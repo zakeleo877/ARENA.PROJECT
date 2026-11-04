@@ -259,12 +259,24 @@ jobs:
             echo
             echo '## Gradle test and lint'
             echo '```'
-            head -n 120 /tmp/gradle-test.log 2>/dev/null || echo "(not reached)"
+            head -n 60 /tmp/gradle-test.log 2>/dev/null || echo "(not reached)"
+            echo
+            echo '--- failure lines ---'
+            grep -E 'FAILED|FAILURE|error:|^e: |Execution failed|> Task .* FAILED|tests? completed' /tmp/gradle-test.log 2>/dev/null | head -n 60 || echo "(none)"
+            echo
+            echo '--- tail ---'
+            tail -n 60 /tmp/gradle-test.log 2>/dev/null || true
             echo '```'
             echo
             echo '## Gradle build'
             echo '```'
-            head -n 120 /tmp/gradle-build.log 2>/dev/null || echo "(not reached)"
+            head -n 60 /tmp/gradle-build.log 2>/dev/null || echo "(not reached)"
+            echo
+            echo '--- failure lines ---'
+            grep -E 'FAILED|FAILURE|error:|^e: |Execution failed|> Task .* FAILED' /tmp/gradle-build.log 2>/dev/null | head -n 60 || echo "(none)"
+            echo
+            echo '--- tail ---'
+            tail -n 60 /tmp/gradle-build.log 2>/dev/null || true
             echo '```'
           } > diagnostics/latest.md
 
