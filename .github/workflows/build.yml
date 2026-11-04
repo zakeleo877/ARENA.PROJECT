@@ -279,6 +279,30 @@ jobs:
           rm -f "$RUNNER_TEMP/release.jks" keystore.properties
           echo "Signing mode: $(cat /tmp/signing-mode.txt 2>/dev/null || echo unknown)"
 
+      # Acceptance check 10: report the signing key that was used. The strict
+      # gate lives in the "Release gate" workflow, so a missing production
+      # secret does not hide the result of the build itself.
+      - name: Report the release signing key (acceptance check 10)
+        run: |
+          set -uo pipefail
+          MODE="$(cat /tmp/signing-mode.txt 2>/dev/null || echo unknown)"
+          FINGERPRINT="unknown"
+          if command -v apksigner > /dev/null 2>&1; then
+            FINGERPRINT="$(apksigner verify --print-certs artifacts/apk/saeed-store-1.0.apk 2>/dev/null \
+              | grep -i 'SHA-256 digest' | head -n 1 | sed 's/.*: //')" || true
+          fi
+          {
+            echo "Signing mode: $MODE"
+            echo "Certificate SHA-256: ${FINGERPRINT:-unknown}"
+            if [ "$MODE" = "production" ]; then
+              bash scripts/verify-signing.sh "$MODE" "${FINGERPRINT:-unknown}"
+            else
+              echo "NOTE: 10. the build fell back to a throwaway key."
+              echo "      The APK is not distributable. The Release gate workflow"
+              echo "      reports this as a failure until the production secrets are set."
+            fi
+          } | tee /tmp/verify-signing.txt
+
       - name: Verify the packages (acceptance checks 1-10)
         run: |
           set -uo pipefail
@@ -299,6 +323,16 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npm test
+
+      # Acceptance checks 14-25 and the application flows, executed against an
+      # isolated throwaway Supabase-compatible environment. The environment is
+      # created from supabase/schema.sql on a private PostgreSQL instance, so
+      # the row level security policies under test are the real ones. No
+      # production project and no production key is ever contacted.
+      - name: Run the isolated database security checks (acceptance checks 14-25)
+        working-directory: supabase/tests
+        run: |
+          npm run test:acceptance
 
 
       # The failure output is published with the GitHub API so it can be read

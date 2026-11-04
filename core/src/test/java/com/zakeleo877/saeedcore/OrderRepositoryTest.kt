@@ -116,4 +116,145 @@ class OrderRepositoryTest {
         assertTrue(stored.itemsJson.contains(order.items.first().productId))
         assertTrue(stored.itemsJson.contains("\"quantity\":2"))
     }
+
+    // ---------------------------------------------------------- offline flow ---
+
+    /** An engine that drops the connection the way a real network failure does. */
+    private fun apiLosingTheConnection(): CatalogApi {
+        val engine = MockEngine {
+            throw java.io.IOException("Simulated connection loss")
+        }
+        return CatalogApi(
+            HttpClient(engine) {
+                expectSuccess = false
+                install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+            },
+            SupabasePublicConfig("https://project.example", "sb_publishable_fake_for_test"),
+        )
+    }
+
+    @Test fun aConnectionLostDuringTheSendKeepsTheOrderInTheQueue() = runTest {
+        val dao = FakePendingDao()
+        val repository = OrderRepository(apiLosingTheConnection(), dao)
+
+        val outcome = repository.submit(order, online = true)
+
+        assertTrue(outcome is SubmitOutcome.Rejected)
+        assertEquals("network_error", (outcome as SubmitOutcome.Rejected).reason)
+        // The order must survive the failure, otherwise the customer loses it.
+        assertEquals(1, dao.rows.size)
+        val stored = dao.rows.values.first()
+        assertEquals(order.clientId, stored.clientId)
+        assertEquals("FAILED", stored.state)
+        assertEquals(1, stored.attemptCount)
+        assertEquals("network_error", stored.lastErrorCode)
+    }
+
+    @Test fun aRetryAfterTheConnectionReturnsSendsTheOrderAndClearsTheQueue() = runTest {
+        val dao = FakePendingDao()
+        val failing = OrderRepository(apiLosingTheConnection(), dao)
+        failing.submit(order, online = true)
+        assertEquals(1, dao.rows.size)
+
+        // The network comes back and the queued order is sent again.
+        val working = OrderRepository(apiReturning(HttpStatusCode.OK, "99"), dao)
+        val outcome = working.retry(order.clientId)
+
+        assertEquals(SubmitOutcome.Sent(99), outcome)
+        assertTrue(dao.rows.isEmpty())
+    }
+
+    @Test fun aRetryReusesTheSameClientIdSoTheServerCannotDuplicateTheOrder() = runTest {
+        val dao = FakePendingDao()
+        val failing = OrderRepository(apiLosingTheConnection(), dao)
+        failing.submit(order, online = true)
+
+        val seen = mutableListOf<String>()
+        val engine = MockEngine { request ->
+            seen += request.body.toString()
+            respond("99", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+        }
+        val working = OrderRepository(
+            CatalogApi(
+                HttpClient(engine) {
+                    expectSuccess = false
+                    install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+                },
+                SupabasePublicConfig("https://project.example", "sb_publishable_fake_for_test"),
+            ),
+            dao,
+        )
+        working.retry(order.clientId)
+
+        // The request body still carries the original client id.
+        assertTrue(seen.isNotEmpty())
+        assertTrue(seen.any { it.contains(order.clientId) })
+    }
+
+    @Test fun aPermanentRejectionRemovesTheOrderInsteadOfLoopingForever() = runTest {
+        val dao = FakePendingDao()
+        val engine = MockEngine {
+            respond(
+                """{"code":"P0001","message":"invalid_phone"}""",
+                HttpStatusCode.BadRequest,
+                headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = OrderRepository(
+            CatalogApi(
+                HttpClient(engine) {
+                    expectSuccess = false
+                    install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+                },
+                SupabasePublicConfig("https://project.example", "sb_publishable_fake_for_test"),
+            ),
+            dao,
+        )
+
+        val outcome = repository.submit(order, online = true)
+
+        assertTrue(outcome is SubmitOutcome.Rejected)
+        assertEquals("invalid_order", (outcome as SubmitOutcome.Rejected).reason)
+        // A permanently invalid order must not stay in the queue.
+        assertTrue(dao.rows.isEmpty())
+    }
+
+    @Test fun aRateLimitKeepsTheOrderSoItCanBeSentLater() = runTest {
+        val dao = FakePendingDao()
+        val engine = MockEngine {
+            respond(
+                """{"code":"P0001","message":"rate_limited"}""",
+                HttpStatusCode.BadRequest,
+                headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val repository = OrderRepository(
+            CatalogApi(
+                HttpClient(engine) {
+                    expectSuccess = false
+                    install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+                },
+                SupabasePublicConfig("https://project.example", "sb_publishable_fake_for_test"),
+            ),
+            dao,
+        )
+
+        val outcome = repository.submit(order, online = true)
+
+        assertTrue(outcome is SubmitOutcome.Rejected)
+        assertEquals(1, dao.rows.size)
+    }
+
+    @Test fun anOrderQueuedWhileOfflineIsSentWithTheSameClientId() = runTest {
+        val dao = FakePendingDao()
+        val offline = OrderRepository(apiReturning(HttpStatusCode.OK, "7"), dao)
+        offline.submit(order, online = false)
+        assertEquals(1, dao.rows.size)
+
+        val online = OrderRepository(apiReturning(HttpStatusCode.OK, "7"), dao)
+        val outcome = online.retry(order.clientId)
+
+        assertEquals(SubmitOutcome.Sent(7), outcome)
+        assertTrue(dao.rows.isEmpty())
+    }
 }

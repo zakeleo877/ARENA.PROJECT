@@ -1,0 +1,115 @@
+name: Release gate
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  release-gate:
+    name: Check that the release can actually be published
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Use the runner Android SDK
+        run: |
+          set -euo pipefail
+          SDKMANAGER_PATH=""
+          for candidate in \
+            /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager \
+            /usr/local/lib/android/sdk/cmdline-tools/*/bin/sdkmanager \
+            /opt/android/sdk/cmdline-tools/latest/bin/sdkmanager; do
+            if [ -x "$candidate" ]; then SDKMANAGER_PATH="$candidate"; break; fi
+          done
+          if [ -z "$SDKMANAGER_PATH" ]; then
+            SDK_ROOT="$HOME/Android/Sdk"
+            mkdir -p "$SDK_ROOT/cmdline-tools"
+            curl -fsSL -o /tmp/cmdline-tools.zip \
+              "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+            unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools
+            mv /tmp/cmdline-tools/cmdline-tools "$SDK_ROOT/cmdline-tools/latest"
+            SDKMANAGER_PATH="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          SDK_ROOT="$(dirname "$(dirname "$(dirname "$(dirname "$SDKMANAGER_PATH")")")")"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "SDKMANAGER=$SDKMANAGER_PATH" >> "$GITHUB_ENV"
+          echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+
+      - name: Install the platform
+        run: |
+          set -euo pipefail
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses > /dev/null 2>&1 || true
+          AVAILABLE="$("$SDKMANAGER" --sdk_root="$ANDROID_HOME" --list 2>/dev/null || true)"
+          PLATFORM="$(echo "$AVAILABLE" | grep -oE 'platforms;android-3[0-9][0-9.]*(-[a-z0-9]+)?' | sort -u | tail -n 1)"
+          BUILD_TOOLS="$(echo "$AVAILABLE" | grep -oE 'build-tools;3[0-9][0-9.]*' | sort -V | tail -n 1)"
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platform-tools" \
+            "${PLATFORM:-platforms;android-35}" "${BUILD_TOOLS:-build-tools;35.0.0}" \
+            > /tmp/sdk-install.txt 2>&1 || true
+          INSTALLED="$(ls "$ANDROID_HOME/platforms" 2>/dev/null | grep -oE 'android-[0-9]+(\.[0-9]+)?' | sed 's/android-//' | sort -V | tail -n 1)"
+          if [ -n "$INSTALLED" ]; then
+            echo "SAEED_COMPILE_SDK=android-$INSTALLED" >> "$GITHUB_ENV"
+          fi
+
+      # The production key must exist. A throwaway key cannot update an
+      # installed application, so publishing it is not allowed.
+      - name: Prepare the production signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64:-}" ] || [ -z "${KEYSTORE_PASSWORD:-}" ] \
+             || [ -z "${KEY_ALIAS:-}" ] || [ -z "${KEY_PASSWORD:-}" ]; then
+            echo "FAIL: 10. the production signing secrets are not configured."
+            echo "      KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD"
+            echo "      must be set before the project can be published."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          keytool -list -keystore "$RUNNER_TEMP/release.jks" \
+            -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" > /dev/null
+          cat > keystore.properties <<EOF
+          storeFile=$RUNNER_TEMP/release.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+          echo 'SIGNING_MODE=production' > /tmp/signing-mode.txt
+
+      - name: Build the release APKs with the production key
+        run: ./gradlew --no-daemon :customer:assembleRelease :admin:assembleRelease
+
+      - name: Verify the signing key (acceptance check 10)
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/apk
+          cp customer/build/outputs/apk/release/*.apk artifacts/apk/saeed-store-1.0.apk
+          cp admin/build/outputs/apk/release/*.apk artifacts/apk/saeed-admin-1.0.apk
+          FINGERPRINT="$(apksigner verify --print-certs artifacts/apk/saeed-store-1.0.apk 2>/dev/null \
+            | grep -i 'SHA-256 digest' | head -n 1 | sed 's/.*: //')"
+          bash scripts/verify-signing.sh production "$FINGERPRINT"

@@ -1,0 +1,138 @@
+name: Verify the interface on an emulator
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  emulator:
+    name: Run both apps on an Android emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Enable KVM for the emulator
+        run: |
+          set -euo pipefail
+          # The emulator needs hardware virtualisation. The GitHub runner
+          # exposes it through /dev/kvm, which has to be made accessible to
+          # the current user.
+          if [ ! -e /dev/kvm ]; then
+            echo 'FAIL: /dev/kvm is not available on this runner, so the emulator cannot start.'
+            exit 1
+          fi
+          sudo chmod 666 /dev/kvm
+          ls -l /dev/kvm
+
+      - name: Set up the Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install the emulator and the system image
+        run: |
+          set -euo pipefail
+          sdkmanager --install 'emulator' 'system-images;android-34;google_apis;x86_64'
+
+      - name: Start the emulator
+        run: |
+          set -euo pipefail
+          echo "$ANDROID_SDK_ROOT/emulator" >> "$GITHUB_PATH"
+          nohup emulator \
+            -avd test \
+            -no-window \
+            -no-audio \
+            -no-boot-anim \
+            -gpu swiftshader_indirect \
+            -no-snapshot \
+            -accel auto \
+            -wipe-data \
+            > /tmp/emulator.log 2>&1 &
+          echo $! > /tmp/emulator.pid
+          printf 'The emulator was started with pid %s\n' "$(cat /tmp/emulator.pid)"
+
+      - name: Build the release APKs
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon :customer:assembleRelease :admin:assembleRelease
+
+      - name: Run the customer app on the emulator
+        run: |
+          set -uo pipefail
+          mkdir -p artifacts/screenshots
+          {
+            bash scripts/verify-emulator.sh \
+              customer/build/outputs/apk/release/customer-release.apk \
+              com.zakeleo877.saeedstore \
+              artifacts/screenshots
+          } > /tmp/emulator-customer.txt 2>&1 || true
+          cat /tmp/emulator-customer.txt
+          if grep -q '^FAIL:' /tmp/emulator-customer.txt; then
+            exit 1
+          fi
+
+      - name: Run the admin app on the emulator
+        run: |
+          set -uo pipefail
+          mkdir -p artifacts/screenshots
+          {
+            bash scripts/verify-emulator.sh \
+              admin/build/outputs/apk/release/admin-release.apk \
+              com.zakeleo877.saeedadmin \
+              artifacts/screenshots
+          } > /tmp/emulator-admin.txt 2>&1 || true
+          cat /tmp/emulator-admin.txt
+          if grep -q '^FAIL:' /tmp/emulator-admin.txt; then
+            exit 1
+          fi
+
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-screenshots
+          path: artifacts/screenshots
+          if-no-files-found: ignore
+
+      - name: Publish the emulator log
+        if: always()
+        run: |
+          {
+            echo '## Emulator log'
+            echo '```'
+            tail -n 120 /tmp/emulator.log 2>/dev/null || true
+            echo '```'
+            echo '## Customer run'
+            echo '```'
+            cat /tmp/emulator-customer.txt 2>/dev/null || true
+            echo '```'
+            echo '## Admin run'
+            echo '```'
+            cat /tmp/emulator-admin.txt 2>/dev/null || true
+            echo '```'
+          } > emulator-diagnostics.md
+          gh api "repos/${GITHUB_REPOSITORY}/contents/emulator-diagnostics.md" \
+            --method PUT \
+            -f message="Emulator diagnostics for run ${GITHUB_RUN_ID}" \
+            -f content="$(base64 -w 0 emulator-diagnostics.md)" \
+            -f branch=ci-diagnostics 2>&1 | tail -n 3
