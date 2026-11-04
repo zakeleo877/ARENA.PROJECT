@@ -30,6 +30,7 @@ private class MemoryDao : CatalogDao {
     override fun observeProducts(): Flow<List<ProductEntity>> = products
     override fun observeSettings(): Flow<List<SettingEntity>> = settings
     override fun observeMetadata(key: String): Flow<CacheMetadataEntity?> = metadata.map { it[key] }
+    override suspend fun hasProducts(): Boolean = products.value.isNotEmpty()
     override suspend fun insertProducts(products: List<ProductEntity>) { this.products.value = products }
     override suspend fun clearProducts() { products.value = emptyList() }
     override suspend fun insertSettings(settings: List<SettingEntity>) { this.settings.value = settings }
