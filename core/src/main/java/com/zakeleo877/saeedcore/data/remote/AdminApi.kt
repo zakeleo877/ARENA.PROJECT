@@ -216,8 +216,8 @@ class AdminApi(
     suspend fun uploadProductImage(fileName: String, bytes: ByteArray): String? {
         val response = client.post("${config.baseUrl}/storage/v1/object/product-images/$fileName") {
             headers()
-            // Ktor has no WebP constant, so the MIME type is set explicitly.
-            contentType("image/webp")
+            // Ktor has no WebP constant, so the MIME type is parsed explicitly.
+            contentType(ContentType.parse("image/webp"))
             setBody(bytes)
         }
         if (!response.status.isSuccess()) return null
