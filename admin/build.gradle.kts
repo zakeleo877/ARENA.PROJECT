@@ -28,11 +28,13 @@ fun javaString(value: String): String = "\"" + value
 
 android {
     namespace = "com.zakeleo877.saeedadmin"
-    // The compile SDK can be overridden from local.properties or the
-    // environment, so the project builds on runners that only ship a stable
-    // platform. The default matches the API level the app targets.
+    // The compile SDK can be overridden from a Gradle property or an
+    // environment variable, so the project builds on runners that only ship a
+    // stable platform. Blank values are ignored.
     compileSdk = (providers.gradleProperty("saeed.compileSdk")
         .orElse(providers.environmentVariable("SAEED_COMPILE_SDK"))
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
         .orElse("37")
         .get()
         .toInt())
