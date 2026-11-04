@@ -1,7 +1,9 @@
 # نتائج معايير القبول الفعلية
 
-تاريخ التشغيل: 2026-11-04. رقم التشغيل في GitHub Actions: **41879848618**.
-الالتزام: `5832a54`. النتيجة النهائية: **كل الخطوات ناجحة**.
+تاريخ التشغيل: 2026-11-04. رقم التشغيل في GitHub Actions: **41915916445**.
+الالتزام: `500d7bd`. النتيجة النهائية: **كل الخطوات ناجحة**.
+
+الرابط: https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/41915916445
 
 كل الأرقام أدناه مأخوذة من ناتج التشغيل الفعلي، وليست من توثيق سابق.
 
@@ -9,15 +11,20 @@
 
 | الخطوة | النتيجة |
 |---|---|
+| Check the Kotlin references | نجاح |
 | Set up JDK 17 | نجاح |
 | Use the runner Android SDK | نجاح |
 | Accept licenses and install the platform | نجاح |
 | Verify the pinned versions | نجاح |
-| Run unit tests and lint | **نجاح** |
+| Run unit tests and lint | **نجاح** (`BUILD SUCCESSFUL in 5m 5s`) |
 | Build both release APKs | **نجاح** (`BUILD SUCCESSFUL in 6m 25s`) |
 | Verify the packages (checks 1-10) | **نجاح** |
 | Verify the repository (checks 11-13) | **نجاح** |
 | Run the local database smoke tests | **نجاح** |
+
+كل خطوة في التشغيل أعلاه مسجّلة `success`، ومنها `Build both release APKs`
+و`Verify the packages (acceptance checks 1-10)` و`Verify the repository
+(acceptance checks 11-13)`.
 
 ## فحوص الحزمة ١-١٠ — للتطبيقين
 
@@ -34,7 +41,7 @@ PASS: 6. exported attribute present
 PASS: 7. package integrity verified
 PASS: 8. no unexpected permissions
 PASS: 9. customer APK contains no admin code
-PASS: 10. APK size is 852 KiB (limit 20 MiB)
+PASS: 10. APK size is 853 KiB (limit 20 MiB)
 
 PASS: 9. admin APK contains no customer code
 PASS: 10. APK size is 989 KiB (limit 20 MiB)
@@ -96,6 +103,30 @@ bash scripts/db-security-tests.sh
 **لم تُنفَّذ.** لم يتوفّر محاكي أو جهاز في هذه البيئة، ولم تُلتقط لقطات شاشة.
 الفحوص البصرية (RTL، تباين WCAG، بديل blur على API < 31، Predictive Back، Shared Element،
 أهداف 48dp، خط 200%، وضع الطيران، Realtime، إشعارات 15 دقيقة) تبقى غير مُتحقَّق منها على جهاز.
+
+## سلسلة أخطاء الترجمة التي عولجت
+
+كل خطأ أدناه كان يمنع `:core` أو `:customer` أو `:admin` من الترجمة، ولهذا لم
+تبدأ اختبارات الوحدة ولا lint في تلك التشغيلات. لم يُعطَّل أي اختبار ولا أي
+قاعدة lint في أي مرحلة.
+
+| التشغيل | الملف:السطر | الخطأ | السبب الحقيقي | الإصلاح |
+|---|---|---|---|---|
+| `41906502426` | `core/.../OrderRepository.kt:113,118` | `No value passed for parameter 'location'` | أُعيدت تسمية معرّف رابط الخريطة في Kotlin إلى `customerLocationUrl` بينما عمود Room بقي `location` | تمرير `location = order.customerLocationUrl` مع قيمة التطبيق الحقيقية |
+| `41908867960` | `gradle/libs.versions.toml` | `Reserved alias name` | Gradle 9.8.2 يحجز أي alias يحتوي كلمة `class` | تسمية الـ alias `androidx-compose-material3-sizes` |
+| `41909796271` | `admin/.../AdminApp.kt:79` | `Unresolved reference 'EXPANDED'` | الثابت الحقيقي هو `WindowWidthSizeClass.Expanded` | تصحيح اسم الثابت |
+| `41909796271` | `admin/.../OrdersScreen.kt:71` | `Unresolved reference 'size'` | `Modifier.size` مستخدم بلا `import androidx.compose.foundation.layout.size` | إضافة الاستيراد |
+| `41909796271` | `admin/.../ProductsScreen.kt:83` | `Unresolved reference 'size'` | نفس المشكلة | إضافة الاستيراد |
+| `41911359524` | `customer/.../CatalogScreen.kt:264` | `No parameter with name 'state' found` | المعامل الأول في `sharedElement` اسمه `sharedContentState` | تصحيح اسم المعامل |
+| `41911359524` | `customer/.../ProductDetailScreen.kt:6` | `Unresolved reference 'rememberSharedContentState'` | الدالة عضو في `SharedTransitionScope` ولا تُستورد | حذف الاستيراد الخاطئ |
+| `41912849774` | `customer/.../ProductImageDialog.kt:59` | `NoCollectCallFound` (lint) | `PredictiveBackHandler` يمرّر `Flow` ويجب جمعه، وإلا نُفِّذ الكود عند **بداية** الإيماءة لا عند اكتمالها | جمع الـ flow وتحريك الصورة مع تقدّم الإيماءة، والإغلاق عند الاكتمال فقط |
+
+### الفحص الثابت المضاف
+
+`scripts/verify-kotlin-refs.py` يفحص محلياً في ثوانٍ الأخطاء التي استغرقت
+كل واحد منها خمس دقائق ليُكتشف في CI: استيراد مفقود، اسم معامل خاطئ، ثابت
+مكتبة غير موجود، وغياب `collect` داخل `PredictiveBackHandler`. وهو يعمل ضمن
+خطوة `Check the Kotlin references` قبل البناء.
 
 ## حالة البناء في هذه البيئة
 

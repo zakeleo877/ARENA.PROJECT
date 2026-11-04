@@ -159,13 +159,16 @@ bash scripts/db-security-tests.sh
 
 ## الفحوص المنفّذة
 
-آخر تشغيل ناجح: **41879848618** — كل الخطوات خضراء.
+آخر تشغيل ناجح: **41915916445** — كل الخطوات خضراء.
+<https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/41915916445>
 
 - `./gradlew test lint` نجح.
 - `./gradlew :customer:assembleRelease :admin:assembleRelease` نجح (`BUILD SUCCESSFUL`).
 - فحوص الحزمة ١-١٠ نجحت للتطبيقين: `resources.arsc` غير مضغوط، المحاذاة، التوقيع v2،
-  الهوية، عدم قابلية التصحيح، الصلاحيات، عزل الأكواد، والحجم (852 KiB و989 KiB).
+  الهوية، عدم قابلية التصحيح، الصلاحيات، عزل الأكواد، والحجم (853 KiB و989 KiB).
 - فحوص المستودع ١١-١٣ نجحت.
 - `npm ci && npm test`: **32 فحص SQL** نجحت، منها أن الزائر يرى المتاح فقط.
+- فحص ثابت محلي (`scripts/verify-kotlin-refs.py`) يلتقط الاستيرادات الناقصة
+  وأسماء المعاملات الخاطئة قبل البناء بخمس دقائق.
 
 التفاصيل الكاملة في `docs/acceptance-results.md`.
