@@ -71,6 +71,13 @@ fun CheckoutSheet(
     var locationError by remember { mutableStateOf(false) }
 
     fun currentLocation(): Location? {
+        // The permission may have been revoked between the check and the call.
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) return null
+
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as? android.location.LocationManager
             ?: return null
         val providers = listOf(
@@ -78,9 +85,11 @@ fun CheckoutSheet(
             android.location.LocationManager.NETWORK_PROVIDER,
         )
         return providers.firstNotNullOfOrNull { provider ->
-            runCatching {
+            try {
                 manager.getLastKnownLocation(provider)?.takeIf { it.accuracy < 500f }
-            }.getOrNull()
+            } catch (_: SecurityException) {
+                null
+            }
         }
     }
 

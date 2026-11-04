@@ -1,9 +1,9 @@
 package com.zakeleo877.saeedstore.ui
 
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -18,9 +18,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.net.toUri
 import androidx.compose.ui.res.stringResource
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -56,6 +57,19 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    // The strings are read through the composition so they follow the
+    // configuration changes.
+    val addedToCartText = stringResource(R.string.add_to_cart)
+    val cartRemovedText = stringResource(R.string.cart_removed)
+    val undoText = stringResource(R.string.action_undo)
+    val genericErrorText = stringResource(R.string.generic_error)
+    val orderSuccessTitle = stringResource(R.string.order_success_title)
+    val orderNumberLabel = stringResource(R.string.order_number)
+    val orderDoneText = stringResource(R.string.order_done)
+    val orderQueuedTitle = stringResource(R.string.order_queued_title)
+    val orderQueuedMessage = stringResource(R.string.order_queued_message)
+    val cartTotalLabel = stringResource(R.string.cart_total)
+
     var checkoutOpen by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
     var selectedProduct by remember { mutableStateOf<Product?>(null) }
@@ -64,12 +78,6 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
     var lastRemoved by remember { mutableStateOf<CartItem?>(null) }
 
     val currency = state.settings?.currency ?: "د.ج"
-
-    LaunchedEffect(Unit) {
-        viewModel.pendingOrders.collect { orders ->
-            // Nothing to do here; the screen observes the same flow.
-        }
-    }
 
     Box(Modifier.fillMaxSize()) {
         NavHost(navController = navController, startDestination = Routes.CATALOG) {
@@ -83,12 +91,7 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                     },
                     onAddToCart = { product ->
                         viewModel.addToCart(product)
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                message = context.getString(R.string.add_to_cart),
-                                actionLabel = null,
-                            )
-                        }
+                        scope.launch { snackbarHostState.showSnackbar(addedToCartText) }
                     },
                     onCartClick = { navController.navigate(Routes.CART) },
                     onPendingClick = { navController.navigate(Routes.PENDING) },
@@ -157,8 +160,8 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
     if (removed != null) {
         LaunchedEffect(removed) {
             val result = snackbarHostState.showSnackbar(
-                message = context.getString(R.string.cart_removed),
-                actionLabel = context.getString(R.string.action_undo),
+                message = cartRemovedText,
+                actionLabel = undoText,
             )
             if (result == SnackbarResult.ActionPerformed) {
                 viewModel.restoreCartItem(removed)
@@ -195,9 +198,7 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                             }
                             is SubmitOutcome.Rejected -> {
                                 submitting = false
-                                scope.launch {
-                                    snackbarHostState.showSnackbar(context.getString(R.string.generic_error))
-                                }
+                                scope.launch { snackbarHostState.showSnackbar(genericErrorText) }
                             }
                         }
                     }
@@ -209,42 +210,46 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
     successNumber?.let { number ->
         val settings = state.settings
         val total = cartItems.sumOf { it.estimatedTotal }
-        SaeedDialog(
-            title = context.getString(R.string.order_success_title),
-            message = buildString {
-                append(context.getString(R.string.order_number))
+        val summary = buildString {
+            append(orderNumberLabel)
+            append(": ")
+            append(Formatters.orderNumber(number))
+            if (settings != null) {
+                append('\n')
+                append(settings.storeName)
+                append(" · ")
+                append(cartTotalLabel)
                 append(": ")
-                append(Formatters.orderNumber(number))
-                if (settings != null) {
-                    append('\n')
-                    append(settings.storeName)
-                    append(" · ")
-                    append(Formatters.money(total, settings.currency))
-                }
-            },
-            confirmLabel = context.getString(R.string.order_done),
+                append(Formatters.money(total, settings.currency))
+            }
+        }
+
+        SaeedDialog(
+            title = orderSuccessTitle,
+            message = summary,
+            confirmLabel = orderDoneText,
             onConfirm = { successNumber = null },
             onDismiss = { successNumber = null },
         )
 
-        // The WhatsApp share sends the invoice number, the items and the total.
+        // The WhatsApp message carries the invoice number, the items and the total.
         val whatsappLink = settings?.let { current ->
             val message = buildString {
                 append(current.storeName)
                 append(" — ")
-                append(context.getString(R.string.order_number))
+                append(orderNumberLabel)
                 append(": ")
                 append(Formatters.orderNumber(number))
                 append('\n')
-                append(context.getString(R.string.cart_total))
+                append(cartTotalLabel)
                 append(": ")
                 append(Formatters.money(total, current.currency))
             }
             Links.whatsapp(current.whatsapp, message)
         }
         if (whatsappLink != null) {
-            scope.launch {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(whatsappLink))
+            LaunchedEffect(whatsappLink) {
+                val intent = Intent(Intent.ACTION_VIEW, whatsappLink.toUri())
                 runCatching { context.startActivity(intent) }
             }
         }
@@ -252,9 +257,9 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
 
     if (queuedMessage) {
         SaeedDialog(
-            title = context.getString(R.string.order_queued_title),
-            message = context.getString(R.string.order_queued_message),
-            confirmLabel = context.getString(R.string.order_done),
+            title = orderQueuedTitle,
+            message = orderQueuedMessage,
+            confirmLabel = orderDoneText,
             onConfirm = { queuedMessage = false },
             onDismiss = { queuedMessage = false },
         )
