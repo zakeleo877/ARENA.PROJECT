@@ -72,6 +72,10 @@ class OrderRepository(
             queue(order, PendingState.WAITING, null)
             return SubmitOutcome.Queued(order.clientId)
         }
+        // The order is stored before the first attempt, so a transient failure
+        // never loses the customer order. The same clientId is reused on every
+        // retry, so the server returns the same invoice number.
+        queue(order, PendingState.SENDING, null)
         return send(order)
     }
 
@@ -88,16 +92,7 @@ class OrderRepository(
                 pendingDao.delete(order.clientId)
                 SubmitOutcome.Rejected(reason)
             } else {
-                pendingDao.find(order.clientId)?.let { existing ->
-                    pendingDao.delete(order.clientId)
-                    pendingDao.insert(
-                        existing.copy(
-                            state = PendingState.FAILED.name,
-                            attemptCount = existing.attemptCount + 1,
-                            lastErrorCode = reason,
-                        ),
-                    )
-                }
+                markFailed(order.clientId, reason)
                 SubmitOutcome.Rejected(reason)
             }
         } catch (_: IOException) {
@@ -147,17 +142,20 @@ class OrderRepository(
         pendingDao.delete(clientId)
     }
 
+    /**
+     * Records a failed attempt. When the order is not stored yet the caller
+     * only knows the client id, so the entry is created through [queue] first.
+     */
     private suspend fun markFailed(clientId: String, reason: String) {
-        pendingDao.find(clientId)?.let { existing ->
-            pendingDao.delete(clientId)
-            pendingDao.insert(
-                existing.copy(
-                    state = PendingState.FAILED.name,
-                    attemptCount = existing.attemptCount + 1,
-                    lastErrorCode = reason,
-                ),
-            )
-        }
+        val existing = pendingDao.find(clientId) ?: return
+        pendingDao.delete(clientId)
+        pendingDao.insert(
+            existing.copy(
+                state = PendingState.FAILED.name,
+                attemptCount = existing.attemptCount + 1,
+                lastErrorCode = reason,
+            ),
+        )
     }
 
     /** Serializable shape of a queued item, so the snapshot survives a restart. */
