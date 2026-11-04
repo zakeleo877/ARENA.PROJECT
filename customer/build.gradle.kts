@@ -30,14 +30,15 @@ android {
     namespace = "com.zakeleo877.saeedstore"
     // The compile SDK can be overridden from a Gradle property or an
     // environment variable, so the project builds on runners that only ship a
-    // stable platform. Blank values are ignored.
-    compileSdk = (providers.gradleProperty("saeed.compileSdk")
+    // stable platform. Blank values are ignored. The value accepts a minor
+    // version, for example 37.2.
+    val saeedCompileSdk = (providers.gradleProperty("saeed.compileSdk")
         .orElse(providers.environmentVariable("SAEED_COMPILE_SDK"))
         .map { it.trim() }
         .filter { it.isNotEmpty() }
         .orElse("37")
-        .get()
-        .toInt())
+        .get())
+    compileSdkVersion(saeedCompileSdk)
     defaultConfig {
         applicationId = "com.zakeleo877.saeedstore"
         minSdk = 24

@@ -128,6 +128,7 @@ jobs:
           # already ships platforms, so an install failure is not fatal as long
           # as a platform is present.
           INSTALLED_PLATFORM_ID="$(ls "$ANDROID_HOME/platforms" 2>/dev/null | grep -oE 'android-[0-9]+(\.[0-9]+)?' | sed 's/android-//' | sort -V | tail -n 1)"
+          echo "The installed platform is $INSTALLED_PLATFORM_ID"
           if [ -n "$INSTALLED_PLATFORM_ID" ]; then
             echo "SAEED_COMPILE_SDK=$INSTALLED_PLATFORM_ID" >> "$GITHUB_ENV"
             echo "Compiling against the installed platform API $INSTALLED_PLATFORM_ID"
