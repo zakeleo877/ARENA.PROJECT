@@ -1,6 +1,8 @@
 package com.zakeleo877.saeedstore.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -19,6 +21,9 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -72,12 +77,28 @@ fun CartScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(items, key = { it.product.id }) { item ->
-                CartRow(
-                    item = item,
-                    currency = currency,
-                    onQuantityChange = { onQuantityChange(item.product.id, it) },
-                    onRemove = { onRemove(item.product.id) },
+                val dismissState = rememberSwipeToDismissBoxState(
+                    confirmValueChange = { value ->
+                        if (value != SwipeToDismissBoxValue.Settled) {
+                            onRemove(item.product.id)
+                        }
+                        // The row is removed by the caller, so nothing is kept.
+                        false
+                    },
                 )
+                SwipeToDismissBox(
+                    state = dismissState,
+                    enableDismissFromStartToEnd = false,
+                    enableDismissFromEndToStart = true,
+                    backgroundContent = { CartDismissBackground() },
+                ) {
+                    CartRow(
+                        item = item,
+                        currency = currency,
+                        onQuantityChange = { onQuantityChange(item.product.id, it) },
+                        onRemove = { onRemove(item.product.id) },
+                    )
+                }
             }
         }
 
@@ -111,6 +132,23 @@ fun CartScreen(
             text = stringResource(R.string.cart_checkout),
             onClick = onCheckout,
             modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun CartDismissBackground() {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(horizontal = 24.dp),
+        contentAlignment = Alignment.CenterEnd,
+    ) {
+        Icon(
+            Icons.Filled.Delete,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onErrorContainer,
         )
     }
 }

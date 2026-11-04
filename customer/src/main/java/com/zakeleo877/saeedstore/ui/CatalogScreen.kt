@@ -1,5 +1,10 @@
 package com.zakeleo877.saeedstore.ui
 
+import androidx.compose.animation.AnimatedContentScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedContentScope
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.rememberSharedContentState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -63,8 +68,11 @@ import com.zakeleo877.saeedcore.util.Formatters
 import com.zakeleo877.saeedstore.R
 
 /** The home screen: search, category chips and an adaptive product grid. */
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun CatalogScreen(
+    sharedScope: SharedContentScope,
+    animatedScope: AnimatedContentScope,
     state: CustomerUiState,
     cartCount: Int,
     onProductClick: (Product) -> Unit,
@@ -151,6 +159,8 @@ fun CatalogScreen(
             ) {
                 items(visible, key = { it.id }) { product ->
                     ProductCard(
+                        sharedScope = sharedScope,
+                        animatedScope = animatedScope,
                         product = product,
                         currency = state.settings?.currency ?: "د.ج",
                         onClick = { onProductClick(product) },
@@ -226,13 +236,17 @@ private fun OfflineBanner() {
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun ProductCard(
+    sharedScope: SharedContentScope,
+    animatedScope: AnimatedContentScope,
     product: Product,
     currency: String,
     onClick: () -> Unit,
     onAdd: () -> Unit,
 ) {
+    val sharedImageState = sharedScope.rememberSharedContentState(key = "product-image-${product.id}")
     SaeedCard(onClick = onClick) {
         Box(
             Modifier
@@ -248,7 +262,12 @@ private fun ProductCard(
                         .build(),
                     contentDescription = product.name,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .sharedElement(
+                            state = sharedImageState,
+                            animatedVisibilityScope = animatedScope,
+                        ),
                 )
             } else {
                 Box(

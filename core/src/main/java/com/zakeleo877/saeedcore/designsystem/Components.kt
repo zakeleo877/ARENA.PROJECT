@@ -57,12 +57,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
@@ -273,8 +273,13 @@ fun SaeedBottomSheet(
     } else {
         MaterialTheme.colorScheme.surfaceContainerHigh
     }
+    // Material3's ModalBottomSheet drives the predictive back gesture itself
+    // when android:enableOnBackInvokedCallback="true" is declared, so the
+    // sheet shrinks with the gesture on Android 13+ without a custom handler.
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            onDismiss()
+        },
         modifier = modifier,
         containerColor = overlay,
         contentColor = MaterialTheme.colorScheme.onSurface,

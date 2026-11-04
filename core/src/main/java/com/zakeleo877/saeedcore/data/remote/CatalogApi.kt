@@ -86,7 +86,7 @@ private data class OrderRequestWire(
     @SerialName("p_customer") val customer: String,
     @SerialName("p_phone") val phone: String,
     @SerialName("p_notes") val notes: String,
-    @SerialName("p_location") val location: String,
+    @SerialName("p_location") val customerLocationUrl: String,
     @SerialName("p_items") val items: List<OrderItemWire>,
     @SerialName("p_client_id") val clientId: String,
 )
@@ -124,7 +124,7 @@ class CatalogApi(private val client: HttpClient, private val config: SupabasePub
     /** The wire payload carries IDs and quantities, never a client-supplied price or total. */
     suspend fun placeOrder(order: PendingOrder): Long {
         require(Validation.customerName(order.customer) && Validation.phone(order.phone)) { "Invalid customer or phone." }
-        require(Validation.notes(order.notes) && Validation.location(order.location)) { "Invalid notes or location." }
+        require(Validation.notes(order.notes) && Validation.locationUrl(order.customerLocationUrl)) { "Invalid notes or location." }
         require(order.items.size in 1..50 && order.items.all { Validation.quantity(it.quantity) }) { "Invalid items." }
         try {
             UUID.fromString(order.clientId)
@@ -136,7 +136,7 @@ class CatalogApi(private val client: HttpClient, private val config: SupabasePub
             customer = order.customer.trim(),
             phone = order.phone,
             notes = order.notes,
-            location = order.location,
+            customerLocationUrl = order.customerLocationUrl,
             items = order.items.map { OrderItemWire(it.productId, it.quantity) },
             clientId = order.clientId,
         )

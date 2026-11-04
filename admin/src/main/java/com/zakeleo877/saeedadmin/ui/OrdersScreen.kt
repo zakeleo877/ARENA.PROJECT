@@ -13,9 +13,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -35,6 +38,7 @@ import com.zakeleo877.saeedcore.designsystem.SaeedSearchField
 import com.zakeleo877.saeedcore.designsystem.SaeedStatusChip
 import com.zakeleo877.saeedcore.model.Order
 import com.zakeleo877.saeedcore.model.OrderStatus
+import com.zakeleo877.saeedcore.util.CsvExporter
 import com.zakeleo877.saeedcore.util.Formatters
 import com.zakeleo877.saeedadmin.R
 
@@ -48,17 +52,31 @@ fun OrdersScreen(
     onRefresh: () -> Unit,
 ) {
     var selected by remember { mutableStateOf<Order?>(null) }
+    val context = LocalContext.current
 
     Column(
         Modifier
             .fillMaxSize()
             .padding(16.dp),
     ) {
-        Text(
-            text = stringResource(R.string.admin_tab_orders),
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(R.string.admin_tab_orders),
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(
+                onClick = { exportOrders(context, state.orders) },
+                modifier = Modifier.size(48.dp),
+            ) {
+                Icon(
+                    Icons.Filled.FileDownload,
+                    contentDescription = stringResource(R.string.admin_export_orders),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
         Spacer(Modifier.height(12.dp))
 
         SaeedSearchField(
@@ -114,6 +132,38 @@ fun OrdersScreen(
             )
         }
     }
+}
+
+/** Writes the order list as a UTF-8 CSV with a byte order mark for Excel. */
+private fun exportOrders(context: android.content.Context, orders: List<Order>) {
+    val headers = listOf(
+        "رقم الفاتورة",
+        "التاريخ",
+        "الزبون",
+        "الهاتف",
+        "الحالة",
+        "القناة",
+        "المجموع",
+        "المنتجات",
+        "ملاحظات",
+    )
+    val rows = orders.map { order ->
+        listOf(
+            order.number.toString(),
+            order.createdAt.toString(),
+            order.customer,
+            order.phone,
+            order.status.databaseValue,
+            order.channel.databaseValue,
+            order.total.toPlainString(),
+            order.items.joinToString(" | ") { item ->
+                "${item.name} x${item.quantity}"
+            },
+            order.notes,
+        )
+    }
+    val csv = CsvExporter.build(headers, rows)
+    CsvExporter.export(context, "orders.csv", csv)
 }
 
 @Composable

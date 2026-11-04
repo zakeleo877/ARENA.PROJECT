@@ -7,6 +7,7 @@ object Validation {
     fun customerName(value: String) = value.trim().length in 2..100
     fun phone(value: String) = phonePattern.matches(value) && value.count { it in '0'..'9' } in 8..15
     fun notes(value: String) = value.length <= 500
-    fun location(value: String) = value.length <= 200
+    /** Contact-only map link for shop-to-customer contact. */
+    fun locationUrl(value: String) = value.length <= 200
     fun quantity(value: Int) = value in 1..99
 }

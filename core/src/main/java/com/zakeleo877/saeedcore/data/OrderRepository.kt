@@ -22,7 +22,8 @@ data class PendingOrderRow(
     val customer: String,
     val phone: String,
     val notes: String,
-    val location: String,
+    /** Contact-only map link for shop-to-customer contact. */
+    val customerLocationUrl: String,
     val items: List<PendingOrderItem>,
     val state: PendingState,
     val attemptCount: Int,
@@ -54,7 +55,7 @@ class OrderRepository(
                 customer = row.customer,
                 phone = row.phone,
                 notes = row.notes,
-                location = row.location,
+                customerLocationUrl = row.location,
                 items = decodeItems(row.itemsJson),
                 state = runCatching { PendingState.valueOf(row.state) }.getOrDefault(PendingState.WAITING),
                 attemptCount = row.attemptCount,
@@ -114,7 +115,7 @@ class OrderRepository(
                 customer = order.customer,
                 phone = order.phone,
                 notes = order.notes,
-                location = order.location,
+                customerLocationUrl = order.customerLocationUrl,
                 itemsJson = encodeItems(order.items),
                 state = state.name,
                 attemptCount = 0,
@@ -131,7 +132,7 @@ class OrderRepository(
             customer = entity.customer,
             phone = entity.phone,
             notes = entity.notes,
-            location = entity.location,
+            customerLocationUrl = entity.location,
             items = decodeItems(entity.itemsJson),
         )
         pendingDao.delete(clientId)

@@ -1,6 +1,7 @@
 package com.zakeleo877.saeedadmin.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -13,6 +14,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,6 +26,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.window.core.layout.WindowWidthSizeClass
+import androidx.window.layout.calculateWindowSizeClass
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zakeleo877.saeedadmin.R
@@ -58,55 +65,82 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
 
     var tab by remember { mutableStateOf(AdminTab.DASHBOARD) }
 
+    // Wide screens (foldables and tablets) get a navigation rail instead of the
+    // bottom bar, so the content area keeps its full height.
+    val widthSizeClass = calculateWindowSizeClass(LocalConfiguration.current).widthSizeClass
+    val useRail = widthSizeClass == WindowWidthSizeClass.EXPANDED
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
-                AdminTab.entries.forEach { entry ->
-                    NavigationBarItem(
-                        selected = tab == entry,
-                        onClick = { tab = entry },
-                        icon = { Icon(entry.icon, contentDescription = null) },
-                        label = { Text(stringResource(entry.labelRes)) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                        ),
-                    )
+            if (!useRail) {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+                    AdminTab.entries.forEach { entry ->
+                        NavigationBarItem(
+                            selected = tab == entry,
+                            onClick = { tab = entry },
+                            icon = { Icon(entry.icon, contentDescription = null) },
+                            label = { Text(stringResource(entry.labelRes)) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            ),
+                        )
+                    }
                 }
             }
         },
     ) { padding ->
-        Box(
+        Row(
             Modifier
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            when (tab) {
-                AdminTab.DASHBOARD -> DashboardScreen(
-                    stats = viewModel.stats(),
-                    onRefresh = viewModel::refresh,
-                )
-                AdminTab.ORDERS -> OrdersScreen(
-                    state = state,
-                    onFilterChange = viewModel::setStatusFilter,
-                    onSearchChange = viewModel::setSearchQuery,
-                    onStatusUpdate = { id, status -> viewModel.updateOrderStatus(id, status) },
-                    onRefresh = viewModel::refresh,
-                )
-                AdminTab.PRODUCTS -> ProductsScreen(
-                    products = state.products,
-                    onSave = { id, name, price, description, imageUrl, category, available, sortOrder ->
-                        viewModel.saveProduct(id, name, price, description, imageUrl, category, available, sortOrder) {}
-                    },
-                    onDelete = { id -> viewModel.deleteProduct(id) },
-                    onUploadImage = { fileName, bytes -> viewModel.uploadImage(fileName, bytes) {} },
-                )
-                AdminTab.SETTINGS -> SettingsScreen(
-                    onSave = { values -> viewModel.saveSettings(values) {} },
-                    onSignOut = viewModel::signOut,
-                )
+            if (useRail) {
+                NavigationRail(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                ) {
+                    AdminTab.entries.forEach { entry ->
+                        NavigationRailItem(
+                            selected = tab == entry,
+                            onClick = { tab = entry },
+                            icon = { Icon(entry.icon, contentDescription = null) },
+                            label = { Text(stringResource(entry.labelRes)) },
+                        )
+                    }
+                }
+            }
+            Box(
+                Modifier
+                    .fillMaxSize(),
+            ) {
+                when (tab) {
+                    AdminTab.DASHBOARD -> DashboardScreen(
+                        stats = viewModel.stats(),
+                        onRefresh = viewModel::refresh,
+                    )
+                    AdminTab.ORDERS -> OrdersScreen(
+                        state = state,
+                        onFilterChange = viewModel::setStatusFilter,
+                        onSearchChange = viewModel::setSearchQuery,
+                        onStatusUpdate = { id, status -> viewModel.updateOrderStatus(id, status) },
+                        onRefresh = viewModel::refresh,
+                    )
+                    AdminTab.PRODUCTS -> ProductsScreen(
+                        products = state.products,
+                        onSave = { id, name, price, description, imageUrl, category, available, sortOrder ->
+                            viewModel.saveProduct(id, name, price, description, imageUrl, category, available, sortOrder) {}
+                        },
+                        onDelete = { id -> viewModel.deleteProduct(id) },
+                        onUploadImage = { fileName, bytes -> viewModel.uploadImage(fileName, bytes) {} },
+                    )
+                    AdminTab.SETTINGS -> SettingsScreen(
+                        onSave = { values -> viewModel.saveSettings(values) {} },
+                        onSignOut = viewModel::signOut,
+                    )
+                }
             }
         }
     }

@@ -1,6 +1,11 @@
 package com.zakeleo877.saeedstore.ui
 
+import androidx.compose.animation.AnimatedContentScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedContentScope
+import androidx.compose.animation.core.rememberSharedContentState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -41,14 +47,19 @@ import com.zakeleo877.saeedcore.util.Formatters
 import com.zakeleo877.saeedstore.R
 
 /** Product details with a quantity stepper and an add-to-cart action. */
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun ProductDetailScreen(
+    sharedScope: SharedContentScope,
+    animatedScope: AnimatedContentScope,
     product: Product,
     currency: String,
     onBack: () -> Unit,
     onAddToCart: (Int) -> Unit,
 ) {
     var quantity by remember(product.id) { mutableIntStateOf(1) }
+    var zoomOpen by remember { mutableStateOf(false) }
+    val sharedImageState = sharedScope.rememberSharedContentState(key = "product-image-${product.id}")
 
     Column(
         Modifier
@@ -86,7 +97,12 @@ fun ProductDetailScreen(
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(280.dp),
+                        .height(280.dp)
+                        .sharedElement(
+                            state = sharedImageState,
+                            animatedVisibilityScope = animatedScope,
+                        )
+                        .clickable { zoomOpen = true },
                 )
             }
 
@@ -156,5 +172,13 @@ fun ProductDetailScreen(
                 modifier = Modifier.weight(1f),
             )
         }
+    }
+
+    if (zoomOpen && product.imageUrl.isNotBlank()) {
+        ProductImageDialog(
+            imageUrl = product.imageUrl,
+            contentDescription = stringResource(R.string.product_image_viewer),
+            onDismiss = { zoomOpen = false },
+        )
     }
 }

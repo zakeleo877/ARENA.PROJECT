@@ -130,13 +130,13 @@ class CustomerViewModel(
     fun clearCart() = cart.clear()
 
     /** Builds the immutable snapshot that the retry path reuses verbatim. */
-    fun buildPendingOrder(customer: String, phone: String, notes: String, location: String): PendingOrder =
+    fun buildPendingOrder(customer: String, phone: String, notes: String, customerLocationUrl: String): PendingOrder =
         PendingOrder(
             clientId = UUID.randomUUID().toString(),
             customer = customer.trim(),
             phone = phone.trim(),
             notes = notes.trim(),
-            location = location.trim(),
+            customerLocationUrl = customerLocationUrl.trim(),
             items = cart.snapshot().map { PendingOrderItem(it.product.id, it.quantity) },
         )
 

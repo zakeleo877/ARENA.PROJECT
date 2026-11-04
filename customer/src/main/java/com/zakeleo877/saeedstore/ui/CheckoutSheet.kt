@@ -44,7 +44,8 @@ data class CheckoutForm(
     val customer: String = "",
     val phone: String = "",
     val notes: String = "",
-    val location: String = "",
+    /** Contact-only map link for shop-to-customer contact. */
+    val customerLocationUrl: String = "",
 )
 
 sealed interface CheckoutResult {
@@ -54,7 +55,8 @@ sealed interface CheckoutResult {
 
 /**
  * Draggable checkout sheet. The location is optional and the permission is only
- * requested when the user taps "add my location".
+ * requested when the user taps "add my location". It is stored as a contact-only
+ * map link used only so the shop can contact the customer.
  */
 @Composable
 fun CheckoutSheet(
@@ -65,7 +67,7 @@ fun CheckoutSheet(
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
-    var location by remember { mutableStateOf("") }
+    var customerLocationUrl by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf(false) }
     var phoneError by remember { mutableStateOf(false) }
     var locationError by remember { mutableStateOf(false) }
@@ -104,7 +106,7 @@ fun CheckoutSheet(
                 locationError = true
             } else {
                 locationError = false
-                location = "https://maps.google.com/?q=${fix.latitude},${fix.longitude}"
+                customerLocationUrl = "https://maps.google.com/?q=${fix.latitude},${fix.longitude}"
             }
         } else {
             locationError = true
@@ -172,7 +174,7 @@ fun CheckoutSheet(
                             locationError = true
                         } else {
                             locationError = false
-                            location = "https://maps.google.com/?q=${fix.latitude},${fix.longitude}"
+                            customerLocationUrl = "https://maps.google.com/?q=${fix.latitude},${fix.longitude}"
                         }
                     } else {
                         locationPermission.launch(
@@ -215,7 +217,7 @@ fun CheckoutSheet(
                 nameError = !validName
                 phoneError = !validPhone
                 if (validName && validPhone) {
-                    onSubmit(CheckoutForm(name, phone, notes, location))
+                    onSubmit(CheckoutForm(name, phone, notes, customerLocationUrl))
                 }
             },
             enabled = !submitting,

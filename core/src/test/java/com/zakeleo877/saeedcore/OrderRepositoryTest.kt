@@ -31,7 +31,7 @@ class OrderRepositoryTest {
         customer = "زبون تجريبي",
         phone = "0555000000",
         notes = "",
-        location = "",
+        customerLocationUrl = "",
         items = listOf(PendingOrderItem("10000000-0000-4000-8000-000000000001", 2)),
     )
 

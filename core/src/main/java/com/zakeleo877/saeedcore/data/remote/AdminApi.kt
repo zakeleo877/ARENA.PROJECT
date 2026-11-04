@@ -59,7 +59,8 @@ private data class OrderWire(
     val customer: String,
     val phone: String,
     val notes: String,
-    val location: String,
+    /** Contact-only map link for shop-to-customer contact. */
+    @SerialName("location") val customerLocationUrl: String,
     val channel: String,
     val status: String,
     val details: List<OrderItemDetailWire>,
@@ -73,7 +74,7 @@ private data class OrderWire(
         customer = customer,
         phone = phone,
         notes = notes,
-        location = location,
+        customerLocationUrl = customerLocationUrl,
         channel = if (channel == OrderChannel.MANUAL.databaseValue) OrderChannel.MANUAL else OrderChannel.APP,
         status = runCatching { OrderStatus.fromDatabase(status) }.getOrDefault(OrderStatus.NEW),
         items = details.map {

@@ -172,21 +172,51 @@ jobs:
             echo "sdk.dir=$ANDROID_HOME"
           } > local.properties
 
-      # The signing key is created in the runner only and never leaves it.
-      - name: Generate a signing keystore for the packaging checks
+      # Production signing uses the GitHub Secrets when they are configured.
+      # Otherwise a throwaway key is generated inside the runner so that the
+      # packaging checks can still run. The throwaway key never leaves the
+      # runner and is never usable for a real distribution.
+      - name: Prepare the signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          keytool -genkeypair -v \
-            -keystore "$RUNNER_TEMP/release.jks" \
-            -storepass android -keypass android \
-            -alias saeed -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Saeed Stores, OU=Dev, O=Saeed, L=Algiers, C=DZ"
-          cat > keystore.properties <<EOF
+          if [ -n "${KEYSTORE_BASE64:-}" ] && [ -n "${KEYSTORE_PASSWORD:-}" ] \
+             && [ -n "${KEY_ALIAS:-}" ] && [ -n "${KEY_PASSWORD:-}" ]; then
+            echo 'Using the production signing key from the repository secrets.'
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+            # Verify the keystore opens with the given alias before the build.
+            keytool -list -keystore "$RUNNER_TEMP/release.jks" \
+              -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" > /dev/null
+            cat > keystore.properties <<EOF
+          storeFile=$RUNNER_TEMP/release.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+            echo 'SIGNING_MODE=production' > /tmp/signing-mode.txt
+          else
+            echo 'Production secrets are not configured; generating a throwaway key.'
+            echo 'The resulting APKs are signed with a temporary key and are NOT distributable.'
+            keytool -genkeypair -v \
+              -keystore "$RUNNER_TEMP/release.jks" \
+              -storepass android -keypass android \
+              -alias saeed -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Saeed Stores, OU=Dev, O=Saeed, L=Algiers, C=DZ"
+            cat > keystore.properties <<EOF
           storeFile=$RUNNER_TEMP/release.jks
           storePassword=android
           keyAlias=saeed
           keyPassword=android
           EOF
+            echo 'SIGNING_MODE=throwaway' > /tmp/signing-mode.txt
+          fi
+          # The keystore stays in RUNNER_TEMP for the build and is removed later;
+          # it is never copied into the artifacts directory.
+          printf 'signing keystore prepared in %s\n' "$RUNNER_TEMP/release.jks"
 
       - name: Run unit tests and lint
         env:
@@ -239,6 +269,9 @@ jobs:
           mkdir -p artifacts/apk
           cp customer/build/outputs/apk/release/*.apk artifacts/apk/saeed-store-1.0.apk
           cp admin/build/outputs/apk/release/*.apk artifacts/apk/saeed-admin-1.0.apk
+          # The signing material must not survive the job.
+          rm -f "$RUNNER_TEMP/release.jks" keystore.properties
+          echo "Signing mode: $(cat /tmp/signing-mode.txt 2>/dev/null || echo unknown)"
 
       - name: Verify the packages (acceptance checks 1-10)
         run: |

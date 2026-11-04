@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
@@ -28,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,6 +40,7 @@ import com.zakeleo877.saeedcore.designsystem.SaeedCard
 import com.zakeleo877.saeedcore.designsystem.SaeedEmptyState
 import com.zakeleo877.saeedcore.designsystem.SaeedTextField
 import com.zakeleo877.saeedcore.model.Product
+import com.zakeleo877.saeedcore.util.CsvExporter
 import com.zakeleo877.saeedcore.util.Formatters
 import com.zakeleo877.saeedadmin.R
 import java.math.BigDecimal
@@ -61,6 +64,7 @@ fun ProductsScreen(
 ) {
     var editing by remember { mutableStateOf<Product?>(null) }
     var creating by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     Column(
         Modifier
@@ -74,6 +78,16 @@ fun ProductsScreen(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
+            IconButton(
+                onClick = { exportProducts(context, products) },
+                modifier = Modifier.size(48.dp),
+            ) {
+                Icon(
+                    Icons.Filled.FileDownload,
+                    contentDescription = stringResource(R.string.admin_export_products),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
             SaeedButton(
                 text = stringResource(R.string.admin_add_product),
                 onClick = { creating = true },
@@ -128,6 +142,32 @@ fun ProductsScreen(
             )
         }
     }
+}
+
+/** Writes the product list as a UTF-8 CSV with a byte order mark for Excel. */
+private fun exportProducts(context: android.content.Context, products: List<Product>) {
+    val headers = listOf(
+        "الاسم",
+        "السعر",
+        "الفئة",
+        "الوصف",
+        "رابط الصورة",
+        "متاح",
+        "الترتيب",
+    )
+    val rows = products.map { product ->
+        listOf(
+            product.name,
+            product.price.toPlainString(),
+            product.category,
+            product.description,
+            product.imageUrl,
+            if (product.available) "نعم" else "لا",
+            product.sortOrder.toString(),
+        )
+    }
+    val csv = CsvExporter.build(headers, rows)
+    CsvExporter.export(context, "products.csv", csv)
 }
 
 @Composable

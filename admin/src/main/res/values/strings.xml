@@ -71,4 +71,10 @@
     <string name="admin_notification_channel">طلبات جديدة</string>
     <string name="admin_notification_title">طلب جديد</string>
     <string name="admin_notification_body">وصل طلب جديد رقم %1$s</string>
+
+    <string name="admin_export">تصدير CSV</string>
+    <string name="admin_export_products">تصدير المنتجات</string>
+    <string name="admin_export_orders">تصدير الطلبات</string>
+    <string name="admin_export_failed">تعذّر تجهيز ملف التصدير.</string>
+    <string name="admin_export_done">تم تجهيز الملف، اختر مكان الحفظ.</string>
 </resources>

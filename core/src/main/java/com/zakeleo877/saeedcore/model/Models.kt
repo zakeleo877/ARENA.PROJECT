@@ -59,7 +59,8 @@ data class Order(
     val customer: String,
     val phone: String,
     val notes: String,
-    val location: String,
+    /** Contact-only map link for shop-to-customer contact. */
+    val customerLocationUrl: String,
     val channel: OrderChannel,
     val status: OrderStatus,
     val items: List<OrderItem>,
@@ -74,7 +75,8 @@ data class PendingOrder(
     val customer: String,
     val phone: String,
     val notes: String,
-    val location: String,
+    /** Contact-only map link for shop-to-customer contact. */
+    val customerLocationUrl: String,
     val items: List<PendingOrderItem>,
 )
 

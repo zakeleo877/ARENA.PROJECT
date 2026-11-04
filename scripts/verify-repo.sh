@@ -15,6 +15,7 @@ DELIVERY_HITS="$(grep -rniwE 'shipping|delivery|توصيل|شحن' \
   --exclude='saeed-stores-prompt-v2_2.md' \
   --exclude='README.md' \
   --exclude='phase-3-plan.md' \
+  --exclude='acceptance-results.md' \
   --exclude='verify-repo.sh' \
   . || true)"
 if [ -z "$DELIVERY_HITS" ]; then
@@ -22,6 +23,27 @@ if [ -z "$DELIVERY_HITS" ]; then
 else
   printf '%s\n' "$DELIVERY_HITS"
   fail "11. delivery wording found"
+fi
+
+# 11b. The optional map link must be named customerLocationUrl in the code and
+# must never be called a delivery address. The Room persistence column and the
+# SQL parameter keep the names "location" and "p_location" because they are
+# fixed by the published database schema.
+LOCATION_HITS="$(grep -rniE 'deliveryAddress|delivery_address|shippingAddress|shipping_address|deliveryAddressUrl' \
+  --include='*.kt' --include='*.xml' --include='*.sql' \
+  --exclude-dir={.git,build,.gradle,node_modules,.idea} \
+  . || true)"
+if [ -z "$LOCATION_HITS" ]; then
+  pass "11b. no delivery-address identifier in the code"
+else
+  printf '%s\n' "$LOCATION_HITS"
+  fail "11b. delivery-address identifier found"
+fi
+
+if grep -rq 'customerLocationUrl' --include='*.kt' core customer admin; then
+  pass "11c. the map link is named customerLocationUrl in the code"
+else
+  fail "11c. customerLocationUrl is missing from the Kotlin sources"
 fi
 
 # 12. No secrets.

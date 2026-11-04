@@ -47,7 +47,8 @@ data class PendingOrderEntity(
     val customer: String,
     val phone: String,
     val notes: String,
-    val location: String,
+    /** Contact-only map link for shop-to-customer contact. */
+    @ColumnInfo(name = "location") val location: String,
     @ColumnInfo(name = "items_json") val itemsJson: String,
     val state: String,
     @ColumnInfo(name = "attempt_count") val attemptCount: Int,

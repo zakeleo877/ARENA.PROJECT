@@ -52,8 +52,8 @@ fun OrderDetailSheet(
         if (order.notes.isNotBlank()) {
             DetailRow(stringResource(R.string.admin_notes), order.notes)
         }
-        if (order.location.isNotBlank()) {
-            DetailRow(stringResource(R.string.admin_location), order.location)
+        if (order.customerLocationUrl.isNotBlank()) {
+            DetailRow(stringResource(R.string.admin_location), order.customerLocationUrl)
         }
         DetailRow(stringResource(R.string.admin_channel), order.channel.databaseValue)
 

@@ -1,6 +1,8 @@
 package com.zakeleo877.saeedstore.ui
 
 import android.content.Intent
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -45,6 +47,7 @@ private object Routes {
 }
 
 /** Root composable of the customer app: navigation, checkout sheet and order feedback. */
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
     val navController = rememberNavController()
@@ -80,9 +83,12 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
     val currency = state.settings?.currency ?: "د.ج"
 
     Box(Modifier.fillMaxSize()) {
+      SharedTransitionLayout {
         NavHost(navController = navController, startDestination = Routes.CATALOG) {
             composable(Routes.CATALOG) {
                 CatalogScreen(
+                    sharedScope = this@SharedTransitionLayout,
+                    animatedScope = this,
                     state = state,
                     cartCount = cartCount,
                     onProductClick = { product ->
@@ -137,6 +143,8 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                     navController.popBackStack()
                 } else {
                     ProductDetailScreen(
+                        sharedScope = this@SharedTransitionLayout,
+                        animatedScope = this,
                         product = product,
                         currency = currency,
                         onBack = { navController.popBackStack() },
@@ -148,6 +156,7 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                 }
             }
         }
+      }
 
         SnackbarHost(
             hostState = snackbarHostState,
@@ -181,7 +190,7 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                             customer = form.customer,
                             phone = form.phone,
                             notes = form.notes,
-                            location = form.location,
+                            customerLocationUrl = form.customerLocationUrl,
                         )
                         when (val outcome = viewModel.submit(order)) {
                             is SubmitOutcome.Sent -> {
