@@ -137,13 +137,40 @@ def check_shared_element(path: pathlib.Path, code: str) -> None:
 def check_shared_content_state_import(path: pathlib.Path, imports: set[str]) -> None:
     """rememberSharedContentState is a member of SharedTransitionScope."""
     if "androidx.compose.animation.core.rememberSharedContentState" in imports:
-        line = 0
         errors.append(
             f"{path.relative_to(ROOT)}: rememberSharedContentState is a member of "
             f"SharedTransitionScope and must not be imported from "
             f"androidx.compose.animation.core"
         )
-        del line
+
+
+def check_predictive_back_collect(path: pathlib.Path, code: str) -> None:
+    """The lint rule NoCollectCallFound requires the progress flow to be collected.
+
+    PredictiveBackHandler hands a Flow to a suspending lambda. Without a
+    collect call the whole block runs when the gesture starts instead of when
+    it completes, which also trips the lint rule that fails the build.
+    """
+    for match in re.finditer(r"PredictiveBackHandler\s*(\(|\{)", code):
+        opener = match.group(1)
+        closer = ")" if opener == "(" else "}"
+        start = match.end()
+        depth = 1
+        index = start
+        while index < len(code) and depth:
+            if code[index] in "({":
+                depth += 1
+            elif code[index] in ")}":
+                depth -= 1
+            index += 1
+        arguments = code[start : index - 1]
+        if not re.search(r"\.collect\s*(\(|\{)", arguments):
+            line = code[: match.start()].count("\n") + 1
+            errors.append(
+                f"{path.relative_to(ROOT)}:{line}: PredictiveBackHandler must "
+                f"collect the progress flow, otherwise the block runs when the "
+                f"gesture starts instead of when it completes"
+            )
 
 
 def main() -> int:
@@ -159,6 +186,7 @@ def main() -> int:
         check_size_classes(path, code)
         check_shared_element(path, code)
         check_shared_content_state_import(path, imports)
+        check_predictive_back_collect(path, code)
 
     if errors:
         print("Static reference check failed:\n")

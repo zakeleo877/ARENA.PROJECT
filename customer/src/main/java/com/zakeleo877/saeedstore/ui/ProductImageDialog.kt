@@ -1,7 +1,6 @@
 package com.zakeleo877.saeedstore.ui
 
 import androidx.activity.compose.PredictiveBackHandler
-import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
@@ -13,7 +12,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +33,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.zakeleo877.saeedcore.designsystem.saeedBlurBehind
 import com.zakeleo877.saeedstore.R
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
 
 /**
@@ -51,16 +50,27 @@ fun ProductImageDialog(
     onDismiss: () -> Unit,
 ) {
     // The gesture progress drives the shrink so the exit is animated.
-    val progress = remember { Animatable(0f) }
+    var backProgress by remember { mutableFloatStateOf(0f) }
     var scale by remember { mutableFloatStateOf(1f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
 
-    PredictiveBackHandler {
-        progress.animateTo(1f)
-        onDismiss()
+    PredictiveBackHandler { backEvents ->
+        try {
+            // The flow must be collected so the handler can tell the start of
+            // the gesture apart from its completion.
+            backEvents.collect { event ->
+                backProgress = event.progress
+            }
+            // The gesture was committed, so the viewer closes.
+            onDismiss()
+        } catch (cancellation: CancellationException) {
+            // The gesture was abandoned, so the viewer returns to its resting
+            // state and stays open.
+            backProgress = 0f
+            throw cancellation
+        }
     }
-    LaunchedEffect(Unit) { progress.snapTo(0f) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -101,13 +111,12 @@ fun ProductImageDialog(
                     .fillMaxSize()
                     .padding(16.dp)
                     .graphicsLayer {
-                        val fraction = progress.value
-                        val shrink = 1f - fraction * 0.25f
+                        val shrink = 1f - backProgress * 0.25f
                         scaleX = scale * shrink
                         scaleY = scale * shrink
-                        translationX = offsetX * (1f - fraction)
-                        translationY = offsetY * (1f - fraction)
-                        alpha = 1f - fraction * 0.4f
+                        translationX = offsetX * (1f - backProgress)
+                        translationY = offsetY * (1f - backProgress)
+                        alpha = 1f - backProgress * 0.4f
                     },
             )
 

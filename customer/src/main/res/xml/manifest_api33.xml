@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Predictive back is enabled from Android 13 onwards. -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-    <application
-        android:enableOnBackInvokedCallback="true"
-        tools:targetApi="33" />
-</manifest>
