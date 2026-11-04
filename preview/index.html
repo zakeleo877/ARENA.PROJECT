@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>محلات السعيد — معاينة الواجهة</title>
+<style>
+  :root {
+    --electric-cyan: #00F0FF;
+    --neon-blue: #0077FF;
+    --royal-purple: #7000FF;
+    --deep-void-violet: #240046;
+    --shadow-black: #0A0A0F;
+    --spectral-white: #E0FFFF;
+    --semantic-error: #FFB4AB;
+    --semantic-success: #70DFAD;
+    --semantic-warning: #FFC65C;
+    --surface-container-low: #0E0E14;
+    --surface-container: #13131A;
+    --surface-container-high: #181822;
+    --surface-container-highest: #1F1F2A;
+    --outline: rgba(0, 119, 255, 0.30);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--shadow-black);
+    color: var(--spectral-white);
+    font-family: "Tajawal", "Segoe UI", Tahoma, system-ui, sans-serif;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  .page-header {
+    padding: 28px 20px 20px;
+    border-bottom: 1px solid var(--outline);
+    background: linear-gradient(180deg, #101018 0%, var(--shadow-black) 100%);
+  }
+  .page-header h1 {
+    margin: 0;
+    font-size: 26px;
+    font-weight: 700;
+  }
+  .page-header p {
+    margin: 6px 0 0;
+    color: rgba(224, 255, 255, 0.70);
+    font-size: 14px;
+  }
+  .badge {
+    display: inline-block;
+    margin-top: 12px;
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(0, 240, 255, 0.4);
+    background: rgba(0, 240, 255, 0.10);
+    color: var(--electric-cyan);
+    font-size: 12px;
+  }
+
+  .swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+  }
+  .swatch {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border: 1px solid var(--outline);
+    border-radius: 8px;
+    font-size: 12px;
+    background: var(--surface-container);
+  }
+  .chip { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15); }
+
+  .section {
+    padding: 26px 20px 8px;
+  }
+  .section h2 {
+    margin: 0 0 4px;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .section p.hint {
+    margin: 0 0 16px;
+    font-size: 13px;
+    color: rgba(224, 255, 255, 0.60);
+  }
+
+  .phones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 22px;
+    align-items: flex-start;
+  }
+
+  .phone {
+    width: 320px;
+    flex: 0 0 auto;
+    border: 2px solid #2A2A38;
+    border-radius: 30px;
+    overflow: hidden;
+    background: var(--shadow-black);
+    box-shadow: 0 18px 48px rgba(0,0,0,0.6);
+  }
+  .phone-bar {
+    height: 22px;
+    background: #08080C;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: rgba(224,255,255,0.45);
+  }
+  .screen {
+    height: 560px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .screen::-webkit-scrollbar { width: 0; }
+
+  .appbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--surface-container-low);
+    border-bottom: 1px solid var(--outline);
+  }
+  .appbar .titles { flex: 1; min-width: 0; }
+  .appbar h3 { margin: 0; font-size: 16px; font-weight: 700; }
+  .appbar small { color: rgba(224,255,255,0.60); font-size: 11px; }
+  .iconbtn {
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    border: 1px solid var(--outline);
+    background: var(--surface-container);
+    display: grid; place-items: center;
+    font-size: 17px;
+    position: relative;
+    flex: 0 0 auto;
+  }
+  .count {
+    position: absolute;
+    top: -5px; left: -5px;
+    min-width: 18px; height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--electric-cyan);
+    color: var(--shadow-black);
+    font-size: 10px; font-weight: 700;
+    display: grid; place-items: center;
+  }
+
+  .offline {
+    background: rgba(0, 119, 255, 0.18);
+    color: var(--spectral-white);
+    padding: 9px 14px;
+    font-size: 11.5px;
+    border-bottom: 1px solid var(--outline);
+  }
+
+  .search {
+    margin: 10px 14px;
+    padding: 11px 14px;
+    border: 1px solid var(--outline);
+    border-radius: 12px;
+    background: var(--surface-container);
+    color: rgba(224,255,255,0.45);
+    font-size: 13px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .chips { display: flex; gap: 8px; padding: 0 14px 10px; overflow-x: auto; }
+  .chipf {
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--outline);
+    background: transparent;
+    color: var(--spectral-white);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .chipf.on {
+    background: rgba(0, 119, 255, 0.28);
+    border-color: rgba(0, 240, 255, 0.5);
+    color: var(--spectral-white);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 0 14px 14px;
+  }
+  .card {
+    border: 1px solid var(--outline);
+    border-radius: 16px;
+    background: var(--surface-container-high);
+    overflow: hidden;
+  }
+  .thumb {
+    height: 96px;
+    background: linear-gradient(135deg, var(--surface-container-highest), var(--surface-container-low));
+    display: grid; place-items: center;
+    font-size: 28px;
+    opacity: 0.7;
+  }
+  .card .body { padding: 9px 10px 11px; }
+  .card h4 { margin: 0; font-size: 13px; font-weight: 700; }
+  .card .cat { margin: 1px 0 7px; font-size: 10.5px; color: rgba(224,255,255,0.60); }
+  .price { font-size: 13px; font-weight: 700; color: var(--electric-cyan); }
+  .card .row { display: flex; align-items: center; justify-content: space-between; }
+  .add {
+    width: 32px; height: 32px;
+    border-radius: 10px;
+    border: 1px solid rgba(0,240,255,0.35);
+    background: rgba(0,240,255,0.10);
+    color: var(--electric-cyan);
+    display: grid; place-items: center;
+    font-size: 18px; font-weight: 700;
+  }
+
+  .content { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+
+  .btn {
+    display: block;
+    width: 100%;
+    min-height: 48px;
+    border: none;
+    border-radius: 12px;
+    background: var(--electric-cyan);
+    color: var(--shadow-black);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    text-align: center;
+    line-height: 48px;
+  }
+  .btn.ghost {
+    background: transparent;
+    color: var(--spectral-white);
+    border: 1px solid var(--outline);
+  }
+  .btn.danger { background: transparent; color: var(--semantic-error); border: 1px solid rgba(255,180,171,0.35); }
+
+  .field {
+    padding: 10px 13px;
+    border: 1px solid var(--outline);
+    border-radius: 12px;
+    background: var(--surface-container);
+    font-size: 13px;
+  }
+  .field .label { font-size: 11px; color: rgba(224,255,255,0.60); }
+  .field .value { color: rgba(224,255,255,0.85); }
+  .field.err { border-color: var(--semantic-error); }
+  .field .err-msg { font-size: 11px; color: var(--semantic-error); margin-top: 3px; }
+  .hint-sm { font-size: 11px; color: rgba(224,255,255,0.60); }
+
+  .lineitem {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 12px;
+    border: 1px solid var(--outline);
+    border-radius: 14px;
+    background: var(--surface-container-high);
+  }
+  .lineitem .info { flex: 1; min-width: 0; }
+  .lineitem h4 { margin: 0; font-size: 13px; }
+  .lineitem .sub { font-size: 11px; color: rgba(224,255,255,0.60); }
+  .qty {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .qty button {
+    width: 34px; height: 34px;
+    border-radius: 10px;
+    border: 1px solid var(--outline);
+    background: var(--surface-container);
+    color: var(--spectral-white);
+    font-size: 17px; line-height: 1;
+  }
+
+  .totalbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px;
+    border-radius: 14px;
+    background: var(--surface-container-high);
+    border: 1px solid var(--outline);
+  }
+
+  .status {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(0,240,255,0.35);
+    background: var(--surface-container-high);
+    font-size: 11px;
+  }
+  .status .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .status.new .dot { background: var(--electric-cyan); }
+  .status.prep .dot { background: var(--semantic-warning); }
+  .status.ready .dot { background: var(--semantic-success); }
+  .status.hand .dot { background: var(--electric-cyan); }
+  .status.canc .dot { background: var(--semantic-error); }
+
+  .navbar {
+    margin-top: auto;
+    display: flex;
+    border-top: 1px solid var(--outline);
+    background: var(--surface-container-low);
+  }
+  .navbar div {
+    flex: 1;
+    text-align: center;
+    padding: 9px 0 11px;
+    font-size: 10.5px;
+    color: rgba(224,255,255,0.60);
+  }
+  .navbar div.on { color: var(--electric-cyan); }
+  .navbar .ico { font-size: 17px; display: block; margin-bottom: 2px; }
+
+  .stats {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  }
+  .stat {
+    border: 1px solid var(--outline);
+    border-radius: 14px;
+    background: var(--surface-container-high);
+    padding: 14px 10px;
+    text-align: center;
+  }
+  .stat .v { font-size: 20px; font-weight: 700; }
+  .stat .k { font-size: 10.5px; color: rgba(224,255,255,0.60); }
+
+  .sheet {
+    margin: auto 10px 10px;
+    border: 1px solid var(--outline);
+    border-radius: 26px;
+    background: rgba(24, 24, 34, 0.97);
+    padding: 18px 16px;
+    box-shadow: 0 -10px 40px rgba(0,0,0,0.6);
+  }
+  .grabber {
+    width: 38px; height: 4px; border-radius: 999px;
+    background: rgba(224,255,255,0.25);
+    margin: 0 auto 12px;
+  }
+  .scrim { flex: 1; background: rgba(10,10,15,0.55); }
+
+  .listrow {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 12px;
+    border: 1px solid var(--outline);
+    border-radius: 14px;
+    background: var(--surface-container-high);
+  }
+  .listrow .num { font-weight: 700; color: var(--electric-cyan); font-size: 13px; }
+
+  .note {
+    margin: 18px 20px 40px;
+    padding: 14px 16px;
+    border: 1px solid var(--outline);
+    border-radius: 14px;
+    background: var(--surface-container);
+    font-size: 12.5px;
+    color: rgba(224,255,255,0.75);
+  }
+  .note b { color: var(--electric-cyan); }
+  .note code {
+    background: var(--surface-container-highest);
+    padding: 1px 5px; border-radius: 5px; font-size: 11.5px;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>محلات السعيد — معاينة الواجهة</h1>
+  <p>معاينة ثابتة لشاشات التطبيقين مبنية على نفس لوحة ألوان Neon Void ونصوص الواجهة المستخرجة من الكود.</p>
+  <span class="badge">تطبيق الزبائن · تطبيق الإدارة · Neon Void · RTL</span>
+  <div class="swatches">
+    <div class="swatch"><span class="chip" style="background:#00F0FF"></span>ElectricCyan</div>
+    <div class="swatch"><span class="chip" style="background:#0077FF"></span>NeonBlue</div>
+    <div class="swatch"><span class="chip" style="background:#7000FF"></span>RoyalPurple</div>
+    <div class="swatch"><span class="chip" style="background:#240046"></span>DeepVoidViolet</div>
+    <div class="swatch"><span class="chip" style="background:#0A0A0F"></span>ShadowBlack</div>
+    <div class="swatch"><span class="chip" style="background:#E0FFFF"></span>SpectralWhite</div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>تطبيق الزبائن — محلات السعيد</h2>
+  <p class="hint">الرئيسية، السلة، وإتمام الطلب. الأيقونات تمثيلية؛ التخطيط والألوان والنصوص مطابقة للكود.</p>
+  <div class="phones">
+
+    <!-- Catalog -->
+    <div class="phone">
+      <div class="phone-bar">محلات السعيد</div>
+      <div class="screen">
+        <div class="appbar">
+          <div class="titles">
+            <h3>محلات السعيد</h3>
+            <small>حلاقة وتجميل — اطلب من مكانك</small>
+          </div>
+          <div class="iconbtn">🕘</div>
+          <div class="iconbtn">🛒<span class="count">3</span></div>
+        </div>
+
+        <div class="offline">لا يوجد اتصال بالإنترنت. تتصفّح المنتجات المحفوظة، وسيُرسل طلبك تلقائياً عند عودة الاتصال.</div>
+
+        <div class="search">🔍 <span>ابحث عن منتج…</span></div>
+
+        <div class="chips">
+          <div class="chipf on">الكل</div>
+          <div class="chipf">حلاقة</div>
+          <div class="chipf">عناية</div>
+          <div class="chipf">عطور</div>
+        </div>
+
+        <div class="grid">
+          <div class="card">
+            <div class="thumb">🧴</div>
+            <div class="body">
+              <h4>شامبو</h4>
+              <p class="cat">عناية</p>
+              <div class="row"><span class="price">850.00 د.ج</span><span class="add">+</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="thumb">🪒</div>
+            <div class="body">
+              <h4>ماكينة حلاقة</h4>
+              <p class="cat">حلاقة</p>
+              <div class="row"><span class="price">3200.00 د.ج</span><span class="add">+</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="thumb">🧔</div>
+            <div class="body">
+              <h4>كريم حلاقة</h4>
+              <p class="cat">حلاقة</p>
+              <div class="row"><span class="price">420.00 د.ج</span><span class="add">+</span></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="thumb">🌸</div>
+            <div class="body">
+              <h4>عطر شرقي</h4>
+              <p class="cat">عطور</p>
+              <div class="row"><span class="price">5600.00 د.ج</span><span class="add">+</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cart -->
+    <div class="phone">
+      <div class="phone-bar">السلة</div>
+      <div class="screen">
+        <div class="appbar">
+          <div class="titles"><h3>سلة المشتريات</h3></div>
+        </div>
+        <div class="content">
+          <div class="lineitem">
+            <div class="info">
+              <h4>شامبو</h4>
+              <div class="sub">850.00 د.ج</div>
+              <div class="price">1700.00 د.ج</div>
+            </div>
+            <div class="qty"><button>−</button><span>2</span><button>+</button></div>
+          </div>
+
+          <div class="lineitem">
+            <div class="info">
+              <h4>ماكينة حلاقة</h4>
+              <div class="sub">3200.00 د.ج</div>
+              <div class="price">3200.00 د.ج</div>
+            </div>
+            <div class="qty"><button>−</button><span>1</span><button>+</button></div>
+          </div>
+
+          <div class="totalbar">
+            <span>المجموع</span>
+            <span class="price">4900.00 د.ج</span>
+          </div>
+
+          <button class="btn">إتمام الطلب</button>
+          <p class="hint-sm">الحذف بالسحب مع «تراجع» يظهر في الشريط السفلي.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Checkout -->
+    <div class="phone">
+      <div class="phone-bar">إتمام الطلب</div>
+      <div class="screen">
+        <div class="scrim"></div>
+        <div class="sheet">
+          <div class="grabber"></div>
+          <div class="content" style="padding:0;gap:10px">
+            <h3 style="margin:0 0 4px">إتمام الطلب</h3>
+            <div class="field">
+              <div class="label">الاسم الكامل</div>
+              <div class="value">أمين بن علي</div>
+            </div>
+            <div class="field err">
+              <div class="label">رقم الهاتف</div>
+              <div class="value">0555</div>
+              <div class="err-msg">أدخل رقم هاتف جزائري صحيح (8 إلى 15 رقماً).</div>
+            </div>
+            <div class="field">
+              <div class="label">ملاحظات (اختياري)</div>
+              <div class="value" style="opacity:0.6">التوصيل بعد العصر</div>
+            </div>
+            <button class="btn ghost" style="min-height:44px;line-height:44px">📍 إضافة موقعي</button>
+            <p class="hint-sm">لمساعدة المحل على التواصل معك — اختياري</p>
+            <button class="btn">إرسال الطلب</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="section">
+  <h2>تطبيق الإدارة — إدارة محلات السعيد</h2>
+  <p class="hint">تسجيل الدخول، لوحة الإحصائيات، والطلبات.</p>
+  <div class="phones">
+
+    <!-- Login -->
+    <div class="phone">
+      <div class="phone-bar">إدارة محلات السعيد</div>
+      <div class="screen" style="justify-content:center">
+        <div class="content" style="padding:22px;align-items:center;text-align:center">
+          <div style="font-size:48px">🛡️</div>
+          <h3 style="margin:6px 0 0">إدارة محلات السعيد</h3>
+          <p class="hint-sm" style="margin:2px 0 14px">سجّل الدخول لإدارة الطلبات والمنتجات</p>
+          <div class="field" style="width:100%;text-align:right">
+            <div class="label">البريد الإلكتروني</div>
+            <div class="value">owner@example.com</div>
+          </div>
+          <div class="field" style="width:100%;text-align:right">
+            <div class="label">كلمة المرور</div>
+            <div class="value">••••••••••</div>
+          </div>
+          <button class="btn">تسجيل الدخول</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="phone">
+      <div class="phone-bar">اللوحة</div>
+      <div class="screen">
+        <div class="appbar">
+          <div class="titles"><h3>اللوحة</h3></div>
+          <div class="iconbtn">🔄</div>
+        </div>
+        <div class="content">
+          <div class="stats">
+            <div class="stat"><div class="v">4</div><div class="k">طلبات جديدة</div></div>
+            <div class="stat"><div class="v">7</div><div class="k">طلبات اليوم</div></div>
+            <div class="stat"><div class="v">128</div><div class="k">إجمالي الطلبات</div></div>
+            <div class="stat"><div class="v">24</div><div class="k">عدد المنتجات</div></div>
+          </div>
+          <div class="stat" style="text-align:center">
+            <div class="v">18400.00 د.ج</div>
+            <div class="k">مبيعات المسلَّم</div>
+          </div>
+          <div class="note" style="margin:0">
+            تُحدَّث البطاقات لحظياً عبر Realtime عند وصول طلب جديد.
+          </div>
+        </div>
+        <div class="navbar">
+          <div class="on"><span class="ico">▦</span>اللوحة</div>
+          <div><span class="ico">🧾</span>الطلبات</div>
+          <div><span class="ico">📦</span>المنتجات</div>
+          <div><span class="ico">⚙</span>الإعدادات</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Orders -->
+    <div class="phone">
+      <div class="phone-bar">الطلبات</div>
+      <div class="screen">
+        <div class="appbar">
+          <div class="titles"><h3>الطلبات</h3></div>
+        </div>
+        <div class="content">
+          <div class="search">🔍 <span>ابحث برقم الطلب أو الاسم أو الهاتف…</span></div>
+          <div class="chips">
+            <div class="chipf on">الكل</div>
+            <div class="chipf">جديد</div>
+            <div class="chipf">قيد التحضير</div>
+            <div class="chipf">جاهز</div>
+            <div class="chipf">مُسلَّم</div>
+            <div class="chipf">ملغي</div>
+          </div>
+
+          <div class="listrow">
+            <div class="info" style="flex:1">
+              <div class="row" style="display:flex;align-items:center;gap:8px">
+                <span class="num">#128</span>
+                <span class="status new"><span class="dot"></span>جديد</span>
+              </div>
+              <div style="font-size:13px;margin-top:4px">أمين بن علي</div>
+              <div class="sub" style="font-size:11px;color:rgba(224,255,255,0.6)">0555 12 34 56</div>
+              <div class="price" style="margin-top:3px">4900.00 د.ج</div>
+              <div style="font-size:11px;color:rgba(224,255,255,0.6)">04/11/2026 14:32</div>
+            </div>
+          </div>
+
+          <div class="listrow">
+            <div class="info" style="flex:1">
+              <div class="row" style="display:flex;align-items:center;gap:8px">
+                <span class="num">#127</span>
+                <span class="status ready"><span class="dot"></span>جاهز</span>
+              </div>
+              <div style="font-size:13px;margin-top:4px">سمير قاسم</div>
+              <div class="sub" style="font-size:11px;color:rgba(224,255,255,0.6)">0661 98 76 54</div>
+              <div class="price" style="margin-top:3px">3200.00 د.ج</div>
+            </div>
+          </div>
+
+          <div class="listrow">
+            <div class="info" style="flex:1">
+              <div class="row" style="display:flex;align-items:center;gap:8px">
+                <span class="num">#126</span>
+                <span class="status prep"><span class="dot"></span>قيد التحضير</span>
+              </div>
+              <div style="font-size:13px;margin-top:4px">ياسين مرابط</div>
+              <div class="sub" style="font-size:11px;color:rgba(224,255,255,0.6)">0770 45 67 89</div>
+              <div class="price" style="margin-top:3px">850.00 د.ج</div>
+            </div>
+          </div>
+        </div>
+        <div class="navbar">
+          <div><span class="ico">▦</span>اللوحة</div>
+          <div class="on"><span class="ico">🧾</span>الطلبات</div>
+          <div><span class="ico">📦</span>المنتجات</div>
+          <div><span class="ico">⚙</span>الإعدادات</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="note">
+  <b>ملاحظة مهمة:</b> هذه معاينة ساكنة تمثّل تخطيط الشاشات كما هو محدد في الكود
+  (<code>customer/src/main/java/…/ui</code> و<code>admin/src/main/java/…/ui</code>) بنفس لوحة
+  <code>NeonVoidColorScheme</code> ونصوص <code>strings.xml</code>.
+  <br><br>
+  <b>ما هو مُتحقَّق منه فعليًا:</b> البناء والاختبارات و lint نجحت في GitHub Actions (التشغيل 41879848618)،
+  وفحوص الحزمة ١-١٠ وفحوص المستودع ١١-١٣ نجحت، و32 فحص SQL نجحت.
+  <br><br>
+  <b>ما لم يُختبر بعد:</b> لا يوجد جهاز أو محاكي، فلا لقطات شاشة حقيقية ولا اختبار وضع الطيران
+  ولا إشعارات فعلية. التفاصيل في <code>docs/acceptance-results.md</code>.
+</div>
+
+</body>
+</html>
