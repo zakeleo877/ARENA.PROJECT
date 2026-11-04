@@ -36,8 +36,9 @@ android {
         .orElse(providers.environmentVariable("SAEED_COMPILE_SDK"))
         .map { it.trim() }
         .filter { it.isNotEmpty() }
-        .orElse("37")
+        .orElse("android-37")
         .get())
+    // The value must use the android-NN format, with an optional minor version.
     compileSdkVersion(saeedCompileSdk)
     defaultConfig {
         applicationId = "com.zakeleo877.saeedstore"
