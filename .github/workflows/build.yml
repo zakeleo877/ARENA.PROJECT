@@ -76,35 +76,50 @@ jobs:
             sdkmanager --version 2>&1
             echo "--- licenses ---"
             yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses 2>&1 | tail -n 20
-            echo "--- available platforms ---"
-            sdkmanager --sdk_root="$ANDROID_HOME" --list 2>&1 | grep -E 'platforms;android-3[0-9]' | head -n 20
-            echo "--- available build tools ---"
-            sdkmanager --sdk_root="$ANDROID_HOME" --list 2>&1 | grep -E 'build-tools;3[0-9]' | head -n 20
+            echo "--- platforms ---"
+            sdkmanager --sdk_root="$ANDROID_HOME" --list 2>&1 | grep -E 'platforms;android-3[0-9]' | head -n 15
+            echo "--- build tools ---"
+            sdkmanager --sdk_root="$ANDROID_HOME" --list 2>&1 | grep -E 'build-tools;3[0-9]' | head -n 15
           } | tee /tmp/sdk-logs/sdk-probe.txt
 
           PLATFORM="$(grep -oE 'platforms;android-3[0-9]' /tmp/sdk-logs/sdk-probe.txt | sort -u | tail -n 1)"
           BUILD_TOOLS="$(grep -oE 'build-tools;3[0-9][0-9.]*' /tmp/sdk-logs/sdk-probe.txt | sort -V | tail -n 1)"
 
-          echo "Installing platform: ${PLATFORM:-none found}"
-          echo "Installing build tools: ${BUILD_TOOLS:-none found}"
+          {
+            echo "### Chosen platform: ${PLATFORM:-none found}"
+            echo "### Chosen build tools: ${BUILD_TOOLS:-none found}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          {
+            echo '<details><summary>sdkmanager probe</summary>'
+            echo
+            echo '```'
+            cat /tmp/sdk-logs/sdk-probe.txt
+            echo '```'
+            echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"
 
           set -e
           sdkmanager --sdk_root="$ANDROID_HOME" "platform-tools" \
             "${PLATFORM:-platforms;android-36}" \
-            "${BUILD_TOOLS:-build-tools;36.0.0}" 2>&1 | tee /tmp/sdk-logs/sdk-install.txt
+            "${BUILD_TOOLS:-build-tools;36.0.0}" 2>&1 | tee /tmp/sdk-logs/sdk-install.txt || {
+              {
+                echo '<details><summary>sdkmanager install output</summary>'
+                echo
+                echo '```'
+                cat /tmp/sdk-logs/sdk-install.txt
+                echo '```'
+                echo '</details>'
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            }
 
           {
-            echo "--- installed packages ---"
-            sdkmanager --sdk_root="$ANDROID_HOME" --list_installed 2>&1
-          } | tee /tmp/sdk-logs/sdk-installed.txt
-
-      - name: Upload SDK diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: sdk-diagnostics
-          path: /tmp/sdk-logs/
-          if-no-files-found: warn
+            echo "### Installed packages"
+            echo '```'
+            sdkmanager --sdk_root="$ANDROID_HOME" --list_installed 2>&1 | head -n 20
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # The publishable key and the project URL are public values, but they are
       # kept in secrets so nothing sensitive is ever committed.
@@ -140,14 +155,38 @@ jobs:
         env:
           SAEED_COMPILE_SDK: ${{ vars.SAEED_COMPILE_SDK }}
         run: |
-          ./gradlew --no-daemon --stacktrace test lint
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace test lint 2>&1 | tee /tmp/gradle-test.log || {
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            grep -E 'error:|e: |FAILED|Execution failed|Caused by|\* What went wrong' -A 3 /tmp/gradle-test.log | head -n 120 >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          {
+            echo '### Gradle test and lint output'
+            echo '```'
+            tail -n 40 /tmp/gradle-test.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
           mkdir -p artifacts/logs
           find . -name '*.xml' -path '*/test-results/*' -exec cp --parents {} artifacts/logs/ \; 2>/dev/null || true
           find . -name 'lint-results*.html' -exec cp --parents {} artifacts/logs/ \; 2>/dev/null || true
 
       - name: Build both release APKs
         run: |
-          ./gradlew --no-daemon --stacktrace :customer:assembleRelease :admin:assembleRelease
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace :customer:assembleRelease :admin:assembleRelease 2>&1 | tee /tmp/gradle-build.log || {
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            grep -E 'error:|e: |FAILED|Execution failed|Caused by|\* What went wrong' -A 3 /tmp/gradle-build.log | head -n 150 >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+          {
+            echo '### Gradle build output'
+            echo '```'
+            tail -n 30 /tmp/gradle-build.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
           mkdir -p artifacts/apk
           cp customer/build/outputs/apk/release/*.apk artifacts/apk/saeed-store-1.0.apk
           cp admin/build/outputs/apk/release/*.apk artifacts/apk/saeed-admin-1.0.apk
