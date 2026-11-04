@@ -159,8 +159,8 @@ bash scripts/db-security-tests.sh
 
 ## الفحوص المنفّذة
 
-آخر تشغيل ناجح: **41915916445** — كل الخطوات خضراء.
-<https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/41915916445>
+آخر تشغيل ناجح: **41918818858** — كل الخطوات خضراء.
+<https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/41918818858>
 
 - `./gradlew test lint` نجح.
 - `./gradlew :customer:assembleRelease :admin:assembleRelease` نجح (`BUILD SUCCESSFUL`).
