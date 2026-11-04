@@ -138,6 +138,27 @@ jobs:
 
       # The publishable key and the project URL are public values, but they are
       # kept in secrets so nothing sensitive is ever committed.
+      # Check that every pinned plugin and library version exists before the
+      # build starts, so a bad version is reported clearly.
+      - name: Verify the pinned versions
+        run: |
+          set -uo pipefail
+          {
+            echo "## Plugin and library versions"
+            for url in \
+              "https://plugins.gradle.org/m2/org/jetbrains/kotlin/plugin/compose/org.jetbrains.kotlin.plugin.compose.gradle.plugin/2.4.21/org.jetbrains.kotlin.plugin.compose.gradle.plugin-2.4.21.pom" \
+              "https://plugins.gradle.org/m2/org/jetbrains/kotlin/plugin/compose/org.jetbrains.kotlin.plugin.compose.gradle.plugin/2.4.20/org.jetbrains.kotlin.plugin.compose.gradle.plugin-2.4.20.pom" \
+              "https://plugins.gradle.org/m2/com/google/devtools/ksp/com.google.devtools.ksp.gradle.plugin/2.3.12/com.google.devtools.ksp.gradle.plugin-2.3.12.pom" \
+              "https://repo1.maven.org/maven2/androidx/room3/room3-runtime/3.0.3/room3-runtime-3.0.3.pom" \
+              "https://repo1.maven.org/maven2/com/google/dagger/hilt-android/2.60.1/hilt-android-2.60.1.pom" \
+              "https://repo1.maven.org/maven2/androidx/compose/compose-bom/2026.09.00/compose-bom-2026.09.00.pom" \
+              "https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/9.5.0/gradle-9.5.0.pom"; do
+              CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$url" 2>/dev/null || echo ERR)"
+              echo "$CODE  $url"
+            done
+          } > /tmp/versions.txt 2>&1
+          cat /tmp/versions.txt
+
       - name: Generate local.properties
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -229,6 +250,11 @@ jobs:
             echo "## runner probe"
             echo '```'
             cat /tmp/runner-probe.txt 2>/dev/null || echo "(no probe output)"
+            echo '```'
+            echo
+            echo '## version probe'
+            echo '```'
+            cat /tmp/versions.txt 2>/dev/null || echo "(not reached)"
             echo '```'
             echo
             echo '## Gradle test and lint'
