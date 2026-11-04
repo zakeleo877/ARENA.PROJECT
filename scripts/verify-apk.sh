@@ -47,7 +47,8 @@ if echo "$BADGING" | grep -q "minSdkVersion:'24'"; then
 else
   fail "4. minSdkVersion is not 24"
 fi
-if echo "$BADGING" | grep -q "versionName:'1.0'"; then
+# The version is reported on the package line of the badging output.
+if echo "$BADGING" | grep -q "versionName='1.0'"; then
   pass "4. versionName is 1.0"
 else
   fail "4. versionName is not 1.0"
