@@ -110,6 +110,42 @@ def check_size_classes(path: pathlib.Path, code: str) -> None:
             )
 
 
+def check_shared_element(path: pathlib.Path, code: str) -> None:
+    """The sharedElement modifier names its first parameter sharedContentState.
+
+    An older signature used "state"; passing that name now fails to compile.
+    """
+    for match in re.finditer(r"\.sharedElement\s*\(", code):
+        start = match.end()
+        depth = 1
+        index = start
+        while index < len(code) and depth:
+            if code[index] == "(":
+                depth += 1
+            elif code[index] == ")":
+                depth -= 1
+            index += 1
+        arguments = code[start : index - 1]
+        if "state" in arguments and "sharedContentState" not in arguments:
+            line = code[: match.start()].count("\n") + 1
+            errors.append(
+                f"{path.relative_to(ROOT)}:{line}: sharedElement expects the "
+                f"parameter sharedContentState, not state"
+            )
+
+
+def check_shared_content_state_import(path: pathlib.Path, imports: set[str]) -> None:
+    """rememberSharedContentState is a member of SharedTransitionScope."""
+    if "androidx.compose.animation.core.rememberSharedContentState" in imports:
+        line = 0
+        errors.append(
+            f"{path.relative_to(ROOT)}: rememberSharedContentState is a member of "
+            f"SharedTransitionScope and must not be imported from "
+            f"androidx.compose.animation.core"
+        )
+        del line
+
+
 def main() -> int:
     files = kotlin_files()
     for path in files:
@@ -121,6 +157,8 @@ def main() -> int:
         code = strip_noise(source)
         check_modifier_extensions(path, code, imports)
         check_size_classes(path, code)
+        check_shared_element(path, code)
+        check_shared_content_state_import(path, imports)
 
     if errors:
         print("Static reference check failed:\n")

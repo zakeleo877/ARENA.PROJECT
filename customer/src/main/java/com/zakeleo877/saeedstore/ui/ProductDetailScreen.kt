@@ -3,7 +3,6 @@ package com.zakeleo877.saeedstore.ui
 import androidx.compose.animation.AnimatedContentScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.core.rememberSharedContentState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -97,7 +96,7 @@ fun SharedTransitionScope.ProductDetailScreen(
                         .fillMaxWidth()
                         .height(280.dp)
                         .sharedElement(
-                            state = rememberSharedContentState(key = "product-image-${product.id}"),
+                            sharedContentState = rememberSharedContentState(key = "product-image-${product.id}"),
                             animatedVisibilityScope = animatedScope,
                         )
                         .clickable { zoomOpen = true },

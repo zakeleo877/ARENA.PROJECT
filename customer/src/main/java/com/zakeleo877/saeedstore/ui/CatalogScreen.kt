@@ -262,7 +262,7 @@ private fun SharedTransitionScope.ProductCard(
                     modifier = Modifier
                         .fillMaxSize()
                         .sharedElement(
-                            state = rememberSharedContentState(key = "product-image-${product.id}"),
+                            sharedContentState = rememberSharedContentState(key = "product-image-${product.id}"),
                             animatedVisibilityScope = animatedScope,
                         ),
                 )
