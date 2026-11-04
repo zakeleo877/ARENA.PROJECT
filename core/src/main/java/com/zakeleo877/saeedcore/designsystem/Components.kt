@@ -177,7 +177,12 @@ fun SaeedSearchField(
         trailingIcon = {
             if (value.isNotEmpty()) {
                 IconButton(onClick = { onValueChange("") }) {
-                    Icon(Icons.Filled.Close, contentDescription = null)
+                    Icon(
+                        Icons.Filled.Close,
+                        // The button clears the field, so it needs a label that
+                        // a screen reader can announce.
+                        contentDescription = stringResource(R.string.action_clear_search),
+                    )
                 }
             }
         },

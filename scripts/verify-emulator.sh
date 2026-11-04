@@ -20,38 +20,58 @@ if ! command -v adb > /dev/null 2>&1; then
   exit 1
 fi
 
-adb wait-for-device
-# Wait for the package manager to finish booting.
+adb start-server > /dev/null 2>&1 || true
+
+# Wait for the device to show up, with a hard limit so the job cannot hang.
+DEVICE_SEEN=0
 for _ in $(seq 1 60); do
-  BOOTED="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
-  [ "$BOOTED" = "1" ] && break
-  sleep 2
+  if adb devices | grep -q 'emulator-[0-9]*[[:space:]]*device'; then
+    DEVICE_SEEN=1
+    break
+  fi
+  sleep 5
 done
-if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" != "1" ]; then
-  printf 'FAIL: the emulator did not finish booting\n'
+if [ "$DEVICE_SEEN" != "1" ]; then
+  printf 'FAIL: no emulator appeared in adb devices\n'
+  adb devices
   exit 1
 fi
+printf 'PASS: the emulator is visible to adb\n'
+
+# Wait for the package manager to finish booting, again with a hard limit.
+BOOTED=""
+for _ in $(seq 1 90); do
+  BOOTED="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+  [ "$BOOTED" = "1" ] && break
+  sleep 4
+done
+if [ "$BOOTED" != "1" ]; then
+  printf 'FAIL: the emulator did not finish booting\n'
+  adb shell getprop 2>/dev/null | head -n 20 || true
+  exit 1
+fi
+printf 'PASS: the emulator finished booting\n'
 
 adb logcat -c
-adb install -r -t "$APK" > /tmp/emulator-install.txt 2>&1 || {
+if ! timeout 300 adb install -r -t "$APK" > /tmp/emulator-install.txt 2>&1; then
   printf 'FAIL: the apk could not be installed\n'
   cat /tmp/emulator-install.txt
   exit 1
-}
+fi
 printf 'PASS: the apk was installed on the emulator\n'
 
-adb shell am start -W -n "$PACKAGE/$ACTIVITY" > /tmp/emulator-start.txt 2>&1 || {
+if ! timeout 180 adb shell am start -W -n "$PACKAGE/$ACTIVITY" > /tmp/emulator-start.txt 2>&1; then
   printf 'FAIL: the launcher activity did not start\n'
   cat /tmp/emulator-start.txt
   exit 1
-}
+fi
 cat /tmp/emulator-start.txt
 
 # Give the first composition time to finish and the network time to fail
 # gracefully, which is also the offline behaviour that has to be checked.
 sleep 12
 
-if ! adb shell pidof "$PACKAGE" > /dev/null 2>&1; then
+if ! timeout 60 adb shell pidof "$PACKAGE" > /dev/null 2>&1; then
   printf 'FAIL: the application process is not running after it was started\n'
   adb logcat -d -t 200 | tail -n 60
   exit 1
@@ -67,7 +87,7 @@ if [ -n "$FATAL" ]; then
 fi
 printf 'PASS: no fatal exception was logged\n'
 
-adb exec-out screencap -p > "$OUTPUT/$PACKAGE.png"
+timeout 120 adb exec-out screencap -p > "$OUTPUT/$PACKAGE.png"
 if [ ! -s "$OUTPUT/$PACKAGE.png" ]; then
   printf 'FAIL: the screenshot is empty\n'
   exit 1

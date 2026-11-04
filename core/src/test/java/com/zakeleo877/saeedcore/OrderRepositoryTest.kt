@@ -171,7 +171,7 @@ class OrderRepositoryTest {
 
         val seen = mutableListOf<String>()
         val engine = MockEngine { request ->
-            seen += request.body.toString()
+            seen += (request.body as io.ktor.http.content.TextContent).text
             respond("99", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
         }
         val working = OrderRepository(

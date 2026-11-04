@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -23,6 +25,8 @@ import com.zakeleo877.saeedcore.designsystem.SaeedSearchField
 import com.zakeleo877.saeedcore.designsystem.SaeedTextField
 import com.zakeleo877.saeedcore.designsystem.SaeedTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -122,7 +126,7 @@ class DesignSystemUiTest {
                 )
             }
         }
-        composeRule.onNodeWithContentDescription("Close").performClick()
+        composeRule.onNodeWithContentDescription("مسح البحث").performClick()
         composeRule.waitForIdle()
         assertEquals("", value)
     }
@@ -212,17 +216,22 @@ class DesignSystemUiTest {
 
     @Test
     fun `the theme applies the brand colours`() {
+        var primary = Color.Unspecified
+        var onPrimary = Color.Unspecified
         composeRule.setContent {
             SaeedTheme {
-                val colors = MaterialTheme.colorScheme
-                Column {
-                    androidx.compose.material3.Text(
-                        text = "${colors.primary}|${colors.onPrimary}",
-                    )
-                }
+                primary = MaterialTheme.colorScheme.primary
+                onPrimary = MaterialTheme.colorScheme.onPrimary
             }
         }
-        composeRule.onNodeWithText("|").assertIsDisplayed()
+        composeRule.waitForIdle()
+        // The brand colour is not the default purple, so the theme really was
+        // applied and not the stock Material palette.
+        assertNotEquals(Color(0xFF6750A4), primary)
+        // The text colour on the brand colour has to be readable, so it is
+        // either clearly lighter or clearly darker than the brand colour.
+        val difference = kotlin.math.abs(primary.luminance() - onPrimary.luminance())
+        assertTrue("the text colour must contrast with the brand colour", difference > 0.3f)
     }
 
     @Test
@@ -255,15 +264,17 @@ class DesignSystemUiTest {
     }
 
     @Test
-    fun `the button label is replaced by the new value`() {
-        var text = "قبل"
+    fun `the button label follows the state it is given`() {
+        var label by mutableStateOf("قبل")
         composeRule.setContent {
             SaeedTheme {
-                SaeedButton(text = text, onClick = {})
+                SaeedButton(text = label, onClick = {})
             }
         }
         composeRule.onNodeWithText("قبل").assertIsDisplayed()
-        text = "بعد"
+
+        // The label changes the way it does when a cart is emptied.
+        label = "بعد"
         composeRule.waitForIdle()
         composeRule.onNodeWithText("بعد").assertIsDisplayed()
         assertEquals(0, composeRule.onAllNodes(hasText("قبل")).fetchSemanticsNodes().size)

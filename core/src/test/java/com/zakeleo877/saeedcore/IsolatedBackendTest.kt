@@ -9,6 +9,7 @@ import com.zakeleo877.saeedcore.data.remote.AuthManager
 import com.zakeleo877.saeedcore.data.remote.AuthResult
 import com.zakeleo877.saeedcore.data.remote.CatalogApi
 import com.zakeleo877.saeedcore.data.remote.SupabasePublicConfig
+import com.zakeleo877.saeedcore.data.remote.anonymousHttpClient
 import com.zakeleo877.saeedcore.model.PendingOrder
 import com.zakeleo877.saeedcore.model.PendingOrderItem
 import io.ktor.client.HttpClient
@@ -97,9 +98,11 @@ class IsolatedBackendTest {
         )
     }
 
-    private fun client(): HttpClient = HttpClient(engine()) {
-        expectSuccess = false
-    }
+    /**
+     * The same client factory the application uses, so the JSON
+     * transformation and the timeouts are the production ones.
+     */
+    private fun client(): HttpClient = anonymousHttpClient(engine())
 
     private fun config(): SupabasePublicConfig =
         // The application always talks to an HTTPS project. The transport is

@@ -186,6 +186,15 @@ def check_compose_test_api(path: pathlib.Path, code: str) -> None:
             f"of the compose rule, use onAllNodes(hasText(...)) instead"
         )
 
+    # The body of a Ktor request is an OutgoingContent, and its toString is
+    # not the payload. The payload is read through the TextContent.
+    for match in re.finditer(r"request\.body\.toString\(\)", code):
+        line = code[: match.start()].count("\n") + 1
+        errors.append(
+            f"{path.relative_to(ROOT)}:{line}: the body of a request is not "
+            f"read with toString, cast it to TextContent and read the text"
+        )
+
 
 def main() -> int:
     files = kotlin_files()
