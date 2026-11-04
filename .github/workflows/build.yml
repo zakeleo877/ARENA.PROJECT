@@ -39,12 +39,37 @@ jobs:
           key: android-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
 
       - name: Configure Android SDK
-        uses: android-actions/setup-android@v3
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          # The command line tools are preinstalled on the runner images; move
+          # them into the layout the sdkmanager expects.
+          if [ -d "$ANDROID_HOME/cmdline-tools/latest" ]; then
+            echo "cmdline-tools already present"
+          elif [ -d /usr/local/lib/android/sdk/cmdline-tools/latest ]; then
+            cp -r /usr/local/lib/android/sdk/cmdline-tools "$ANDROID_HOME/cmdline-tools-tmp"
+            mv "$ANDROID_HOME/cmdline-tools-tmp/latest" "$ANDROID_HOME/cmdline-tools/latest"
+          else
+            echo "Downloading the Android command line tools"
+            curl -fsSL -o /tmp/cmdline-tools.zip \
+              "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+            mkdir -p "$ANDROID_HOME/cmdline-tools"
+            unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_HOME/cmdline-tools"
+            mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+          fi
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          sdkmanager --version
 
       - name: Accept Android SDK licenses
         run: |
+          set -euo pipefail
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "platform-tools" "platforms;android-37" "build-tools;37.0.0" > /dev/null
+          sdkmanager "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+          sdkmanager --list_installed | head -n 20
 
       # The publishable key and the project URL are public values, but they are
       # kept in secrets so nothing sensitive is ever committed.
