@@ -35,6 +35,7 @@
     <string name="checkout_phone_error">أدخل رقم هاتف جزائري صحيح (8 إلى 15 رقماً).</string>
     <string name="checkout_name_error">أدخل اسمك الكامل.</string>
     <string name="checkout_location_error">تعذّر تحديد الموقع. يمكنك إرسال الطلب بدونه.</string>
+    <string name="checkout_location_permission">نحتاج إذن الموقع لإرساله إلى المحل فقط، ويمكنك رفضه.</string>
 
     <string name="order_success_title">تم استلام طلبك</string>
     <string name="order_number">رقم الفاتورة</string>
