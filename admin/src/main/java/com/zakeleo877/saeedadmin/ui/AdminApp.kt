@@ -1,5 +1,6 @@
 package com.zakeleo877.saeedadmin.ui
 
+import android.app.Activity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,11 +26,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.window.core.layout.WindowWidthSizeClass
-import androidx.window.layout.calculateWindowSizeClass
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zakeleo877.saeedadmin.R
@@ -42,6 +44,7 @@ private enum class AdminTab(val labelRes: Int, val icon: ImageVector) {
 }
 
 /** Root composable of the admin app: login gate, bottom navigation and the four tabs. */
+@OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
 @Composable
 fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
     val session by viewModel.session.collectAsStateWithLifecycle()
@@ -67,7 +70,12 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
 
     // Wide screens (foldables and tablets) get a navigation rail instead of the
     // bottom bar, so the content area keeps its full height.
-    val widthSizeClass = calculateWindowSizeClass(LocalConfiguration.current).widthSizeClass
+    val activity = LocalContext.current.findActivity()
+    val widthSizeClass = if (activity != null) {
+        calculateWindowSizeClass(activity).widthSizeClass
+    } else {
+        null
+    }
     val useRail = widthSizeClass == WindowWidthSizeClass.EXPANDED
 
     Scaffold(
@@ -144,6 +152,13 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
             }
         }
     }
+}
+
+/** Unwraps the activity from the context chain that Compose provides. */
+private tailrec fun android.content.Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 @Composable

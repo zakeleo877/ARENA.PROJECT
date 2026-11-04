@@ -2,9 +2,7 @@ package com.zakeleo877.saeedstore.ui
 
 import androidx.compose.animation.AnimatedContentScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedContentScope
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.core.rememberSharedContentState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -71,7 +69,7 @@ import com.zakeleo877.saeedstore.R
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun CatalogScreen(
-    sharedScope: SharedContentScope,
+    sharedScope: SharedTransitionScope,
     animatedScope: AnimatedContentScope,
     state: CustomerUiState,
     cartCount: Int,
@@ -158,14 +156,15 @@ fun CatalogScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 items(visible, key = { it.id }) { product ->
-                    ProductCard(
-                        sharedScope = sharedScope,
-                        animatedScope = animatedScope,
-                        product = product,
-                        currency = state.settings?.currency ?: "د.ج",
-                        onClick = { onProductClick(product) },
-                        onAdd = { onAddToCart(product) },
-                    )
+                    with(sharedScope) {
+                        ProductCard(
+                            animatedScope = animatedScope,
+                            product = product,
+                            currency = state.settings?.currency ?: "د.ج",
+                            onClick = { onProductClick(product) },
+                            onAdd = { onAddToCart(product) },
+                        )
+                    }
                 }
             }
         }
@@ -238,15 +237,13 @@ private fun OfflineBanner() {
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-private fun ProductCard(
-    sharedScope: SharedContentScope,
+private fun SharedTransitionScope.ProductCard(
     animatedScope: AnimatedContentScope,
     product: Product,
     currency: String,
     onClick: () -> Unit,
     onAdd: () -> Unit,
 ) {
-    val sharedImageState = sharedScope.rememberSharedContentState(key = "product-image-${product.id}")
     SaeedCard(onClick = onClick) {
         Box(
             Modifier
@@ -265,7 +262,7 @@ private fun ProductCard(
                     modifier = Modifier
                         .fillMaxSize()
                         .sharedElement(
-                            state = sharedImageState,
+                            state = rememberSharedContentState(key = "product-image-${product.id}"),
                             animatedVisibilityScope = animatedScope,
                         ),
                 )

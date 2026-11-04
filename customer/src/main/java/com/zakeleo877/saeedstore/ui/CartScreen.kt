@@ -82,13 +82,16 @@ fun CartScreen(
                         if (value != SwipeToDismissBoxValue.Settled) {
                             onRemove(item.product.id)
                         }
-                        // The row is removed by the caller, so nothing is kept.
-                        false
+                        // The item leaves the list, so the swipe is allowed to
+                        // finish instead of animating back.
+                        true
                     },
                 )
                 SwipeToDismissBox(
                     state = dismissState,
-                    enableDismissFromStartToEnd = false,
+                    // Both directions are allowed so the gesture works the same
+                    // way in the Arabic right-to-left layout.
+                    enableDismissFromStartToEnd = true,
                     enableDismissFromEndToStart = true,
                     backgroundContent = { CartDismissBackground() },
                 ) {

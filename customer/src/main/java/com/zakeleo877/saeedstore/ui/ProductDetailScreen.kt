@@ -2,7 +2,7 @@ package com.zakeleo877.saeedstore.ui
 
 import androidx.compose.animation.AnimatedContentScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedContentScope
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.rememberSharedContentState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -49,8 +49,7 @@ import com.zakeleo877.saeedstore.R
 /** Product details with a quantity stepper and an add-to-cart action. */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun ProductDetailScreen(
-    sharedScope: SharedContentScope,
+fun SharedTransitionScope.ProductDetailScreen(
     animatedScope: AnimatedContentScope,
     product: Product,
     currency: String,
@@ -59,7 +58,6 @@ fun ProductDetailScreen(
 ) {
     var quantity by remember(product.id) { mutableIntStateOf(1) }
     var zoomOpen by remember { mutableStateOf(false) }
-    val sharedImageState = sharedScope.rememberSharedContentState(key = "product-image-${product.id}")
 
     Column(
         Modifier
@@ -99,7 +97,7 @@ fun ProductDetailScreen(
                         .fillMaxWidth()
                         .height(280.dp)
                         .sharedElement(
-                            state = sharedImageState,
+                            state = rememberSharedContentState(key = "product-image-${product.id}"),
                             animatedVisibilityScope = animatedScope,
                         )
                         .clickable { zoomOpen = true },

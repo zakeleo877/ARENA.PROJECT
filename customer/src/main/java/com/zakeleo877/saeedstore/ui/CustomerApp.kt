@@ -142,17 +142,19 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                 if (product == null) {
                     navController.popBackStack()
                 } else {
-                    ProductDetailScreen(
-                        sharedScope = this@SharedTransitionLayout,
-                        animatedScope = this,
-                        product = product,
-                        currency = currency,
-                        onBack = { navController.popBackStack() },
-                        onAddToCart = { quantity ->
-                            viewModel.addToCart(product, quantity)
-                            navController.popBackStack()
-                        },
-                    )
+                    val animatedScope = this
+                    with(this@SharedTransitionLayout) {
+                        ProductDetailScreen(
+                            animatedScope = animatedScope,
+                            product = product,
+                            currency = currency,
+                            onBack = { navController.popBackStack() },
+                            onAddToCart = { quantity ->
+                                viewModel.addToCart(product, quantity)
+                                navController.popBackStack()
+                            },
+                        )
+                    }
                 }
             }
         }

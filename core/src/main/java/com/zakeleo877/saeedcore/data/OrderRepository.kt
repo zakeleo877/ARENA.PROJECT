@@ -115,7 +115,7 @@ class OrderRepository(
                 customer = order.customer,
                 phone = order.phone,
                 notes = order.notes,
-                customerLocationUrl = order.customerLocationUrl,
+                location = order.customerLocationUrl,
                 itemsJson = encodeItems(order.items),
                 state = state.name,
                 attemptCount = 0,
