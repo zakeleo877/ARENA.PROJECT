@@ -9,6 +9,8 @@ import com.zakeleo877.saeedcore.data.remote.SupabasePublicConfig
 import com.zakeleo877.saeedcore.model.PendingOrder
 import com.zakeleo877.saeedcore.model.PendingOrderItem
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.serialization.kotlinx.json.json
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.respondError
@@ -18,6 +20,7 @@ import io.ktor.http.HttpHeaders
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -54,7 +57,10 @@ class OrderRepositoryTest {
             respond(body, status, headersOf(HttpHeaders.ContentType, "application/json"))
         }
         return CatalogApi(
-            HttpClient(engine) { expectSuccess = false },
+            HttpClient(engine) {
+                expectSuccess = false
+                install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+            },
             SupabasePublicConfig("https://project.example", "sb_publishable_fake_for_test"),
         )
     }
@@ -86,7 +92,10 @@ class OrderRepositoryTest {
         }
         val repository = OrderRepository(
             CatalogApi(
-                HttpClient(engine) { expectSuccess = false },
+                HttpClient(engine) {
+                    expectSuccess = false
+                    install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+                },
                 SupabasePublicConfig("https://project.example", "sb_publishable_fake_for_test"),
             ),
             dao,

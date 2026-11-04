@@ -14,7 +14,6 @@ import java.math.BigDecimal
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -42,8 +41,9 @@ class AdminViewModel(private val repository: AdminRepository) : ViewModel() {
     private val _filter = MutableStateFlow<OrderStatus?>(null)
     private val _query = MutableStateFlow("")
 
-    val session: StateFlow<AdminSession?> = repository.sessionHolder.session.asStateFlow()
-    val authorization: StateFlow<AdminAuthorization?> = repository.sessionHolder.authorization.asStateFlow()
+    // The holder already exposes read-only state flows.
+    val session: StateFlow<AdminSession?> = repository.sessionHolder.session
+    val authorization: StateFlow<AdminAuthorization?> = repository.sessionHolder.authorization
 
     /** The loading flag and the error message travel together. */
     private data class LoadState(val loading: Boolean = false, val error: String? = null)

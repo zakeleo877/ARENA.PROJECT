@@ -160,15 +160,15 @@ class OrderRepository(
         }
     }
 
+    /** Serializable shape of a queued item, so the snapshot survives a restart. */
+    @kotlinx.serialization.Serializable
+    private data class PendingItemWire(val productId: String, val quantity: Int)
+
     private fun encodeItems(items: List<PendingOrderItem>): String =
-        json.encodeToString(items.map { mapOf("productId" to it.productId, "quantity" to it.quantity) })
+        json.encodeToString(items.map { PendingItemWire(it.productId, it.quantity) })
 
     private fun decodeItems(raw: String): List<PendingOrderItem> = runCatching {
-        json.decodeFromString<List<Map<String, String>>>(raw).mapNotNull { entry ->
-            val productId = entry["productId"] ?: return@mapNotNull null
-            val quantity = entry["quantity"]?.toIntOrNull() ?: return@mapNotNull null
-            PendingOrderItem(productId, quantity)
-        }
+        json.decodeFromString<List<PendingItemWire>>(raw).map { PendingOrderItem(it.productId, it.quantity) }
     }.getOrDefault(emptyList())
 
     private fun ApiFailureKind.toReason(): String = when (this) {
