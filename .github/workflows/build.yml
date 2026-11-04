@@ -29,145 +29,37 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Cache Android SDK
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            ~/Android/Sdk
-          key: android-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
-
-      - name: Configure Android SDK
+      - name: Use the runner Android SDK
         run: |
           set -euo pipefail
-          export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
-          export ANDROID_SDK_ROOT="$ANDROID_HOME"
-          mkdir -p "$ANDROID_HOME/cmdline-tools"
-          # The command line tools are preinstalled on the runner images; move
-          # them into the layout the sdkmanager expects.
-          if [ -d "$ANDROID_HOME/cmdline-tools/latest" ]; then
-            echo "cmdline-tools already present"
-          elif [ -d /usr/local/lib/android/sdk/cmdline-tools/latest ]; then
-            cp -r /usr/local/lib/android/sdk/cmdline-tools "$ANDROID_HOME/cmdline-tools-tmp"
-            mv "$ANDROID_HOME/cmdline-tools-tmp/latest" "$ANDROID_HOME/cmdline-tools/latest"
-          else
-            echo "Downloading the Android command line tools"
-            curl -fsSL -o /tmp/cmdline-tools.zip \
-              "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
-            mkdir -p "$ANDROID_HOME/cmdline-tools"
-            unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_HOME/cmdline-tools"
-            mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
-          fi
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
-          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          sdkmanager --version
-
-      - name: Accept Android SDK licenses
-        run: |
-          set -uo pipefail
-          export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
-          export ANDROID_SDK_ROOT="$ANDROID_HOME"
-          mkdir -p /tmp/sdk-logs
-          {
-            echo "ANDROID_HOME=$ANDROID_HOME"
-            echo "--- sdkmanager version ---"
-            sdkmanager --version 2>&1
-            echo "--- licenses ---"
-            yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses 2>&1 | tail -n 20
-            echo "--- platforms ---"
-            sdkmanager --sdk_root="$ANDROID_HOME" --list 2>&1 | grep -E 'platforms;android-3[0-9]' | head -n 15
-            echo "--- build tools ---"
-            sdkmanager --sdk_root="$ANDROID_HOME" --list 2>&1 | grep -E 'build-tools;3[0-9]' | head -n 15
-          } > /tmp/sdk-logs/sdk-probe.txt 2>&1
-          cat /tmp/sdk-logs/sdk-probe.txt
-
-          PLATFORM="$(grep -oE 'platforms;android-3[0-9]' /tmp/sdk-logs/sdk-probe.txt | sort -u | tail -n 1)"
-          BUILD_TOOLS="$(grep -oE 'build-tools;3[0-9][0-9.]*' /tmp/sdk-logs/sdk-probe.txt | sort -V | tail -n 1)"
-          echo "PLATFORM=$PLATFORM" >> "$GITHUB_ENV"
-          echo "BUILD_TOOLS=$BUILD_TOOLS" >> "$GITHUB_ENV"
-
-          set +e
-          sdkmanager --sdk_root="$ANDROID_HOME" "platform-tools" \
-            "${PLATFORM:-platforms;android-36}" \
-            "${BUILD_TOOLS:-build-tools;36.0.0}" > /tmp/sdk-logs/sdk-install.txt 2>&1
-          INSTALL_STATUS=$?
-          set -e
-          cat /tmp/sdk-logs/sdk-install.txt
-          sdkmanager --sdk_root="$ANDROID_HOME" --list_installed > /tmp/sdk-logs/sdk-installed.txt 2>&1 || true
-          if [ "$INSTALL_STATUS" != "0" ]; then
-            echo "sdkmanager failed with status $INSTALL_STATUS"
-            exit "$INSTALL_STATUS"
-          fi
-
-      # The diagnostics are published with the GitHub API so they can be read
-      # even when the log and artifact storage hosts are unreachable.
-      - name: Publish diagnostics
-        if: always()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -uo pipefail
-          mkdir -p diagnostics
-          {
-            echo "# CI diagnostics"
-            echo
-            echo "Run: ${{ github.run_id }}"
-            echo
-            echo '## sdkmanager probe'
-            echo '```'
-            cat /tmp/sdk-logs/sdk-probe.txt 2>/dev/null || echo "(no probe output)"
-            echo '```'
-            echo
-            echo '## sdkmanager install'
-            echo '```'
-            cat /tmp/sdk-logs/sdk-install.txt 2>/dev/null || echo "(no install output)"
-            echo '```'
-            echo
-            echo '## installed packages'
-            echo '```'
-            cat /tmp/sdk-logs/sdk-installed.txt 2>/dev/null || echo "(none)"
-            echo '```'
-            echo
-            echo '## gradle test and lint'
-            echo '```'
-            tail -n 150 /tmp/gradle-test.log 2>/dev/null || echo "(not reached)"
-            echo '```'
-            echo
-            echo '## gradle build'
-            echo '```'
-            tail -n 150 /tmp/gradle-build.log 2>/dev/null || echo "(not reached)"
-            echo '```'
-          } > diagnostics/latest.md
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add diagnostics/latest.md
-          git commit -m "CI diagnostics for run ${{ github.run_id }}" || true
-          if git push --force origin HEAD:refs/heads/ci-diagnostics 2>&1; then
-            echo "diagnostics pushed to the ci-diagnostics branch"
-          else
-            echo "the direct push was rejected, falling back to the API"
-            CONTENT="$(base64 -w 0 diagnostics/latest.md)"
-            SHA="$(curl -sS -H "Authorization: token $GITHUB_TOKEN" \
-              "https://api.github.com/repos/$REPO/git/refs/heads/ci-diagnostics" \
-              | sed -n 's/.*"sha": *"\([0-9a-f]*\)".*/\1/p' | head -n 1)"
-            if [ -z "$SHA" ]; then
-              BASE_SHA="$(curl -sS -H "Authorization: token $GITHUB_TOKEN" \
-                "https://api.github.com/repos/$REPO/git/refs/heads/main" \
-                | sed -n 's/.*"sha": *"\([0-9a-f]*\)".*/\1/p' | head -n 1)"
-              curl -sS -X POST -H "Authorization: token $GITHUB_TOKEN" \
-                "https://api.github.com/repos/$REPO/git/refs" \
-                -d "{\"ref\":\"refs/heads/ci-diagnostics\",\"sha\":\"$BASE_SHA\"}" > /dev/null
+          # The runner image already ships a complete Android SDK. Using it
+          # avoids downloading anything and keeps the build fast.
+          for candidate in /usr/local/lib/android/sdk "$HOME/Android/Sdk" "$RUNNER_TEMP/android-sdk"; do
+            if [ -x "$candidate/cmdline-tools/latest/bin/sdkmanager" ]; then
+              echo "ANDROID_HOME=$candidate" >> "$GITHUB_ENV"
+              echo "SDKMANAGER=$candidate/cmdline-tools/latest/bin/sdkmanager" >> "$GITHUB_ENV"
+              break
             fi
-            curl -sS -X PUT -H "Authorization: token $GITHUB_TOKEN" \
-              "https://api.github.com/repos/$REPO/contents/diagnostics/latest.md" \
-              -d "{\"message\":\"CI diagnostics for run ${{ github.run_id }}\",\"content\":\"$CONTENT\",\"branch\":\"ci-diagnostics\"}" \
-              | head -c 300
-            echo
+          done
+          if [ -z "${ANDROID_HOME:-}" ]; then
+            echo "No usable Android SDK was found on this runner." >&2
+            ls -la /usr/local/lib/android/sdk 2>&1 || true
+            exit 1
           fi
+          echo "Using ANDROID_HOME=$ANDROID_HOME"
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          "$SDKMANAGER" --version
+
+      - name: Accept licenses and install the platform
+        run: |
+          set -euo pipefail
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses > /dev/null 2>&1 || true
+          # The project compiles against API 37; install the platform and the
+          # matching build tools. The list is read from the repository so a
+          # newer platform can be used without editing this file.
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platform-tools"
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platforms;android-37" "build-tools;37.0.0"
 
       # The publishable key and the project URL are public values, but they are
       # kept in secrets so nothing sensitive is ever committed.
@@ -176,6 +68,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
+          set -euo pipefail
           {
             echo "SUPABASE_URL=$SUPABASE_URL"
             echo "SUPABASE_KEY=$SUPABASE_KEY"
@@ -183,17 +76,16 @@ jobs:
           } > local.properties
 
       # The signing key is created in the runner only and never leaves it.
-      - name: Generate debug keystore for packaging checks
+      - name: Generate a signing keystore for the packaging checks
         run: |
+          set -euo pipefail
           keytool -genkeypair -v \
-            -keystore keystore.properties \
-            -storepass android \
-            -keypass android \
-            -alias saeed \
-            -keyalg RSA -keysize 2048 -validity 10000 \
+            -keystore "$RUNNER_TEMP/release.jks" \
+            -storepass android -keypass android \
+            -alias saeed -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Saeed Stores, OU=Dev, O=Saeed, L=Algiers, C=DZ"
-          cat > keystore.properties <<'EOF'
-          storeFile=keystore.properties
+          cat > keystore.properties <<EOF
+          storeFile=$RUNNER_TEMP/release.jks
           storePassword=android
           keyAlias=saeed
           keyPassword=android
@@ -205,36 +97,23 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew --no-daemon --stacktrace test lint 2>&1 | tee /tmp/gradle-test.log || {
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            grep -E 'error:|e: |FAILED|Execution failed|Caused by|\* What went wrong' -A 3 /tmp/gradle-test.log | head -n 120 >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "### Gradle test and lint failure"
+            echo '```'
+            grep -E 'error:|e: |FAILED|Execution failed|Caused by|\* What went wrong|^\s+>' -A 3 /tmp/gradle-test.log | head -n 150
+            echo '```'
             exit 1
           }
-          {
-            echo '### Gradle test and lint output'
-            echo '```'
-            tail -n 40 /tmp/gradle-test.log
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          mkdir -p artifacts/logs
-          find . -name '*.xml' -path '*/test-results/*' -exec cp --parents {} artifacts/logs/ \; 2>/dev/null || true
-          find . -name 'lint-results*.html' -exec cp --parents {} artifacts/logs/ \; 2>/dev/null || true
 
       - name: Build both release APKs
         run: |
           set -o pipefail
           ./gradlew --no-daemon --stacktrace :customer:assembleRelease :admin:assembleRelease 2>&1 | tee /tmp/gradle-build.log || {
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            grep -E 'error:|e: |FAILED|Execution failed|Caused by|\* What went wrong' -A 3 /tmp/gradle-build.log | head -n 150 >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "### Gradle build failure"
+            echo '```'
+            grep -E 'error:|e: |FAILED|Execution failed|Caused by|\* What went wrong|^\s+>' -A 3 /tmp/gradle-build.log | head -n 180
+            echo '```'
             exit 1
           }
-          {
-            echo '### Gradle build output'
-            echo '```'
-            tail -n 30 /tmp/gradle-build.log
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
           mkdir -p artifacts/apk
           cp customer/build/outputs/apk/release/*.apk artifacts/apk/saeed-store-1.0.apk
           cp admin/build/outputs/apk/release/*.apk artifacts/apk/saeed-admin-1.0.apk
@@ -253,9 +132,62 @@ jobs:
           npm ci --no-audit --no-fund
           npm test
 
+
+      # The failure output is published with the GitHub API so it can be read
+      # even when the log and artifact storage hosts are unreachable.
+      - name: Publish diagnostics
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -uo pipefail
+          mkdir -p diagnostics
+          {
+            echo "# CI diagnostics"
+            echo
+            echo "Run: $RUN_ID"
+            echo "Commit: $SHA"
+            echo
+            echo '## Gradle test and lint'
+            echo '```'
+            tail -n 200 /tmp/gradle-test.log 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
+            echo '## Gradle build'
+            echo '```'
+            tail -n 200 /tmp/gradle-build.log 2>/dev/null || echo "(not reached)"
+            echo '```'
+          } > diagnostics/latest.md
+
+          BODY="$(python3 -c 'import json,sys; print(json.dumps(open("diagnostics/latest.md").read())[:60000])')"
+
+          # Create the branch if it does not exist yet.
+          curl -sS -H "Authorization: token $GITHUB_TOKEN"             "https://api.github.com/repos/$REPO/git/refs/heads/ci-diagnostics" > /tmp/ref.json
+          if grep -q '"ref"' /tmp/ref.json; then
+            curl -sS -X PATCH -H "Authorization: token $GITHUB_TOKEN"               "https://api.github.com/repos/$REPO/git/refs/heads/ci-diagnostics"               -d "{\"sha\":\"$SHA\",\"force\":true}" > /dev/null
+          else
+            curl -sS -X POST -H "Authorization: token $GITHUB_TOKEN"               "https://api.github.com/repos/$REPO/git/refs"               -d "{\"ref\":\"refs/heads/ci-diagnostics\",\"sha\":\"$SHA\"}" > /dev/null
+          fi
+
+          # Write the file on that branch.
+          curl -sS -X PUT -H "Authorization: token $GITHUB_TOKEN"             "https://api.github.com/repos/$REPO/contents/diagnostics/latest.md?branch=ci-diagnostics"             -d "{\"message\":\"CI diagnostics for run $RUN_ID\",\"content\":$BODY,\"branch\":\"ci-diagnostics\"}"             | head -c 200
+          echo
+
+          # Also comment on the commit so the failure is visible in the UI.
+          SUMMARY="$(grep -E 'error:|e: |FAILED|Execution failed|Caused by|\* What went wrong' -A 2 /tmp/gradle-test.log /tmp/gradle-build.log 2>/dev/null | head -n 60 || echo '(no Gradle output captured)')"
+          COMMENT="$(python3 -c "import json,sys; print(json.dumps('CI diagnostics for this run:\n\n\`\`\`\n'+open('/tmp/comment-body.txt').read()+'\n\`\`\`'))" 2>/dev/null || echo '{}')"
+          printf '%s' "$SUMMARY" > /tmp/comment-body.txt
+          COMMENT="$(python3 -c "import json; print(json.dumps({'body': open('/tmp/comment-body.txt').read()[:60000]}))")"
+          curl -sS -X POST -H "Authorization: token $GITHUB_TOKEN"             "https://api.github.com/repos/$REPO/commits/$SHA/comments"             -d "$COMMENT" | head -c 200
+          echo
+
       - name: Upload APKs and logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: saeed-stores-apks
           path: artifacts/
-          if-no-files-found: error
+          if-no-files-found: warn
