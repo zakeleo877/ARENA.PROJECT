@@ -53,8 +53,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.zakeleo877.saeedcore.designsystem.SaeedCard
 import com.zakeleo877.saeedcore.designsystem.SaeedEmptyState
+import com.zakeleo877.saeedcore.designsystem.SaeedSearchField
 import com.zakeleo877.saeedcore.designsystem.SaeedSkeleton
 import com.zakeleo877.saeedcore.model.Product
 import com.zakeleo877.saeedcore.util.Formatters

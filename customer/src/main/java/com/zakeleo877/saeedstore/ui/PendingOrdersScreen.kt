@@ -102,10 +102,11 @@ private fun PendingOrderCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            if (order.lastError != null) {
+            val lastError = order.lastError
+            if (lastError != null) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = errorMessage(order.lastError),
+                    text = errorMessage(lastError),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )

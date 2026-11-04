@@ -42,9 +42,6 @@ class CustomerViewModel(
     val cart: CartStore,
     private val isOnline: () -> Boolean,
 ) : ViewModel() {
-    private val _refreshing = MutableStateFlow(false)
-    private val _failed = MutableStateFlow(false)
-    private val _offline = MutableStateFlow(!isOnline())
 
     val cartItems: StateFlow<List<CartItem>> = cart.items.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList(),
@@ -56,20 +53,27 @@ class CustomerViewModel(
         viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList(),
     )
 
+    /** The refresh flags travel together so the combine stays within its arity. */
+    private data class RefreshState(
+        val refreshing: Boolean = false,
+        val failed: Boolean = false,
+        val offline: Boolean = false,
+    )
+
+    private val _refresh = MutableStateFlow(RefreshState())
+
     val uiState: StateFlow<CustomerUiState> = combine(
         dao.observeProducts(),
         dao.observeSettings(),
         dao.observeMetadata("products"),
-        _refreshing,
-        _failed,
-        _offline,
-    ) { products, settings, metadata, refreshing, failed, offline ->
+        _refresh,
+    ) { products, settings, metadata, refresh ->
         CustomerUiState(
-            products = products.map(ProductEntity::model),
+            products = products.map { it.model() },
             settings = settings.toStoreSettings(),
-            isRefreshing = refreshing,
-            loadFailed = failed,
-            offline = offline,
+            isRefreshing = refresh.refreshing,
+            loadFailed = refresh.failed,
+            offline = refresh.offline,
             everLoaded = metadata != null,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CustomerUiState())
@@ -79,16 +83,16 @@ class CustomerViewModel(
         viewModelScope.launch {
             // Keeps the offline banner and the send button state in sync.
             while (true) {
-                _offline.value = !isOnline()
+                _refresh.value = _refresh.value.copy(offline = !isOnline())
                 delay(5_000)
             }
         }
     }
 
     fun refresh() {
-        if (_refreshing.value) return
+        if (_refresh.value.refreshing) return
         viewModelScope.launch {
-            _refreshing.value = true
+            _refresh.value = _refresh.value.copy(refreshing = true)
             val productsResult = runCatching { api.products() }
             productsResult.onSuccess { snapshot ->
                 runCatching {
@@ -110,8 +114,8 @@ class CustomerViewModel(
                 }
             }
             // The cache stays usable when the network fails, so only a cold start fails.
-            _failed.value = productsResult.isFailure && !dao.hasProducts()
-            _refreshing.value = false
+            _refresh.value = _refresh.value.copy(failed = productsResult.isFailure && !dao.hasProducts())
+            _refresh.value = _refresh.value.copy(refreshing = false)
         }
     }
 
