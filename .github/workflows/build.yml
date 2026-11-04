@@ -68,7 +68,8 @@ jobs:
             echo "--- downloading the command line tools ---"
             SDKMANAGER_PATH=""
           else
-            SDK_ROOT="$(dirname "$(dirname "$(dirname "$SDKMANAGER_PATH")")")"
+            # .../sdk/cmdline-tools/latest/bin/sdkmanager -> .../sdk
+            SDK_ROOT="$(dirname "$(dirname "$(dirname "$(dirname "$SDKMANAGER_PATH")")")")"
             echo "Using SDK root $SDK_ROOT"
             echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
             echo "SDKMANAGER=$SDKMANAGER_PATH" >> "$GITHUB_ENV"
