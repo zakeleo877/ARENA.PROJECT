@@ -69,28 +69,42 @@ jobs:
           set -uo pipefail
           export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
           export ANDROID_SDK_ROOT="$ANDROID_HOME"
-          yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses > /dev/null 2>&1 || true
+          mkdir -p /tmp/sdk-logs
+          {
+            echo "ANDROID_HOME=$ANDROID_HOME"
+            echo "--- sdkmanager version ---"
+            sdkmanager --version 2>&1
+            echo "--- licenses ---"
+            yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses 2>&1 | tail -n 20
+            echo "--- available platforms ---"
+            sdkmanager --sdk_root="$ANDROID_HOME" --list 2>&1 | grep -E 'platforms;android-3[0-9]' | head -n 20
+            echo "--- available build tools ---"
+            sdkmanager --sdk_root="$ANDROID_HOME" --list 2>&1 | grep -E 'build-tools;3[0-9]' | head -n 20
+          } | tee /tmp/sdk-logs/sdk-probe.txt
 
-          # Install the newest platform and build-tools the project can use.
-          # compileSdk is 37 with minorApiLevel 2, so the 37.x platform is required.
-          PLATFORM="$(sdkmanager --sdk_root="$ANDROID_HOME" --list 2>/dev/null \
-            | grep -oE 'platforms;android-3[5-9]' | sort -u | tail -n 1)"
-          BUILD_TOOLS="$(sdkmanager --sdk_root="$ANDROID_HOME" --list 2>/dev/null \
-            | grep -oE 'build-tools;3[5-9][0-9.]*' | sort -V | tail -n 1)"
+          PLATFORM="$(grep -oE 'platforms;android-3[0-9]' /tmp/sdk-logs/sdk-probe.txt | sort -u | tail -n 1)"
+          BUILD_TOOLS="$(grep -oE 'build-tools;3[0-9][0-9.]*' /tmp/sdk-logs/sdk-probe.txt | sort -V | tail -n 1)"
 
-          echo "Installing platform: ${PLATFORM:-platforms;android-37}"
-          echo "Installing build tools: ${BUILD_TOOLS:-build-tools;37.0.0}"
+          echo "Installing platform: ${PLATFORM:-none found}"
+          echo "Installing build tools: ${BUILD_TOOLS:-none found}"
 
+          set -e
           sdkmanager --sdk_root="$ANDROID_HOME" "platform-tools" \
-            "${PLATFORM:-platforms;android-37}" \
-            "${BUILD_TOOLS:-build-tools;37.0.0}" || {
-              echo "Retrying with the pinned platform and build tools"
-              sdkmanager --sdk_root="$ANDROID_HOME" "platform-tools" \
-                "platforms;android-37" "build-tools;37.0.0"
-            }
+            "${PLATFORM:-platforms;android-36}" \
+            "${BUILD_TOOLS:-build-tools;36.0.0}" 2>&1 | tee /tmp/sdk-logs/sdk-install.txt
 
-          echo "--- installed packages ---"
-          sdkmanager --sdk_root="$ANDROID_HOME" --list_installed 2>/dev/null | head -n 30
+          {
+            echo "--- installed packages ---"
+            sdkmanager --sdk_root="$ANDROID_HOME" --list_installed 2>&1
+          } | tee /tmp/sdk-logs/sdk-installed.txt
+
+      - name: Upload SDK diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-diagnostics
+          path: /tmp/sdk-logs/
+          if-no-files-found: warn
 
       # The publishable key and the project URL are public values, but they are
       # kept in secrets so nothing sensitive is ever committed.
