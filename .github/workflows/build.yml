@@ -193,6 +193,31 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew --no-daemon --stacktrace test lint 2>&1 | tee /tmp/gradle-test.log || {
+            {
+              echo '## lint report'
+              for report in $(find . -name 'lint-results*.txt' 2>/dev/null); do
+                echo "### $report"
+                cat "$report"
+              done
+              echo '## lint xml issues'
+              for report in $(find . -name 'lint-results*.xml' 2>/dev/null); do
+                python3 - "$report" <<'PYEOF'
+          import sys, xml.etree.ElementTree as ET
+          try:
+              root = ET.parse(sys.argv[1]).getroot()
+          except Exception as error:
+              print('could not parse:', error)
+              raise SystemExit(0)
+          for issue in root.iter('issue'):
+              location = issue.find('location')
+              where = ''
+              if location is not None:
+                  where = f"{location.get('file', '')}:{location.get('line', '')}"
+              print(f"[{issue.get('severity')}] {issue.get('id')} {where} {issue.get('message')}")
+          PYEOF
+              done
+            } > /tmp/lint-issues.txt 2>&1
+            cat /tmp/lint-issues.txt | head -n 150
             echo "### Gradle test and lint failure"
             echo '```'
             grep -E 'error:|e: |FAILED|Execution failed|Caused by|\* What went wrong|^\s+>' -A 3 /tmp/gradle-test.log | head -n 150
@@ -238,6 +263,11 @@ jobs:
           mkdir -p /tmp/test-reports
           find . -path '*/build/test-results/*' -name '*.xml' -exec cp --parents {} /tmp/test-reports/ \; 2>/dev/null || true
           {
+            echo '## Lint issues'
+            echo '```'
+            cat /tmp/lint-issues.txt 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
             echo '## Unit test failures'
             for report in $(find . -path '*/build/test-results/*' -name 'TEST-*.xml' 2>/dev/null); do
               echo "### $report"
@@ -283,6 +313,11 @@ jobs:
             echo '## version probe'
             echo '```'
             cat /tmp/versions.txt 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
+            echo '## Lint issues'
+            echo '```'
+            cat /tmp/lint-issues.txt 2>/dev/null || echo "(not reached)"
             echo '```'
             echo
             echo '## Unit test failures'
