@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="status_new">جديد</string>
+    <string name="status_preparing">قيد التحضير</string>
+    <string name="status_ready">جاهز</string>
+    <string name="status_handed_over">مُسلَّم</string>
+    <string name="status_cancelled">ملغي</string>
+    <string name="action_retry">إعادة المحاولة</string>
+    <string name="action_cancel">إلغاء</string>
+    <string name="action_confirm">تأكيد</string>
+    <string name="preview_empty_message">لا توجد عناصر للعرض</string>
+    <string name="preview_title">محلات السعيد</string>
+    <string name="preview_dialog_message">هذه نافذة معاينة للتصميم.</string>
+</resources>
