@@ -80,46 +80,73 @@ jobs:
             sdkmanager --sdk_root="$ANDROID_HOME" --list 2>&1 | grep -E 'platforms;android-3[0-9]' | head -n 15
             echo "--- build tools ---"
             sdkmanager --sdk_root="$ANDROID_HOME" --list 2>&1 | grep -E 'build-tools;3[0-9]' | head -n 15
-          } | tee /tmp/sdk-logs/sdk-probe.txt
+          } > /tmp/sdk-logs/sdk-probe.txt 2>&1
+          cat /tmp/sdk-logs/sdk-probe.txt
 
           PLATFORM="$(grep -oE 'platforms;android-3[0-9]' /tmp/sdk-logs/sdk-probe.txt | sort -u | tail -n 1)"
           BUILD_TOOLS="$(grep -oE 'build-tools;3[0-9][0-9.]*' /tmp/sdk-logs/sdk-probe.txt | sort -V | tail -n 1)"
+          echo "PLATFORM=$PLATFORM" >> "$GITHUB_ENV"
+          echo "BUILD_TOOLS=$BUILD_TOOLS" >> "$GITHUB_ENV"
 
-          {
-            echo "### Chosen platform: ${PLATFORM:-none found}"
-            echo "### Chosen build tools: ${BUILD_TOOLS:-none found}"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          {
-            echo '<details><summary>sdkmanager probe</summary>'
-            echo
-            echo '```'
-            cat /tmp/sdk-logs/sdk-probe.txt
-            echo '```'
-            echo '</details>'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          set -e
+          set +e
           sdkmanager --sdk_root="$ANDROID_HOME" "platform-tools" \
             "${PLATFORM:-platforms;android-36}" \
-            "${BUILD_TOOLS:-build-tools;36.0.0}" 2>&1 | tee /tmp/sdk-logs/sdk-install.txt || {
-              {
-                echo '<details><summary>sdkmanager install output</summary>'
-                echo
-                echo '```'
-                cat /tmp/sdk-logs/sdk-install.txt
-                echo '```'
-                echo '</details>'
-              } >> "$GITHUB_STEP_SUMMARY"
-              exit 1
-            }
+            "${BUILD_TOOLS:-build-tools;36.0.0}" > /tmp/sdk-logs/sdk-install.txt 2>&1
+          INSTALL_STATUS=$?
+          set -e
+          cat /tmp/sdk-logs/sdk-install.txt
+          sdkmanager --sdk_root="$ANDROID_HOME" --list_installed > /tmp/sdk-logs/sdk-installed.txt 2>&1 || true
+          if [ "$INSTALL_STATUS" != "0" ]; then
+            echo "sdkmanager failed with status $INSTALL_STATUS"
+            exit "$INSTALL_STATUS"
+          fi
 
+      # The diagnostics are committed to a branch so they can be read even when
+      # the log and artifact storage hosts are unreachable.
+      - name: Publish diagnostics
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          mkdir -p diagnostics
           {
-            echo "### Installed packages"
+            echo "# CI diagnostics"
+            echo
+            echo "Run: ${{ github.run_id }}"
+            echo
+            echo '## sdkmanager probe'
             echo '```'
-            sdkmanager --sdk_root="$ANDROID_HOME" --list_installed 2>&1 | head -n 20
+            cat /tmp/sdk-logs/sdk-probe.txt 2>/dev/null || echo "(no probe output)"
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo
+            echo '## sdkmanager install'
+            echo '```'
+            cat /tmp/sdk-logs/sdk-install.txt 2>/dev/null || echo "(no install output)"
+            echo '```'
+            echo
+            echo '## installed packages'
+            echo '```'
+            cat /tmp/sdk-logs/sdk-installed.txt 2>/dev/null || echo "(none)"
+            echo '```'
+            echo
+            echo '## gradle test and lint'
+            echo '```'
+            tail -n 120 /tmp/gradle-test.log 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
+            echo '## gradle build'
+            echo '```'
+            tail -n 120 /tmp/gradle-build.log 2>/dev/null || echo "(not reached)"
+            echo '```'
+          } > diagnostics/latest.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B ci-diagnostics
+          git add diagnostics/latest.md
+          git commit -m "CI diagnostics for run ${{ github.run_id }}" || true
+          git push --force origin ci-diagnostics || true
 
       # The publishable key and the project URL are public values, but they are
       # kept in secrets so nothing sensitive is ever committed.
