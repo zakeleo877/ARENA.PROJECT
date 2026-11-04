@@ -24,6 +24,7 @@ object Formatters {
         return "#${number.toString().padStart(3, '0')}"
     }
 
+    /** Day first, as used in the Algerian locale: dd/MM/yyyy HH:mm. */
     fun dateTime(instant: Instant, zone: ZoneId = ZoneId.systemDefault()): String =
-        DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm", Locale.US).withZone(zone).format(instant)
+        DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm", Locale.US).withZone(zone).format(instant)
 }

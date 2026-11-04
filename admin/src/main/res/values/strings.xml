@@ -2,4 +2,70 @@
 <resources>
     <string name="app_name">إدارة محلات السعيد</string>
     <string name="scaffold_message">التطبيق قيد الإنشاء، وهذه واجهة مؤقتة.</string>
+
+    <string name="admin_title">إدارة محلات السعيد</string>
+    <string name="admin_subtitle">سجّل الدخول لإدارة الطلبات والمنتجات</string>
+    <string name="admin_email">البريد الإلكتروني</string>
+    <string name="admin_password">كلمة المرور</string>
+    <string name="admin_sign_in">تسجيل الدخول</string>
+    <string name="admin_sign_out">تسجيل الخروج</string>
+    <string name="admin_not_authorized">هذا الحساب غير مخوَّل.</string>
+    <string name="admin_load_error">تعذّر تحميل البيانات، تحقّق من الاتصال.</string>
+
+    <string name="admin_tab_dashboard">اللوحة</string>
+    <string name="admin_tab_orders">الطلبات</string>
+    <string name="admin_tab_products">المنتجات</string>
+    <string name="admin_tab_settings">الإعدادات</string>
+
+    <string name="admin_stat_new">طلبات جديدة</string>
+    <string name="admin_stat_today">طلبات اليوم</string>
+    <string name="admin_stat_total">إجمالي الطلبات</string>
+    <string name="admin_stat_products">عدد المنتجات</string>
+    <string name="admin_stat_sales">مبيعات المسلَّم</string>
+
+    <string name="admin_search_orders">ابحث برقم الطلب أو الاسم أو الهاتف…</string>
+    <string name="admin_filter_all">الكل</string>
+    <string name="admin_no_orders">لا توجد طلبات.</string>
+    <string name="admin_no_name">بدون اسم</string>
+
+    <string name="admin_order_number">فاتورة %1$s</string>
+    <string name="admin_order_date">التاريخ: %1$s</string>
+    <string name="admin_order_items">المنتجات</string>
+    <string name="admin_customer">الزبون</string>
+    <string name="admin_phone">الهاتف</string>
+    <string name="admin_notes">ملاحظات</string>
+    <string name="admin_location">موقع الزبون</string>
+    <string name="admin_channel">القناة</string>
+    <string name="admin_total">المجموع</string>
+    <string name="admin_change_status">تغيير الحالة</string>
+
+    <string name="admin_add_product">منتج جديد</string>
+    <string name="admin_no_products">لا توجد منتجات. أضف أول منتج.</string>
+    <string name="admin_edit">تعديل</string>
+    <string name="admin_available">متاح للعرض</string>
+    <string name="admin_hidden">مخفي</string>
+    <string name="admin_product_form_title">بيانات المنتج</string>
+    <string name="admin_product_name">اسم المنتج</string>
+    <string name="admin_product_price">السعر</string>
+    <string name="admin_product_description">الوصف</string>
+    <string name="admin_product_category">الفئة</string>
+    <string name="admin_product_image">رابط الصورة</string>
+    <string name="admin_product_available">متاح</string>
+    <string name="admin_product_order">الترتيب</string>
+    <string name="admin_price_error">أدخل سعراً صحيحاً.</string>
+    <string name="admin_save">حفظ</string>
+
+    <string name="admin_setting_store_name">اسم المتجر</string>
+    <string name="admin_setting_whatsapp">رقم الواتساب</string>
+    <string name="admin_setting_currency">العملة</string>
+    <string name="admin_setting_footer">ملاحظة الفاتورة</string>
+    <string name="admin_settings_saved">تم الحفظ.</string>
+    <string name="admin_battery_title">إشعارات الطلبات في الخلفية</string>
+    <string name="admin_battery_hint">قد يتأخر الإشعار 15 دقيقة أو أكثر في وضع Doze. استثنِ التطبيق من تحسين البطارية لضمان وصوله.</string>
+    <string name="admin_battery_button">فتح إعدادات البطارية</string>
+    <string name="admin_notifications_enabled">إشعارات الطلبات الجديدة</string>
+
+    <string name="admin_notification_channel">طلبات جديدة</string>
+    <string name="admin_notification_title">طلب جديد</string>
+    <string name="admin_notification_body">وصل طلب جديد رقم %1$s</string>
 </resources>

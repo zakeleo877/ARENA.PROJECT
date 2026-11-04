@@ -12,6 +12,9 @@ interface CatalogDao {
     @Query("SELECT * FROM products ORDER BY sort_order ASC, created_at DESC")
     fun observeProducts(): Flow<List<ProductEntity>>
 
+    @Query("SELECT EXISTS(SELECT 1 FROM products)")
+    suspend fun hasProducts(): Boolean
+
     @Query("SELECT * FROM settings")
     fun observeSettings(): Flow<List<SettingEntity>>
 

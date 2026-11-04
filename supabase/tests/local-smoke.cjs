@@ -51,7 +51,8 @@ async function expectError(action, expected, message) {
   }
   await as('anon', '', async () => {
     const visible = await db.query('select id from public.products');
-    check(visible.rows.length === 2 && visible.rows.some(x => x.id === hiddenId), 'anonymous can read unavailable products for disabled catalog UI');
+    check(visible.rows.length === 1 && visible.rows[0].id === productId, 'anonymous sees only available products');
+    check(!visible.rows.some(x => x.id === hiddenId), 'anonymous cannot read hidden products');
     await expectError(() => db.query('select * from public.orders'), 'permission denied', 'anonymous cannot read orders directly');
     await expectError(() => db.query("insert into public.orders(customer,phone) values ('a','1')"), 'permission denied', 'anonymous cannot insert orders directly');
     await expectError(() => db.query("insert into public.products(name) values ('unauthorized')"), 'permission denied', 'anonymous cannot insert products');
@@ -71,6 +72,8 @@ async function expectError(action, expected, message) {
     const orders = await db.query('select id from public.orders');
     check(orders.rows.length === 0, 'non-admin cannot read orders');
     await expectError(() => db.query("insert into public.products(name) values ('unauthorized')"), 'row-level security', 'non-admin cannot insert products');
+    const hiddenVisible = await db.query('select id from public.products where id = $1', [hiddenId]);
+    check(hiddenVisible.rows.length === 0, 'non-admin cannot read hidden products');
   });
   const items = JSON.stringify([{product_id:productId, qty:2, name:'forged', price:0}]);
   const call = (phone, id, values=items) => db.query('select public.place_order($1,$2,$3,$4,$5::jsonb,$6::uuid) as n', ['اسم تجريبي',phone,'','',values,id]);

@@ -21,7 +21,7 @@ class UtilitiesTest {
     }
 
     @Test fun dateUsesExplicitZoneAndWesternDigits() {
-        assertEquals("2026/01/01 01:00", Formatters.dateTime(Instant.parse("2026-01-01T00:00:00Z"), ZoneId.of("Africa/Algiers")))
+        assertEquals("01/01/2026 01:00", Formatters.dateTime(Instant.parse("2026-01-01T00:00:00Z"), ZoneId.of("Africa/Algiers")))
     }
 
     @Test fun phoneAndLimitsMatchTheDatabase() {

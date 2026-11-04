@@ -29,9 +29,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.HourglassBottom
 import androidx.compose.material.icons.filled.NewReleases
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -40,6 +42,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -159,6 +162,36 @@ fun SaeedTextField(
 }
 
 @Composable
+fun SaeedSearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.fillMaxWidth(),
+        placeholder = { if (placeholder.isNotEmpty()) Text(placeholder) },
+        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+        trailingIcon = {
+            if (value.isNotEmpty()) {
+                IconButton(onClick = { onValueChange("") }) {
+                    Icon(Icons.Filled.Close, contentDescription = null)
+                }
+            }
+        },
+        singleLine = true,
+        shape = MaterialTheme.shapes.medium,
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+        ),
+    )
+}
+
+@Composable
 fun SaeedStatusChip(status: OrderStatus, modifier: Modifier = Modifier) {
     val (label, icon, accent) = when (status) {
         OrderStatus.NEW -> Triple(R.string.status_new, Icons.Filled.NewReleases, ElectricCyan)
@@ -234,14 +267,17 @@ fun SaeedBottomSheet(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // Deep Void Violet surface layer; a translucent variant only on Android 12+.
     val overlay = if (Build.VERSION.SDK_INT >= 31) {
-        MaterialTheme.colorScheme.secondary.copy(alpha = 0.90f)
-    } else MaterialTheme.colorScheme.secondary
+        MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         modifier = modifier,
         containerColor = overlay,
-        contentColor = SpectralWhite,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         shape = MaterialTheme.shapes.extraLarge,
         content = content,
     )

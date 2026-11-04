@@ -115,11 +115,11 @@ begin
 end;
 $drop_managed_policies$;
 
--- All catalog rows, including unavailable products, are visible for disabled UI.
--- Ordering remains restricted to available products inside place_order.
+-- The public catalog only exposes available products.
+-- Hidden rows stay visible to admins so the management app can list and edit them.
 create policy "products read" on public.products
     for select to anon, authenticated
-    using (true);
+    using (available or (select public.is_admin()));
 create policy "products admin write" on public.products
     for all to authenticated
     using ((select public.is_admin()))

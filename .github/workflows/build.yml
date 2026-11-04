@@ -1,0 +1,112 @@
+name: Build and verify
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build, test and package both apps
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Cache Android SDK
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/Android/Sdk
+          key: android-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
+
+      - name: Configure Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses
+        run: |
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platform-tools" "platforms;android-37" "build-tools;37.0.0" > /dev/null
+
+      # The publishable key and the project URL are public values, but they are
+      # kept in secrets so nothing sensitive is ever committed.
+      - name: Generate local.properties
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          {
+            echo "SUPABASE_URL=$SUPABASE_URL"
+            echo "SUPABASE_KEY=$SUPABASE_KEY"
+            echo "sdk.dir=$ANDROID_HOME"
+          } > local.properties
+
+      # The signing key is created in the runner only and never leaves it.
+      - name: Generate debug keystore for packaging checks
+        run: |
+          keytool -genkeypair -v \
+            -keystore keystore.properties \
+            -storepass android \
+            -keypass android \
+            -alias saeed \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Saeed Stores, OU=Dev, O=Saeed, L=Algiers, C=DZ"
+          cat > keystore.properties <<'EOF'
+          storeFile=keystore.properties
+          storePassword=android
+          keyAlias=saeed
+          keyPassword=android
+          EOF
+
+      - name: Run unit tests and lint
+        run: |
+          ./gradlew --no-daemon --stacktrace test lint
+          mkdir -p artifacts/logs
+          find . -name '*.xml' -path '*/test-results/*' -exec cp --parents {} artifacts/logs/ \; 2>/dev/null || true
+          find . -name 'lint-results*.html' -exec cp --parents {} artifacts/logs/ \; 2>/dev/null || true
+
+      - name: Build both release APKs
+        run: |
+          ./gradlew --no-daemon --stacktrace :customer:assembleRelease :admin:assembleRelease
+          mkdir -p artifacts/apk
+          cp customer/build/outputs/apk/release/*.apk artifacts/apk/saeed-store-1.0.apk
+          cp admin/build/outputs/apk/release/*.apk artifacts/apk/saeed-admin-1.0.apk
+
+      - name: Verify the packages (acceptance checks 1-10)
+        run: |
+          bash scripts/verify-apk.sh artifacts/apk/saeed-store-1.0.apk saeed-store
+          bash scripts/verify-apk.sh artifacts/apk/saeed-admin-1.0.apk saeed-admin
+
+      - name: Verify the repository (acceptance checks 11-13)
+        run: bash scripts/verify-repo.sh
+
+      - name: Run the local database smoke tests
+        working-directory: supabase/tests
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+
+      - name: Upload APKs and logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: saeed-stores-apks
+          path: artifacts/
+          if-no-files-found: error
