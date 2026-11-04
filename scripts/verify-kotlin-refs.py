@@ -172,6 +172,20 @@ def check_predictive_back_collect(path: pathlib.Path, code: str) -> None:
                 f"gesture starts instead of when it completes"
             )
 
+def check_compose_test_api(path: pathlib.Path, code: str) -> None:
+    """Catch the Compose test helpers that do not exist on the rule type.
+
+    `onAllNodesWithText` is not a member of ComposeContentTestRule, it lives
+    on SemanticsNodeInteractionsProvider. The compiler only reports this after
+    the whole module is compiled, so the static check reports it in seconds.
+    """
+    for match in re.finditer(r"\b\w+\.onAllNodesWithText\(", code):
+        line = code[: match.start()].count("\n") + 1
+        errors.append(
+            f"{path.relative_to(ROOT)}:{line}: onAllNodesWithText is not a member "
+            f"of the compose rule, use onAllNodes(hasText(...)) instead"
+        )
+
 
 def main() -> int:
     files = kotlin_files()
@@ -187,6 +201,7 @@ def main() -> int:
         check_shared_element(path, code)
         check_shared_content_state_import(path, imports)
         check_predictive_back_collect(path, code)
+        check_compose_test_api(path, code)
 
     if errors:
         print("Static reference check failed:\n")

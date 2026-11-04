@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -206,7 +207,7 @@ class DesignSystemUiTest {
             }
         }
         composeRule.onNodeWithText("لا توجد منتجات").assertIsDisplayed()
-        assertEquals(0, composeRule.onAllNodesWithText("إعادة المحاولة").fetchSemanticsNodes().size)
+        assertEquals(0, composeRule.onAllNodes(hasText("إعادة المحاولة")).fetchSemanticsNodes().size)
     }
 
     @Test
@@ -265,6 +266,6 @@ class DesignSystemUiTest {
         text = "بعد"
         composeRule.waitForIdle()
         composeRule.onNodeWithText("بعد").assertIsDisplayed()
-        assertEquals(0, composeRule.onAllNodesWithText("قبل").fetchSemanticsNodes().size)
+        assertEquals(0, composeRule.onAllNodes(hasText("قبل")).fetchSemanticsNodes().size)
     }
 }

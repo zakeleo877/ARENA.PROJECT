@@ -47,17 +47,75 @@ jobs:
           ls -l /dev/kvm
 
       - name: Set up the Android SDK
-        uses: android-actions/setup-android@v3
+        run: |
+          set -euo pipefail
+          SDKMANAGER_PATH=""
+          for candidate in \
+            /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager \
+            /usr/local/lib/android/sdk/cmdline-tools/*/bin/sdkmanager \
+            /opt/android/sdk/cmdline-tools/latest/bin/sdkmanager \
+            "$HOME/Android/Sdk/cmdline-tools/latest/bin/sdkmanager"; do
+            if [ -x "$candidate" ]; then
+              SDKMANAGER_PATH="$candidate"
+              break
+            fi
+          done
+          if [ -z "$SDKMANAGER_PATH" ]; then
+            SDK_ROOT="$HOME/Android/Sdk"
+            mkdir -p "$SDK_ROOT/cmdline-tools"
+            curl -fsSL -o /tmp/cmdline-tools.zip \
+              "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+            unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools
+            mv /tmp/cmdline-tools/cmdline-tools "$SDK_ROOT/cmdline-tools/latest"
+            SDKMANAGER_PATH="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          SDK_ROOT="$(dirname "$(dirname "$(dirname "$(dirname "$SDKMANAGER_PATH")")")")"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "SDKMANAGER=$SDKMANAGER_PATH" >> "$GITHUB_ENV"
+          echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/emulator" >> "$GITHUB_PATH"
+
+      - name: Accept licenses and install the platform
+        run: |
+          set -euo pipefail
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses > /dev/null 2>&1 || true
+          AVAILABLE="$("$SDKMANAGER" --sdk_root="$ANDROID_HOME" --list 2>/dev/null || true)"
+          PLATFORM="$(echo "$AVAILABLE" | grep -oE 'platforms;android-3[0-9][0-9.]*(-[a-z0-9]+)?' | sort -u | tail -n 1)"
+          BUILD_TOOLS="$(echo "$AVAILABLE" | grep -oE 'build-tools;3[0-9][0-9.]*' | sort -V | tail -n 1)"
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platform-tools" \
+            "${PLATFORM:-platforms;android-35}" "${BUILD_TOOLS:-build-tools;35.0.0}" \
+            > /tmp/sdk-install.txt 2>&1 || true
+          INSTALLED="$(ls "$ANDROID_HOME/platforms" 2>/dev/null | grep -oE 'android-[0-9]+(\.[0-9]+)?' | sed 's/android-//' | sort -V | tail -n 1)"
+          if [ -n "$INSTALLED" ]; then
+            echo "SAEED_COMPILE_SDK=android-$INSTALLED" >> "$GITHUB_ENV"
+            echo "Compiling against the installed platform API $INSTALLED"
+          fi
+          cat /tmp/sdk-install.txt || true
 
       - name: Install the emulator and the system image
         run: |
           set -euo pipefail
-          sdkmanager --install 'emulator' 'system-images;android-34;google_apis;x86_64'
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
+            "emulator" "system-images;android-34;google_apis;x86_64" \
+            > /tmp/emulator-install.txt 2>&1
+          cat /tmp/emulator-install.txt
+          echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" \
+            create avd -n test -k "system-images;android-34;google_apis;x86_64" \
+            --force 2>&1 || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" list avd 2>&1 | head -n 20 || true
 
       - name: Start the emulator
         run: |
           set -euo pipefail
-          echo "$ANDROID_SDK_ROOT/emulator" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
+          # The AVD is created by the previous step. If it is missing, the
+          # emulator is started without one so the failure is visible in the
+          # log instead of being swallowed.
+          if ! "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" list avd 2>/dev/null | grep -q 'Name: test'; then
+            echo "NOTE: the test AVD was not created, the emulator will start without a device."
+          fi
           nohup emulator \
             -avd test \
             -no-window \
@@ -67,9 +125,41 @@ jobs:
             -no-snapshot \
             -accel auto \
             -wipe-data \
+            -memory 2048 \
             > /tmp/emulator.log 2>&1 &
           echo $! > /tmp/emulator.pid
           printf 'The emulator was started with pid %s\n' "$(cat /tmp/emulator.pid)"
+          sleep 5
+          head -n 30 /tmp/emulator.log || true
+
+      - name: Prepare a throwaway signing key
+        run: |
+          set -euo pipefail
+          # The emulator run only needs an installable package. The permanent
+          # key is checked by the Release gate workflow.
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/release.jks" \
+            -storepass android -keypass android \
+            -alias saeed -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Saeed Stores, OU=Dev, O=Saeed, L=Algiers, C=DZ"
+          cat > keystore.properties <<EOF
+          storeFile=$RUNNER_TEMP/release.jks
+          storePassword=android
+          keyAlias=saeed
+          keyPassword=android
+          EOF
+
+      - name: Generate local.properties
+        run: |
+          set -euo pipefail
+          {
+            # The emulator has no route to a hosted project. The application
+            # must still start and show its own screens, so a placeholder
+            # address is used and the offline behaviour is what gets checked.
+            echo "SUPABASE_URL=https://placeholder.invalid"
+            echo "SUPABASE_KEY=sb_publishable_placeholder_for_the_emulator_run"
+            echo "sdk.dir=$ANDROID_HOME"
+          } > local.properties
 
       - name: Build the release APKs
         run: |
@@ -80,9 +170,14 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p artifacts/screenshots
+          CUSTOMER_APK="$(find customer/build/outputs/apk/release -name '*.apk' | head -n 1)"
+          if [ -z "$CUSTOMER_APK" ]; then
+            echo "FAIL: the customer APK was not built."
+            exit 1
+          fi
           {
             bash scripts/verify-emulator.sh \
-              customer/build/outputs/apk/release/customer-release.apk \
+              "$CUSTOMER_APK" \
               com.zakeleo877.saeedstore \
               artifacts/screenshots
           } > /tmp/emulator-customer.txt 2>&1 || true
@@ -95,9 +190,14 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p artifacts/screenshots
+          ADMIN_APK="$(find admin/build/outputs/apk/release -name '*.apk' | head -n 1)"
+          if [ -z "$ADMIN_APK" ]; then
+            echo "FAIL: the admin APK was not built."
+            exit 1
+          fi
           {
             bash scripts/verify-emulator.sh \
-              admin/build/outputs/apk/release/admin-release.apk \
+              "$ADMIN_APK" \
               com.zakeleo877.saeedadmin \
               artifacts/screenshots
           } > /tmp/emulator-admin.txt 2>&1 || true
