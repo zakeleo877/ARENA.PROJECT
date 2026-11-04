@@ -27,9 +27,14 @@ fun javaString(value: String): String = "\"" + value
 
 android {
     namespace = "com.zakeleo877.saeedadmin"
-    compileSdk {
-        version = release(37) { minorApiLevel = 2 }
-    }
+    // The compile SDK can be overridden from local.properties or the
+    // environment, so the project builds on runners that only ship a stable
+    // platform. The default matches the API level the app targets.
+    compileSdk = (providers.gradleProperty("saeed.compileSdk")
+        .orElse(providers.environmentVariable("SAEED_COMPILE_SDK"))
+        .orElse("37")
+        .get()
+        .toInt())
     defaultConfig {
         applicationId = "com.zakeleo877.saeedadmin"
         minSdk = 24

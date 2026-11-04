@@ -66,10 +66,31 @@ jobs:
 
       - name: Accept Android SDK licenses
         run: |
-          set -euo pipefail
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "platform-tools" "platforms;android-37" "build-tools;37.0.0"
-          sdkmanager --list_installed | head -n 20
+          set -uo pipefail
+          export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
+          export ANDROID_SDK_ROOT="$ANDROID_HOME"
+          yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses > /dev/null 2>&1 || true
+
+          # Install the newest platform and build-tools the project can use.
+          # compileSdk is 37 with minorApiLevel 2, so the 37.x platform is required.
+          PLATFORM="$(sdkmanager --sdk_root="$ANDROID_HOME" --list 2>/dev/null \
+            | grep -oE 'platforms;android-3[5-9]' | sort -u | tail -n 1)"
+          BUILD_TOOLS="$(sdkmanager --sdk_root="$ANDROID_HOME" --list 2>/dev/null \
+            | grep -oE 'build-tools;3[5-9][0-9.]*' | sort -V | tail -n 1)"
+
+          echo "Installing platform: ${PLATFORM:-platforms;android-37}"
+          echo "Installing build tools: ${BUILD_TOOLS:-build-tools;37.0.0}"
+
+          sdkmanager --sdk_root="$ANDROID_HOME" "platform-tools" \
+            "${PLATFORM:-platforms;android-37}" \
+            "${BUILD_TOOLS:-build-tools;37.0.0}" || {
+              echo "Retrying with the pinned platform and build tools"
+              sdkmanager --sdk_root="$ANDROID_HOME" "platform-tools" \
+                "platforms;android-37" "build-tools;37.0.0"
+            }
+
+          echo "--- installed packages ---"
+          sdkmanager --sdk_root="$ANDROID_HOME" --list_installed 2>/dev/null | head -n 30
 
       # The publishable key and the project URL are public values, but they are
       # kept in secrets so nothing sensitive is ever committed.
@@ -102,6 +123,8 @@ jobs:
           EOF
 
       - name: Run unit tests and lint
+        env:
+          SAEED_COMPILE_SDK: ${{ vars.SAEED_COMPILE_SDK }}
         run: |
           ./gradlew --no-daemon --stacktrace test lint
           mkdir -p artifacts/logs
