@@ -35,49 +35,58 @@ jobs:
 
       - name: Use the runner Android SDK
         run: |
-          set -euo pipefail
-          # The runner image already ships a complete Android SDK. Using it
-          # avoids downloading anything and keeps the build fast.
-          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
-          echo "--- searching for sdkmanager ---"
-          SDKMANAGER_PATH="$(find / -name sdkmanager -type f -perm -u+x 2>/dev/null | head -n 1)"
-          if [ -n "$SDKMANAGER_PATH" ]; then
+          set -uo pipefail
+          {
+            echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+            echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
+            echo "--- /usr/local/lib/android/sdk ---"
+            ls -la /usr/local/lib/android/sdk 2>&1 || true
+            echo "--- /opt/android ---"
+            ls -la /opt/android 2>&1 || true
+            echo "--- $HOME/Android ---"
+            ls -la "$HOME/Android" 2>&1 || true
+            echo "--- sdkmanager binaries ---"
+            find /usr /opt "$HOME" -name 'sdkmanager' -type f 2>/dev/null | head -n 20
+            echo "--- java ---"
+            java -version 2>&1 || true
+          } > /tmp/runner-probe.txt 2>&1
+          cat /tmp/runner-probe.txt
+
+          SDKMANAGER_PATH=""
+          for candidate in \
+            /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager \
+            /usr/local/lib/android/sdk/cmdline-tools/*/bin/sdkmanager \
+            /opt/android/sdk/cmdline-tools/latest/bin/sdkmanager \
+            "$HOME/Android/Sdk/cmdline-tools/latest/bin/sdkmanager"; do
+            if [ -x "$candidate" ]; then
+              SDKMANAGER_PATH="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$SDKMANAGER_PATH" ]; then
+            echo "--- downloading the command line tools ---"
+            SDKMANAGER_PATH=""
+          else
             SDK_ROOT="$(dirname "$(dirname "$(dirname "$SDKMANAGER_PATH")")")"
-            echo "Found sdkmanager at $SDKMANAGER_PATH"
             echo "Using SDK root $SDK_ROOT"
             echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
             echo "SDKMANAGER=$SDKMANAGER_PATH" >> "$GITHUB_ENV"
-          else
-            echo "--- no sdkmanager found; listing the usual locations ---"
-            ls -la /usr/local/lib/android/sdk 2>&1 || true
-            ls -la "$HOME/Android" 2>&1 || true
-            {
-              echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
-              echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
-              echo "sdkmanager found at: ${SDKMANAGER_PATH:-none}"
-              echo "--- /usr/local/lib/android/sdk ---"
-              ls -la /usr/local/lib/android/sdk 2>&1 || true
-              echo "--- /opt/android ---"
-              ls -la /opt/android 2>&1 || true
-              echo "--- home Android ---"
-              ls -la "$HOME/Android" 2>&1 || true
-              echo "--- all sdkmanager binaries ---"
-              find / -name 'sdkmanager*' 2>/dev/null | head -n 20
-            } > /tmp/runner-probe.txt 2>&1
-            echo "--- downloading the command line tools ---"
-            mkdir -p "$HOME/Android/Sdk/cmdline-tools"
+          fi
+
+          if [ -z "$SDKMANAGER_PATH" ]; then
+            SDK_ROOT="$HOME/Android/Sdk"
+            mkdir -p "$SDK_ROOT/cmdline-tools"
             curl -fsSL -o /tmp/cmdline-tools.zip \
               "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
             unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools
-            mv /tmp/cmdline-tools/cmdline-tools "$HOME/Android/Sdk/cmdline-tools/latest"
-            echo "ANDROID_HOME=$HOME/Android/Sdk" >> "$GITHUB_ENV"
-            echo "SDKMANAGER=$HOME/Android/Sdk/cmdline-tools/latest/bin/sdkmanager" >> "$GITHUB_ENV"
+            mv /tmp/cmdline-tools/cmdline-tools "$SDK_ROOT/cmdline-tools/latest"
+            echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+            echo "SDKMANAGER=$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" >> "$GITHUB_ENV"
           fi
-          echo "Using ANDROID_HOME=$ANDROID_HOME"
+
           echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          "$SDKMANAGER" --version
 
       - name: Accept licenses and install the platform
         run: |
