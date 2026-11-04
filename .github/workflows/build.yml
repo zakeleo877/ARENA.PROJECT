@@ -92,11 +92,30 @@ jobs:
         run: |
           set -euo pipefail
           yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses > /dev/null 2>&1 || true
-          # The project compiles against API 37; install the platform and the
-          # matching build tools. The list is read from the repository so a
-          # newer platform can be used without editing this file.
-          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platform-tools"
-          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platforms;android-37" "build-tools;37.0.0"
+
+          # The runner image ships a set of platforms. Prefer the one the
+          # project targets, and fall back to the newest available so the
+          # build still runs on images that lag behind.
+          AVAILABLE="$("$SDKMANAGER" --sdk_root="$ANDROID_HOME" --list 2>/dev/null || true)"
+          echo "$AVAILABLE" | grep -E 'platforms;android-3[0-9]|build-tools;3[0-9]' | head -n 30 || true
+
+          PLATFORM="$(echo "$AVAILABLE" | grep -oE 'platforms;android-3[0-9]' | sort -u | tail -n 1)"
+          BUILD_TOOLS="$(echo "$AVAILABLE" | grep -oE 'build-tools;3[0-9][0-9.]*' | sort -V | tail -n 1)"
+          echo "Selected platform: ${PLATFORM:-none}"
+          echo "Selected build tools: ${BUILD_TOOLS:-none}"
+
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platform-tools" \
+            "${PLATFORM:-platforms;android-35}" "${BUILD_TOOLS:-build-tools;35.0.0}" || {
+            echo "The preferred package failed; retrying with the newest installed platform."
+            INSTALLED_PLATFORM="$(ls "$ANDROID_HOME/platforms" 2>/dev/null | sort -V | tail -n 1)"
+            INSTALLED_TOOLS="$(ls "$ANDROID_HOME/build-tools" 2>/dev/null | sort -V | tail -n 1)"
+            echo "Falling back to platform android-$INSTALLED_PLATFORM and build tools $INSTALLED_TOOLS"
+          }
+
+          # Tell Gradle which platform to compile against.
+          if [ -n "${PLATFORM:-}" ]; then
+            echo "SAEED_COMPILE_SDK=${PLATFORM#platforms;android-}" >> "$GITHUB_ENV"
+          fi
 
       # The publishable key and the project URL are public values, but they are
       # kept in secrets so nothing sensitive is ever committed.
