@@ -242,8 +242,15 @@ jobs:
 
       - name: Verify the packages (acceptance checks 1-10)
         run: |
-          bash scripts/verify-apk.sh artifacts/apk/saeed-store-1.0.apk saeed-store
-          bash scripts/verify-apk.sh artifacts/apk/saeed-admin-1.0.apk saeed-admin
+          set -uo pipefail
+          {
+            bash scripts/verify-apk.sh artifacts/apk/saeed-store-1.0.apk saeed-store
+            bash scripts/verify-apk.sh artifacts/apk/saeed-admin-1.0.apk saeed-admin
+          } > /tmp/verify-apk.txt 2>&1 || true
+          cat /tmp/verify-apk.txt
+          if grep -q '^FAIL:' /tmp/verify-apk.txt; then
+            exit 1
+          fi
 
       - name: Verify the repository (acceptance checks 11-13)
         run: bash scripts/verify-repo.sh
@@ -264,6 +271,11 @@ jobs:
           mkdir -p /tmp/test-reports
           find . -path '*/build/test-results/*' -name '*.xml' -exec cp --parents {} /tmp/test-reports/ \; 2>/dev/null || true
           {
+            echo '## Package verification'
+            echo '```'
+            cat /tmp/verify-apk.txt 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
             echo '## Lint issues'
             echo '```'
             cat /tmp/lint-issues.txt 2>/dev/null || echo "(not reached)"
@@ -314,6 +326,11 @@ jobs:
             echo '## version probe'
             echo '```'
             cat /tmp/versions.txt 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
+            echo '## Package verification'
+            echo '```'
+            cat /tmp/verify-apk.txt 2>/dev/null || echo "(not reached)"
             echo '```'
             echo
             echo '## Lint issues'
