@@ -52,6 +52,19 @@ jobs:
             echo "--- no sdkmanager found; listing the usual locations ---"
             ls -la /usr/local/lib/android/sdk 2>&1 || true
             ls -la "$HOME/Android" 2>&1 || true
+            {
+              echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+              echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
+              echo "sdkmanager found at: ${SDKMANAGER_PATH:-none}"
+              echo "--- /usr/local/lib/android/sdk ---"
+              ls -la /usr/local/lib/android/sdk 2>&1 || true
+              echo "--- /opt/android ---"
+              ls -la /opt/android 2>&1 || true
+              echo "--- home Android ---"
+              ls -la "$HOME/Android" 2>&1 || true
+              echo "--- all sdkmanager binaries ---"
+              find / -name 'sdkmanager*' 2>/dev/null | head -n 20
+            } > /tmp/runner-probe.txt 2>&1
             echo "--- downloading the command line tools ---"
             mkdir -p "$HOME/Android/Sdk/cmdline-tools"
             curl -fsSL -o /tmp/cmdline-tools.zip \
@@ -166,6 +179,11 @@ jobs:
             echo "Run: $RUN_ID"
             echo "Commit: $SHA"
             echo
+            echo "## runner probe"
+            echo '```'
+            cat /tmp/runner-probe.txt 2>/dev/null || echo "(no probe output)"
+            echo '```'
+            echo
             echo '## Gradle test and lint'
             echo '```'
             tail -n 200 /tmp/gradle-test.log 2>/dev/null || echo "(not reached)"
@@ -177,26 +195,20 @@ jobs:
             echo '```'
           } > diagnostics/latest.md
 
-          BODY="$(python3 -c 'import json,sys; print(json.dumps(open("diagnostics/latest.md").read())[:60000])')"
+          base64 -w 0 diagnostics/latest.md > /tmp/diag.b64
+          {
+            echo '{"message":"CI diagnostics for run '"$RUN_ID"'","content":"'
+            cat /tmp/diag.b64
+            echo '","branch":"ci-diagnostics"}'
+          } > /tmp/diag-payload.json
 
-          # Create the branch if it does not exist yet.
-          curl -sS -H "Authorization: token $GITHUB_TOKEN"             "https://api.github.com/repos/$REPO/git/refs/heads/ci-diagnostics" > /tmp/ref.json
-          if grep -q '"ref"' /tmp/ref.json; then
-            curl -sS -X PATCH -H "Authorization: token $GITHUB_TOKEN"               "https://api.github.com/repos/$REPO/git/refs/heads/ci-diagnostics"               -d "{\"sha\":\"$SHA\",\"force\":true}" > /dev/null
-          else
-            curl -sS -X POST -H "Authorization: token $GITHUB_TOKEN"               "https://api.github.com/repos/$REPO/git/refs"               -d "{\"ref\":\"refs/heads/ci-diagnostics\",\"sha\":\"$SHA\"}" > /dev/null
-          fi
-
-          # Write the file on that branch.
-          curl -sS -X PUT -H "Authorization: token $GITHUB_TOKEN"             "https://api.github.com/repos/$REPO/contents/diagnostics/latest.md?branch=ci-diagnostics"             -d "{\"message\":\"CI diagnostics for run $RUN_ID\",\"content\":$BODY,\"branch\":\"ci-diagnostics\"}"             | head -c 200
-          echo
-
-          # Also comment on the commit so the failure is visible in the UI.
-          SUMMARY="$(grep -E 'error:|e: |FAILED|Execution failed|Caused by|\* What went wrong' -A 2 /tmp/gradle-test.log /tmp/gradle-build.log 2>/dev/null | head -n 60 || echo '(no Gradle output captured)')"
-          COMMENT="$(python3 -c "import json,sys; print(json.dumps('CI diagnostics for this run:\n\n\`\`\`\n'+open('/tmp/comment-body.txt').read()+'\n\`\`\`'))" 2>/dev/null || echo '{}')"
-          printf '%s' "$SUMMARY" > /tmp/comment-body.txt
-          COMMENT="$(python3 -c "import json; print(json.dumps({'body': open('/tmp/comment-body.txt').read()[:60000]}))")"
-          curl -sS -X POST -H "Authorization: token $GITHUB_TOKEN"             "https://api.github.com/repos/$REPO/commits/$SHA/comments"             -d "$COMMENT" | head -c 200
+          curl -sS -X PUT \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/contents/diagnostics/latest.md?branch=ci-diagnostics" \
+            --data-binary @/tmp/diag-payload.json \
+            -o /tmp/diag-response.json -w 'HTTP %{http_code}\n'
+          head -c 300 /tmp/diag-response.json
           echo
 
       - name: Upload APKs and logs
