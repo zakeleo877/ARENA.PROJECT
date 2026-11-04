@@ -107,6 +107,7 @@ fun CatalogScreen(
         SaeedSearchField(
             value = query,
             onValueChange = { query = it },
+            placeholder = stringResource(R.string.search_products),
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
 

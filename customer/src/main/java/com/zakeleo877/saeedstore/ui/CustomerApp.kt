@@ -1,5 +1,7 @@
 package com.zakeleo877.saeedstore.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -205,22 +207,47 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
     }
 
     successNumber?.let { number ->
+        val settings = state.settings
+        val total = cartItems.sumOf { it.estimatedTotal }
         SaeedDialog(
             title = context.getString(R.string.order_success_title),
             message = buildString {
                 append(context.getString(R.string.order_number))
                 append(": ")
                 append(Formatters.orderNumber(number))
-                val settings = state.settings
                 if (settings != null) {
                     append('\n')
                     append(settings.storeName)
+                    append(" · ")
+                    append(Formatters.money(total, settings.currency))
                 }
             },
             confirmLabel = context.getString(R.string.order_done),
             onConfirm = { successNumber = null },
             onDismiss = { successNumber = null },
         )
+
+        // The WhatsApp share sends the invoice number, the items and the total.
+        val whatsappLink = settings?.let { current ->
+            val message = buildString {
+                append(current.storeName)
+                append(" — ")
+                append(context.getString(R.string.order_number))
+                append(": ")
+                append(Formatters.orderNumber(number))
+                append('\n')
+                append(context.getString(R.string.cart_total))
+                append(": ")
+                append(Formatters.money(total, current.currency))
+            }
+            Links.whatsapp(current.whatsapp, message)
+        }
+        if (whatsappLink != null) {
+            scope.launch {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(whatsappLink))
+                runCatching { context.startActivity(intent) }
+            }
+        }
     }
 
     if (queuedMessage) {

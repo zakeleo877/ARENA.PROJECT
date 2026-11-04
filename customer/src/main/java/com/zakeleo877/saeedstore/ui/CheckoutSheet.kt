@@ -185,6 +185,13 @@ fun CheckoutSheet(
         )
         if (locationError) {
             Text(
+                text = stringResource(R.string.checkout_location_permission),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (locationError) {
+            Text(
                 text = stringResource(R.string.checkout_location_error),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,

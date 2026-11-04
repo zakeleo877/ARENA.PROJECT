@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">إدارة محلات السعيد</string>
-    <string name="scaffold_message">التطبيق قيد الإنشاء، وهذه واجهة مؤقتة.</string>
 
     <string name="admin_title">إدارة محلات السعيد</string>
     <string name="admin_subtitle">سجّل الدخول لإدارة الطلبات والمنتجات</string>

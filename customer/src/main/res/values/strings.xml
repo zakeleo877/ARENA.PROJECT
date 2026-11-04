@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">محلات السعيد</string>
-    <string name="scaffold_message">التطبيق قيد الإنشاء، وهذه واجهة مؤقتة.</string>
 
     <string name="catalog_tagline">حلاقة وتجميل — اطلب من مكانك</string>
     <string name="catalog_empty">لا توجد منتجات مطابقة لبحثك.</string>
@@ -32,7 +31,6 @@
     <string name="checkout_notes">ملاحظات (اختياري)</string>
     <string name="checkout_add_location">إضافة موقعي</string>
     <string name="checkout_location_hint">لمساعدة المحل على التواصل معك — اختياري</string>
-    <string name="checkout_location_permission">نحتاج موقعك لإرساله إلى المحل فقط.</string>
     <string name="checkout_submit">إرسال الطلب</string>
     <string name="checkout_phone_error">أدخل رقم هاتف جزائري صحيح (8 إلى 15 رقماً).</string>
     <string name="checkout_name_error">أدخل اسمك الكامل.</string>
@@ -42,8 +40,6 @@
     <string name="order_number">رقم الفاتورة</string>
     <string name="order_queued_title">تم حفظ طلبك</string>
     <string name="order_queued_message">سيُرسل طلبك تلقائياً عند عودة الاتصال.</string>
-    <string name="order_whatsapp">إرسال عبر واتساب</string>
-    <string name="order_share_location">مشاركة موقعي مع المحل</string>
     <string name="order_done">تم</string>
 
     <string name="pending_title">الطلبات المعلّقة</string>

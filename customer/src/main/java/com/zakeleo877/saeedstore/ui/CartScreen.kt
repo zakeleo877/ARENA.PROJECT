@@ -160,6 +160,11 @@ private fun CartRow(
             IconButton(onClick = { onQuantityChange(item.quantity + 1) }, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.increase))
             }
+            Text(
+                text = stringResource(R.string.quantity_label),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             IconButton(onClick = onRemove, modifier = Modifier.size(48.dp)) {
                 Icon(
                     Icons.Filled.Delete,

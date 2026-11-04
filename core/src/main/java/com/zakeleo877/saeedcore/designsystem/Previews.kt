@@ -36,3 +36,17 @@ private fun NeonVoidPreview() {
         }
     }
 }
+
+@Preview(showBackground = true, locale = "ar", widthDp = 360, heightDp = 260, name = "Neon Void dialog")
+@Composable
+private fun NeonVoidDialogPreview() {
+    SaeedTheme {
+        SaeedDialog(
+            title = stringResource(R.string.preview_title),
+            message = stringResource(R.string.preview_dialog_message),
+            confirmLabel = stringResource(R.string.action_confirm),
+            onConfirm = {},
+            onDismiss = {},
+        )
+    }
+}
