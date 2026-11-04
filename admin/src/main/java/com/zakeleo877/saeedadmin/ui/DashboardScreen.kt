@@ -49,7 +49,7 @@ fun DashboardScreen(
                 modifier = Modifier.weight(1f),
             )
             SaeedButton(
-                text = stringResource(R.string.action_retry),
+                text = stringResource(R.string.admin_refresh),
                 onClick = onRefresh,
                 icon = Icons.Filled.Refresh,
             )

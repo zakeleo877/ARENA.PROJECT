@@ -21,14 +21,14 @@ class OrdersRefreshWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         val session = repository.sessionHolder.session.value ?: return Result.success()
-        val lastSeen = LastSeenOrderStore(context).lastSeenNumber()
+        val lastSeen = LastSeenOrderStore(applicationContext).lastSeenNumber()
         val newOrders = runCatching { repository.newOrdersSince(session, lastSeen) }.getOrNull()
             ?: return Result.retry()
         if (newOrders.isEmpty()) return Result.success()
 
         val highest = newOrders.maxOf { it.number }
         newOrders.forEach { NewOrderNotifier.notifyNewOrder(applicationContext, it.number) }
-        LastSeenOrderStore(context).setLastSeenNumber(highest)
+        LastSeenOrderStore(applicationContext).setLastSeenNumber(highest)
         return Result.success()
     }
 }

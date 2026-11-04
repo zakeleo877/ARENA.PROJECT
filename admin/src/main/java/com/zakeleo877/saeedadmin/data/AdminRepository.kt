@@ -130,7 +130,7 @@ class AdminRepository(
     /** Calls a boolean RPC with the admin's bearer token. */
     private suspend fun rpcBoolean(session: AdminSession, function: String): Boolean = try {
         val response = client.post("${config.baseUrl}/rest/v1/rpc/$function") {
-            header("apikey", config.publicKey)
+            header("apikey", config.apiKey)
             header(HttpHeaders.Authorization, "Bearer ${session.accessToken}")
             header(HttpHeaders.Accept, ContentType.Application.Json)
             contentType(ContentType.Application.Json)

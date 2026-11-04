@@ -231,6 +231,34 @@ jobs:
 
       # The failure output is published with the GitHub API so it can be read
       # even when the log and artifact storage hosts are unreachable.
+      - name: Collect the unit test reports
+        if: always()
+        run: |
+          set -uo pipefail
+          mkdir -p /tmp/test-reports
+          find . -path '*/build/test-results/*' -name '*.xml' -exec cp --parents {} /tmp/test-reports/ \; 2>/dev/null || true
+          {
+            echo '## Unit test failures'
+            for report in $(find . -path '*/build/test-results/*' -name 'TEST-*.xml' 2>/dev/null); do
+              echo "### $report"
+              python3 - "$report" <<'PYEOF'
+          import sys, xml.etree.ElementTree as ET
+          try:
+              root = ET.parse(sys.argv[1]).getroot()
+          except Exception as error:
+              print('could not parse:', error)
+              raise SystemExit(0)
+          for case in root.iter('testcase'):
+              for child in case:
+                  if child.tag in ('failure', 'error'):
+                      print('FAILED:', case.get('name'))
+                      print((child.text or child.get('message') or '')[:1500])
+                      print('-' * 60)
+          PYEOF
+            done
+          } > /tmp/test-failures.txt 2>&1
+          cat /tmp/test-failures.txt | head -n 120
+
       - name: Publish diagnostics
         if: always()
         env:
@@ -255,6 +283,11 @@ jobs:
             echo '## version probe'
             echo '```'
             cat /tmp/versions.txt 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
+            echo '## Unit test failures'
+            echo '```'
+            cat /tmp/test-failures.txt 2>/dev/null || echo "(not reached)"
             echo '```'
             echo
             echo '## Gradle test and lint'

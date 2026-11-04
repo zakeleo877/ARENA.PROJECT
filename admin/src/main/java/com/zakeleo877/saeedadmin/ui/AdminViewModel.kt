@@ -41,15 +41,18 @@ class AdminViewModel(private val repository: AdminRepository) : ViewModel() {
     private val _products = MutableStateFlow<List<Product>>(emptyList())
     private val _filter = MutableStateFlow<OrderStatus?>(null)
     private val _query = MutableStateFlow("")
-    private val _loading = MutableStateFlow(false)
-    private val _error = MutableStateFlow<String?>(null)
 
     val session: StateFlow<AdminSession?> = repository.sessionHolder.session.asStateFlow()
     val authorization: StateFlow<AdminAuthorization?> = repository.sessionHolder.authorization.asStateFlow()
 
+    /** The loading flag and the error message travel together. */
+    private data class LoadState(val loading: Boolean = false, val error: String? = null)
+
+    private val _load = MutableStateFlow(LoadState())
+
     val uiState: StateFlow<AdminUiState> = combine(
-        _orders, _products, _filter, _query, _loading, _error,
-    ) { orders, products, filter, query, loading, error ->
+        _orders, _products, _filter, _query, _load,
+    ) { orders, products, filter, query, load ->
         AdminUiState(
             orders = orders.filter { order ->
                 val matchesStatus = filter == null || order.status == filter
@@ -62,8 +65,8 @@ class AdminViewModel(private val repository: AdminRepository) : ViewModel() {
             products = products,
             statusFilter = filter,
             searchQuery = query,
-            isLoading = loading,
-            errorMessage = error,
+            isLoading = load.loading,
+            errorMessage = load.error,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AdminUiState())
 
@@ -78,9 +81,9 @@ class AdminViewModel(private val repository: AdminRepository) : ViewModel() {
 
     fun signIn(email: String, password: String, onResult: (AuthResult) -> Unit) {
         viewModelScope.launch {
-            _loading.value = true
+            _load.value = _load.value.copy(loading = true)
             val result = repository.signIn(email, password)
-            _loading.value = false
+            _load.value = _load.value.copy(loading = false)
             if (result is AuthResult.Success) {
                 refresh()
             }
@@ -97,13 +100,13 @@ class AdminViewModel(private val repository: AdminRepository) : ViewModel() {
     fun refresh() {
         val session = repository.sessionHolder.session.value ?: return
         viewModelScope.launch {
-            _loading.value = true
+            _load.value = _load.value.copy(loading = true)
             val ordersResult = runCatching { repository.orders(session) }
             val productsResult = runCatching { repository.products(session) }
             _orders.value = ordersResult.getOrDefault(_orders.value)
             _products.value = productsResult.getOrDefault(_products.value)
-            _error.value = if (ordersResult.isFailure && productsResult.isFailure) "load_failed" else null
-            _loading.value = false
+            _load.value = _load.value.copy(error = if (ordersResult.isFailure && productsResult.isFailure) "load_failed" else null)
+            _load.value = _load.value.copy(loading = false)
         }
     }
 

@@ -170,7 +170,7 @@ private fun ProductRow(
             IconButton(onClick = onDelete, modifier = Modifier.height(48.dp)) {
                 Icon(
                     Icons.Filled.Delete,
-                    contentDescription = stringResource(R.string.action_delete),
+                    contentDescription = stringResource(R.string.admin_delete),
                     tint = MaterialTheme.colorScheme.error,
                 )
             }
@@ -263,7 +263,7 @@ private fun ProductFormSheet(
                 modifier = Modifier.weight(1f),
             )
             IconButton(onClick = { sortOrder += 1 }) {
-                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.action_increase))
+                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.admin_move_up))
             }
             Text(
                 text = sortOrder.toString(),
@@ -271,7 +271,7 @@ private fun ProductFormSheet(
                 color = MaterialTheme.colorScheme.onSurface,
             )
             IconButton(onClick = { sortOrder -= 1 }) {
-                Icon(Icons.Filled.Inventory2, contentDescription = stringResource(R.string.action_decrease))
+                Icon(Icons.Filled.Inventory2, contentDescription = stringResource(R.string.admin_move_down))
             }
         }
 

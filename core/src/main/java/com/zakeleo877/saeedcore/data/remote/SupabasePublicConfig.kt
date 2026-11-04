@@ -13,6 +13,9 @@ class SupabasePublicConfig(url: String, key: String) {
     internal val publicKey: String
     internal val legacyAnonJwt: Boolean
 
+    /** The public key is safe to expose; it is still not a secret. */
+    val apiKey: String get() = publicKey
+
     init {
         val parsed = try { URI(url.trim()) } catch (_: Exception) { null }
         require(
