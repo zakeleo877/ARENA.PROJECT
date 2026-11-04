@@ -1,0 +1,42 @@
+name: Probe SDK
+on: workflow_dispatch
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect the runner
+        run: |
+          set -uo pipefail
+          {
+            echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+            echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
+            echo "--- sdk dirs ---"
+            ls -d /usr/local/lib/android/sdk 2>&1 || true
+            ls /usr/local/lib/android/sdk 2>&1 || true
+            echo "--- cmdline-tools ---"
+            ls -R /usr/local/lib/android/sdk/cmdline-tools 2>&1 | head -n 20 || true
+            echo "--- sdkmanager path ---"
+            which -a sdkmanager 2>&1 || true
+            echo "--- java ---"
+            java -version 2>&1 || true
+            echo "--- installed packages ---"
+            ANDROID_HOME=/usr/local/lib/android/sdk sdkmanager --list_installed 2>&1 | head -n 30 || true
+            echo "--- network to dl.google.com ---"
+            curl -sS -o /dev/null -w '%{http_code}\n' --max-time 20 https://dl.google.com/android/repository/repository2-3.xml 2>&1 || true
+            echo "--- proxy env ---"
+            env | grep -i proxy || echo "(no proxy variables)"
+          } > /tmp/probe.txt 2>&1
+          cat /tmp/probe.txt
+      - name: Publish
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p diagnostics
+          cp /tmp/probe.txt diagnostics/probe.txt
+          git add diagnostics/probe.txt
+          git commit -m "runner probe" || true
+          git push --force origin HEAD:refs/heads/ci-diagnostics 2>&1 | tail -n 3

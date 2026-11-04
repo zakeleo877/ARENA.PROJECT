@@ -101,12 +101,13 @@ jobs:
             exit "$INSTALL_STATUS"
           fi
 
-      # The diagnostics are committed to a branch so they can be read even when
-      # the log and artifact storage hosts are unreachable.
+      # The diagnostics are published with the GitHub API so they can be read
+      # even when the log and artifact storage hosts are unreachable.
       - name: Publish diagnostics
         if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
         run: |
           set -uo pipefail
           mkdir -p diagnostics
@@ -132,21 +133,41 @@ jobs:
             echo
             echo '## gradle test and lint'
             echo '```'
-            tail -n 120 /tmp/gradle-test.log 2>/dev/null || echo "(not reached)"
+            tail -n 150 /tmp/gradle-test.log 2>/dev/null || echo "(not reached)"
             echo '```'
             echo
             echo '## gradle build'
             echo '```'
-            tail -n 120 /tmp/gradle-build.log 2>/dev/null || echo "(not reached)"
+            tail -n 150 /tmp/gradle-build.log 2>/dev/null || echo "(not reached)"
             echo '```'
           } > diagnostics/latest.md
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B ci-diagnostics
           git add diagnostics/latest.md
           git commit -m "CI diagnostics for run ${{ github.run_id }}" || true
-          git push --force origin ci-diagnostics || true
+          if git push --force origin HEAD:refs/heads/ci-diagnostics 2>&1; then
+            echo "diagnostics pushed to the ci-diagnostics branch"
+          else
+            echo "the direct push was rejected, falling back to the API"
+            CONTENT="$(base64 -w 0 diagnostics/latest.md)"
+            SHA="$(curl -sS -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/$REPO/git/refs/heads/ci-diagnostics" \
+              | sed -n 's/.*"sha": *"\([0-9a-f]*\)".*/\1/p' | head -n 1)"
+            if [ -z "$SHA" ]; then
+              BASE_SHA="$(curl -sS -H "Authorization: token $GITHUB_TOKEN" \
+                "https://api.github.com/repos/$REPO/git/refs/heads/main" \
+                | sed -n 's/.*"sha": *"\([0-9a-f]*\)".*/\1/p' | head -n 1)"
+              curl -sS -X POST -H "Authorization: token $GITHUB_TOKEN" \
+                "https://api.github.com/repos/$REPO/git/refs" \
+                -d "{\"ref\":\"refs/heads/ci-diagnostics\",\"sha\":\"$BASE_SHA\"}" > /dev/null
+            fi
+            curl -sS -X PUT -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/$REPO/contents/diagnostics/latest.md" \
+              -d "{\"message\":\"CI diagnostics for run ${{ github.run_id }}\",\"content\":\"$CONTENT\",\"branch\":\"ci-diagnostics\"}" \
+              | head -c 300
+            echo
+          fi
 
       # The publishable key and the project URL are public values, but they are
       # kept in secrets so nothing sensitive is ever committed.
