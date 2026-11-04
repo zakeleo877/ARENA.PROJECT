@@ -195,12 +195,16 @@ jobs:
             echo '```'
           } > diagnostics/latest.md
 
-          base64 -w 0 diagnostics/latest.md > /tmp/diag.b64
-          {
-            echo '{"message":"CI diagnostics for run '"$RUN_ID"'","content":"'
-            cat /tmp/diag.b64
-            echo '","branch":"ci-diagnostics"}'
-          } > /tmp/diag-payload.json
+          # The payload is built with a JSON encoder so newlines and quotes in
+          # the captured output are escaped correctly.
+          python3 -c "import base64,json,os; d=open('diagnostics/latest.md','rb').read(); open('/tmp/diag-payload.json','w').write(json.dumps({'message':'CI diagnostics for run '+os.environ['RUN_ID'],'content':base64.b64encode(d).decode('ascii'),'branch':'ci-diagnostics'}))"
+
+          # Point the diagnostics branch at the commit that was just built.
+          curl -sS -X PATCH \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/git/refs/heads/ci-diagnostics" \
+            -d "{\"sha\":\"$SHA\",\"force\":true}" > /dev/null
 
           curl -sS -X PUT \
             -H "Authorization: token $GITHUB_TOKEN" \
