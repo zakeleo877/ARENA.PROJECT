@@ -218,6 +218,12 @@ jobs:
           # it is never copied into the artifacts directory.
           printf 'signing keystore prepared in %s\n' "$RUNNER_TEMP/release.jks"
 
+      # A cheap guard that runs before the Gradle build. It catches a missing
+      # import or a wrong library constant in seconds instead of after the
+      # five minute compile.
+      - name: Check the Kotlin references
+        run: python3 scripts/verify-kotlin-refs.py
+
       - name: Run unit tests and lint
         env:
           SAEED_COMPILE_SDK: ${{ vars.SAEED_COMPILE_SDK }}

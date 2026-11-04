@@ -76,7 +76,7 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
     } else {
         null
     }
-    val useRail = widthSizeClass == WindowWidthSizeClass.EXPANDED
+    val useRail = widthSizeClass == WindowWidthSizeClass.Expanded
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
