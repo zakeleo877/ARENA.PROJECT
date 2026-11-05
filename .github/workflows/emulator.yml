@@ -420,3 +420,27 @@ jobs:
             -o /tmp/emu-response.json -w 'HTTP %{http_code}\n'
           head -c 300 /tmp/emu-response.json
           echo
+
+      - name: Publish the screenshots on the branch
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          # The screenshots are also written to the branch, because the report
+          # of the acceptance has to show the screens that were rendered.
+          for shot in artifacts/screenshots/*.png; do
+            [ -e "$shot" ] || continue
+            NAME="$(basename "$shot")"
+            python3 -c "import base64,json,sys; d=open(sys.argv[1],'rb').read(); open('/tmp/shot-payload.json','w').write(json.dumps({'message':'Screenshot of run '+sys.argv[3],'content':base64.b64encode(d).decode('ascii'),'branch':'ci-emulator','path':'artifacts/screenshots/'+sys.argv[2]}))" "$shot" "$NAME" "$RUN_ID"
+            curl -sS -X PUT \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/contents/artifacts/screenshots/$NAME?branch=ci-emulator" \
+              --data-binary @/tmp/shot-payload.json \
+              -o /tmp/shot-response.json -w "$NAME HTTP %{http_code}\n"
+            head -c 200 /tmp/shot-response.json
+            echo
+          done
