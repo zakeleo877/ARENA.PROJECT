@@ -237,7 +237,7 @@ Activity: com.zakeleo877.saeedstore/.MainActivity
 TotalTime: 1140
 WaitTime: 1145
 Complete
-PASS: the application process is running with the identifier 2264
+PASS: the application process is running with the identifier 2297
 PASS: no fatal exception was logged
 PASS: a screenshot was captured at artifacts/screenshots/com.zakeleo877.saeedstore.png
 PASS: the screenshot shows a rendered screen (320x640, 256 distinct byte values)
@@ -254,7 +254,7 @@ Activity: com.zakeleo877.saeedadmin/.MainActivity
 TotalTime: 813
 WaitTime: 822
 Complete
-PASS: the application process is running with the identifier 2345
+PASS: the application process is running with the identifier 2379
 PASS: no fatal exception was logged
 PASS: a screenshot was captured at artifacts/screenshots/com.zakeleo877.saeedadmin.png
 PASS: the screenshot shows a rendered screen (320x640, 256 distinct byte values)
