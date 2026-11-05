@@ -128,7 +128,7 @@ if [ -z "$PROCESS_ID" ]; then
 fi
 printf 'PASS: the application process is running with the identifier %s\n' "$PROCESS_ID"
 
-FATAL="$("$ADB" -s "$SERIAL" logcat -d 2>/dev/null | grep -E 'FATAL EXCEPTION|AndroidRuntime.*com.zakeleo877' | head -n 10 || true)"
+FATAL="$("$ADB" -s "$SERIAL" logcat -d 2>/dev/null | grep -E 'FATAL EXCEPTION|AndroidRuntime' | head -n 40 || true)"
 if [ -n "$FATAL" ]; then
   printf 'FAIL: a fatal exception was logged while the application was starting\n'
   printf '%s\n' "$FATAL"
