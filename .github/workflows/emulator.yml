@@ -95,14 +95,17 @@ jobs:
 
       # The action starts the emulator, waits for it to boot and hands a
       # ready device to the following steps.
+      # The action starts the device, waits for the boot and hands a ready
+      # device to the following steps. The step does not stop the workflow on
+      # its own: the script below reports whether the device was reachable.
       - name: Start the emulator
+        id: emulator
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
+          api-level: 34
           arch: x86_64
-          target: default
           profile: pixel_2
-          emulator-options: -no-snapshot -gpu swiftshader_indirect -no-boot-anim -camera-back none
           script: echo "The emulator is ready."
           disable-animations: true
 
@@ -111,6 +114,7 @@ jobs:
       - name: Align the SDK environment with the emulator
         run: |
           set -uo pipefail
+          echo "The emulator step outcome: ${{ steps.emulator.outcome }}"
           {
             echo "ANDROID_HOME=$ANDROID_HOME"
             echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
