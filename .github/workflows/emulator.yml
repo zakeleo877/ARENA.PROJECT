@@ -104,6 +104,22 @@ jobs:
           script: echo "The emulator is ready."
           disable-animations: true
 
+      # The emulator action may use its own SDK. The environment is aligned
+      # with it so that the adb binary and the device server are the same.
+      - name: Align the SDK environment with the emulator
+        run: |
+          set -uo pipefail
+          {
+            echo "ANDROID_HOME=$ANDROID_HOME"
+            echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+            echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME"
+          } > /tmp/sdk-environment.txt 2>&1 || true
+          cat /tmp/sdk-environment.txt
+          # Every adb binary that the runner has is listed, so the report shows
+          # which one the emulator action installed.
+          find / -name adb -type f -path '*platform-tools*' 2>/dev/null | head -n 10 || true
+          adb devices 2>&1 || true
+
       - name: Prepare a throwaway signing key
         run: |
           set -euo pipefail

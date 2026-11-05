@@ -15,28 +15,42 @@ ACTIVITY="${4:-.MainActivity}"
 
 mkdir -p "$OUTPUT"
 
-# The adb on the path is the one the emulator action used, so it sees the
-# same server and the same device. Every call uses the serial number of the
-# device that was found.
-ADB="$(command -v adb || true)"
-if [ -z "$ADB" ] && [ -n "${ANDROID_HOME:-}" ]; then
-  ADB="$ANDROID_HOME/platform-tools/adb"
-fi
-if [ -z "$ADB" ]; then
+# Every adb binary that the runner has is tried, because the emulator action
+# can use a different SDK than the one this script finds. The first binary
+# that reports the device is used for the rest of the run.
+CANDIDATE_ADBS=""
+for candidate in \
+  "$(command -v adb || true)" \
+  "${ANDROID_HOME:-}/platform-tools/adb" \
+  "${ANDROID_SDK_ROOT:-}/platform-tools/adb" \
+  /usr/local/lib/android/sdk/platform-tools/adb \
+  "$HOME/Android/Sdk/platform-tools/adb"; do
+  if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+    CANDIDATE_ADBS="$CANDIDATE_ADBS $candidate"
+  fi
+done
+if [ -z "$CANDIDATE_ADBS" ]; then
   printf 'FAIL: adb is not on the path, so no device can be reached\n'
   exit 1
 fi
-printf 'Using adb at %s\n' "$ADB"
-
-"$ADB" start-server > /dev/null 2>&1 || true
+printf 'The adb binaries that are tried:%s\n' "$CANDIDATE_ADBS"
 
 # Wait for the device to show up, with a hard limit so the job cannot hang.
+ADB=""
 SERIAL=""
 DEVICE_SEEN=0
 for _ in $(seq 1 60); do
-  # The device shows up as offline for a moment after it starts, so both
-  # states are accepted and the boot is waited for afterwards.
-  SERIAL="$("$ADB" devices 2>/dev/null | awk '$1 ~ /^emulator-[0-9]+$/ && ($2 == "device" || $2 == "offline") { print $1; exit }')"
+  for candidate in $CANDIDATE_ADBS; do
+    "$candidate" start-server > /dev/null 2>&1 || true
+    # The device shows up as offline for a moment after it starts, so both
+    # states are accepted and the boot is waited for afterwards.
+    FOUND="$("$candidate" devices 2>/dev/null | awk '$1 ~ /^emulator-[0-9]+$/ && ($2 == "device" || $2 == "offline") { print $1; exit }')"
+    if [ -n "$FOUND" ]; then
+      ADB="$candidate"
+      SERIAL="$FOUND"
+      break
+    fi
+  done
   if [ -n "$SERIAL" ]; then
     DEVICE_SEEN=1
     break
@@ -45,11 +59,15 @@ for _ in $(seq 1 60); do
 done
 if [ "$DEVICE_SEEN" != "1" ]; then
   printf 'FAIL: no emulator appeared in adb devices\n'
-  "$ADB" devices
+  for candidate in $CANDIDATE_ADBS; do
+    printf -- '--- %s ---\n' "$candidate"
+    "$candidate" devices 2>&1 || true
+  done
   printf '\nThe emulator log follows.\n'
   tail -n 60 /tmp/emulator.log 2>/dev/null || true
   exit 1
 fi
+printf 'Using adb at %s for the device %s\n' "$ADB" "$SERIAL"
 printf 'PASS: the emulator is visible to adb\n'
 
 # Wait for the package manager to finish booting, again with a hard limit.
