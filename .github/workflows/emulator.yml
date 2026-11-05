@@ -95,6 +95,41 @@ jobs:
 
       # The action starts the emulator, waits for it to boot and hands a
       # ready device to the following steps.
+      # The emulator and a system image are installed here. The image that
+      # installs is the one that the device is created from.
+      - name: Install the emulator and a system image
+        env:
+          ANDROID_AVD_HOME: /home/runner/.android/avd
+          ANDROID_SDK_HOME: /home/runner/.android
+        run: |
+          set -uo pipefail
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_HOME=$ANDROID_SDK_HOME" >> "$GITHUB_ENV"
+          INSTALLED=""
+          for candidate in \
+            "system-images;android-34;default;x86_64" \
+            "system-images;android-34;google_apis;x86_64" \
+            "system-images;android-33;default;x86_64" \
+            "system-images;android-35;default;x86_64"; do
+            echo "Trying $candidate"
+            if "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "emulator" "$candidate" \
+              > /tmp/emulator-install.txt 2>&1; then
+              INSTALLED="$candidate"
+              break
+            fi
+            tail -n 4 /tmp/emulator-install.txt
+          done
+          cat /tmp/emulator-install.txt
+          if [ -z "$INSTALLED" ]; then
+            echo "FAIL: neither the emulator nor a system image could be installed."
+            ls -la "$ANDROID_HOME/system-images" 2>&1 || true
+            ls -la "$ANDROID_HOME/emulator" 2>&1 || true
+            exit 1
+          fi
+          echo "The installed image is $INSTALLED"
+          echo "INSTALLED_IMAGE=$INSTALLED" >> "$GITHUB_ENV"
+
       # The device is started by hand and the boot is waited for. The action
       # that starts it reported a success while no emulator process was
       # running, so the boot is verified here instead of being assumed.
@@ -109,7 +144,7 @@ jobs:
 
           # The image that the previous step installed is used, and the device
           # is written directly when the AVD manager does not create it.
-          INSTALLED_IMAGE=""
+          INSTALLED_IMAGE="${INSTALLED_IMAGE:-}"
           for candidate in \
             "system-images;android-34;default;x86_64" \
             "system-images;android-34;google_apis;x86_64" \
