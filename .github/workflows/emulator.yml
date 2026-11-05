@@ -95,19 +95,132 @@ jobs:
 
       # The action starts the emulator, waits for it to boot and hands a
       # ready device to the following steps.
-      # The action starts the device, waits for the boot and hands a ready
-      # device to the following steps. The step does not stop the workflow on
-      # its own: the script below reports whether the device was reachable.
+      # The device is started by hand and the boot is waited for. The action
+      # that starts it reported a success while no emulator process was
+      # running, so the boot is verified here instead of being assumed.
       - name: Start the emulator
         id: emulator
         continue-on-error: true
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 34
-          arch: x86_64
-          profile: pixel_2
-          script: echo "The emulator is ready."
-          disable-animations: true
+        run: |
+          set -uo pipefail
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          export ANDROID_SDK_HOME="$HOME/.android"
+          mkdir -p "$ANDROID_AVD_HOME"
+
+          # The image that the previous step installed is used, and the device
+          # is written directly when the AVD manager does not create it.
+          INSTALLED_IMAGE=""
+          for candidate in \
+            "system-images;android-34;default;x86_64" \
+            "system-images;android-34;google_apis;x86_64" \
+            "system-images;android-33;default;x86_64"; do
+            IMAGE_DIR="$ANDROID_HOME/${candidate//;//}"
+            if [ -d "$IMAGE_DIR" ]; then
+              INSTALLED_IMAGE="$candidate"
+              break
+            fi
+          done
+          if [ -z "$INSTALLED_IMAGE" ]; then
+            echo "FAIL: no system image is installed."
+            ls -la "$ANDROID_HOME/system-images" 2>&1 || true
+            exit 1
+          fi
+          IMAGE_FLAVOUR="$(echo "$INSTALLED_IMAGE" | cut -d';' -f3)"
+          IMAGE_LEVEL="$(echo "$INSTALLED_IMAGE" | cut -d';' -f2)"
+          echo "The image is $INSTALLED_IMAGE"
+
+          rm -rf "$ANDROID_AVD_HOME/test.avd" "$ANDROID_AVD_HOME/test.ini"
+          echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" \
+            create avd -n test -k "$INSTALLED_IMAGE" --force > /tmp/avd-create.txt 2>&1 || true
+          cat /tmp/avd-create.txt
+          if [ ! -f "$ANDROID_AVD_HOME/test.ini" ]; then
+            echo "The AVD manager did not create the device, so it is written directly."
+            mkdir -p "$ANDROID_AVD_HOME/test.avd"
+            {
+              echo 'avd.ini.encoding=UTF-8'
+              echo 'path.rel=avd/test.avd'
+              echo "path=$ANDROID_AVD_HOME/test.avd"
+              echo "target=$IMAGE_LEVEL"
+            } > "$ANDROID_AVD_HOME/test.ini"
+            {
+              echo 'AvdId=test'
+              echo 'PlayStore.enabled=false'
+              echo 'abi.type=x86_64'
+              echo 'fastboot.forceColdBoot=yes'
+              echo 'hw.accelerometer=yes'
+              echo 'hw.audioInput=no'
+              echo 'hw.battery=yes'
+              echo 'hw.camera.back=none'
+              echo 'hw.camera.front=none'
+              echo 'hw.cpu.arch=x86_64'
+              echo 'hw.cpu.ncore=4'
+              echo 'hw.dPad=no'
+              echo 'hw.device.manufacturer=Google'
+              echo 'hw.device.name=pixel_2'
+              echo 'hw.gps=yes'
+              echo 'hw.gpu.enabled=yes'
+              echo 'hw.gpu.mode=auto'
+              echo 'hw.keyboard=yes'
+              echo 'hw.lcd.density=420'
+              echo 'hw.lcd.height=1920'
+              echo 'hw.lcd.width=1080'
+              echo 'hw.mainKeys=no'
+              echo 'hw.ramSize=3072'
+              echo 'hw.sdCard=no'
+              echo 'hw.sensors.orientation=yes'
+              echo 'hw.sensors.proximity=yes'
+              echo 'hw.trackBall=no'
+              echo "image.sysdir.1=system-images/android-$IMAGE_LEVEL/$IMAGE_FLAVOUR/x86_64/"
+              echo 'runtime.network.latency=none'
+              echo 'runtime.network.speed=full'
+              echo 'showDeviceFrame=no'
+              echo 'skin.dynamic=yes'
+              echo 'skin.name=1080x1920'
+              echo 'skin.path=_no_skin'
+              echo 'tag.display=Default'
+              echo 'tag.id=default'
+              echo 'vm.heapSize=256'
+            } > "$ANDROID_AVD_HOME/test.avd/config.ini"
+          fi
+          ls -la "$ANDROID_AVD_HOME" 2>&1 || true
+          "$ANDROID_HOME/emulator/emulator" -list-avds 2>&1 | head -n 5 || true
+
+          # The emulator is started in the background and the boot is waited
+          # for, so the next step finds a device that is ready.
+          nohup "$ANDROID_HOME/emulator/emulator" \
+            -avd test \
+            -no-window \
+            -no-audio \
+            -no-boot-anim \
+            -no-snapshot \
+            -gpu swiftshader_indirect \
+            -accel auto \
+            -wipe-data \
+            -memory 3072 \
+            -cores 4 \
+            -no-metrics \
+            -netdelay none \
+            -netspeed full \
+            > /tmp/emulator.log 2>&1 &
+          echo $! > /tmp/emulator.pid
+          echo "The emulator was started with pid $(cat /tmp/emulator.pid)"
+
+          # The boot is waited for here, because the process has to be alive
+          # when the following step runs.
+          BOOTED=""
+          for _ in $(seq 1 90); do
+            if ! kill -0 "$(cat /tmp/emulator.pid)" 2>/dev/null; then
+              echo "FAIL: the emulator process stopped."
+              tail -n 40 /tmp/emulator.log 2>/dev/null || true
+              exit 1
+            fi
+            BOOTED="$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+            [ "$BOOTED" = "1" ] && break
+            sleep 4
+          done
+          echo "sys.boot_completed is '$BOOTED'"
+          head -n 40 /tmp/emulator.log 2>/dev/null || true
+          adb devices 2>&1 || true
 
       # The emulator action may use its own SDK. The environment is aligned
       # with it so that the adb binary and the device server are the same.
