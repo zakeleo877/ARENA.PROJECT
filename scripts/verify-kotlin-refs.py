@@ -172,6 +172,78 @@ def check_predictive_back_collect(path: pathlib.Path, code: str) -> None:
                 f"gesture starts instead of when it completes"
             )
 
+def check_required_imports(path: pathlib.Path, code: str, imports: set[str]) -> None:
+    """Report a symbol that is used but whose import is missing.
+
+    The Kotlin compiler only reports this after the whole module is compiled,
+    which costs four minutes in the CI. The list below holds the symbols that
+    were actually missing during this work.
+    """
+    required = {
+        "mutableStateOf": "androidx.compose.runtime.mutableStateOf",
+        "remember": "androidx.compose.runtime.remember",
+        "setValue": "androidx.compose.runtime.setValue",
+        "mutableIntStateOf": "androidx.compose.runtime.mutableIntStateOf",
+        "mutableFloatStateOf": "androidx.compose.runtime.mutableFloatStateOf",
+        "mutableStateListOf": "androidx.compose.runtime.mutableStateListOf",
+        "collectAsState": "androidx.compose.runtime.collectAsState",
+        "LaunchedEffect": "androidx.compose.runtime.LaunchedEffect",
+        "rememberCoroutineScope": "androidx.compose.runtime.rememberCoroutineScope",
+    }
+    # The property delegate operators only need an import when they are used
+    # with the `by` keyword. A map lookup is a different function entirely.
+    delegates = {
+        "getValue": "androidx.compose.runtime.getValue",
+        "setValue": "androidx.compose.runtime.setValue",
+    }
+    for symbol, package in required.items():
+        # The imports hold the full paths, so the symbol is matched against the
+        # last part of every imported path.
+        imported = any(path.rsplit(".", 1)[-1] == symbol for path in imports)
+        if not imported:
+            # The symbol has to be used before the import can be missing.
+            pattern = r"\b" + re.escape(symbol) + r"\s*[({<]"
+            if not re.search(pattern, code):
+                continue
+            if re.search(
+                r"^\s*(private\s+|internal\s+)?(fun|val|var)\s+\w*\s*=\s*" + re.escape(symbol),
+                code,
+                re.M,
+            ):
+                continue
+            line = next(
+                (
+                    code[: match.start()].count("\n") + 1
+                    for match in re.finditer(pattern, code)
+                ),
+                1,
+            )
+            errors.append(
+                f"{path.relative_to(ROOT)}:{line}: {symbol} is used but "
+                f"{package} is not imported"
+            )
+
+    for symbol, package in delegates.items():
+        imported = any(path.rsplit(".", 1)[-1] == symbol for path in imports)
+        if imported:
+            continue
+        # The delegate operator is only needed when a property is declared
+        # with `by` and the delegate is not a call that returns a state.
+        pattern = r"\bby\s+(?:remember|rememberSaveable)\s*\{"
+        if not re.search(pattern, code):
+            continue
+        # The delegate of `by remember { mutableStateOf(...) }` is the state
+        # itself, so the operator is needed.
+        if not re.search(r"\bby\s+(?:remember|rememberSaveable)\s*\{\s*mutable", code):
+            continue
+        match = re.search(pattern, code)
+        line = code[: match.start()].count("\n") + 1
+        errors.append(
+            f"{path.relative_to(ROOT)}:{line}: {symbol} is needed for the "
+            f"property delegate but {package} is not imported"
+        )
+
+
 def check_compose_test_api(path: pathlib.Path, code: str) -> None:
     """Catch the Compose test helpers that do not exist on the rule type.
 
@@ -211,6 +283,7 @@ def main() -> int:
         check_shared_content_state_import(path, imports)
         check_predictive_back_collect(path, code)
         check_compose_test_api(path, code)
+        check_required_imports(path, code, imports)
 
     if errors:
         print("Static reference check failed:\n")

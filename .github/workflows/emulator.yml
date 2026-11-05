@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 jobs:
@@ -216,23 +216,47 @@ jobs:
 
       - name: Publish the emulator log
         if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          SHA: ${{ github.sha }}
         run: |
+          set -uo pipefail
           {
-            echo '## Emulator log'
+            echo "# Emulator diagnostics"
+            echo
+            echo "Run: $RUN_ID"
+            echo
+            echo "## Emulator log"
             echo '```'
-            tail -n 120 /tmp/emulator.log 2>/dev/null || true
+            tail -n 120 /tmp/emulator.log 2>/dev/null || echo "(not reached)"
             echo '```'
-            echo '## Customer run'
+            echo
+            echo "## Customer run"
             echo '```'
-            cat /tmp/emulator-customer.txt 2>/dev/null || true
+            cat /tmp/emulator-customer.txt 2>/dev/null || echo "(not reached)"
             echo '```'
-            echo '## Admin run'
+            echo
+            echo "## Admin run"
             echo '```'
-            cat /tmp/emulator-admin.txt 2>/dev/null || true
+            cat /tmp/emulator-admin.txt 2>/dev/null || echo "(not reached)"
             echo '```'
           } > emulator-diagnostics.md
-          gh api "repos/${GITHUB_REPOSITORY}/contents/emulator-diagnostics.md" \
-            --method PUT \
-            -f message="Emulator diagnostics for run ${GITHUB_RUN_ID}" \
-            -f content="$(base64 -w 0 emulator-diagnostics.md)" \
-            -f branch=ci-diagnostics 2>&1 | tail -n 3
+
+          python3 -c "import base64,json,os; d=open('emulator-diagnostics.md','rb').read(); open('/tmp/emu-payload.json','w').write(json.dumps({'message':'Emulator diagnostics for run '+os.environ['RUN_ID'],'content':base64.b64encode(d).decode('ascii'),'branch':'ci-diagnostics'}))"
+
+          curl -sS -X PATCH \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/git/refs/heads/ci-diagnostics" \
+            -d "{\"sha\":\"$SHA\",\"force\":true}" > /dev/null
+
+          curl -sS -X PUT \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/contents/emulator-diagnostics.md?branch=ci-diagnostics" \
+            --data-binary @/tmp/emu-payload.json \
+            -o /tmp/emu-response.json -w 'HTTP %{http_code}\n'
+          head -c 300 /tmp/emu-response.json
+          echo
