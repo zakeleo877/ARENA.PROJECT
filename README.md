@@ -151,7 +151,7 @@ bash scripts/db-security-tests.sh
 
 ## لقطات الشاشة من المحاكي
 
-لقطتان حقيقيتان من تشغيل GitHub Actions `42028557161`، بعد تثبيت الحزمتين
+لقطتان حقيقيتان من تشغيل GitHub Actions `42031282868`، بعد تثبيت الحزمتين
 وتشغيل الشاشة الرئيسية لكل تطبيق على محاكي `android-34/x86_64`:
 
 | تطبيق الزبائن | تطبيق الإدارة |
@@ -175,10 +175,10 @@ bash scripts/db-security-tests.sh
 
 | سير العمل | آخر تشغيل | النتيجة | الرابط |
 |---|---|---|---|
-| `Build and verify` | **42025570333** | **أخضر** — كل الخطوات | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42025570333> |
-| `Database security checks` | **42025570596** | **أخضر** | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42025570596> |
-| `Verify the interface on an emulator` | **42025570718** | **أخضر** — التطبيقان عملا ولُقطتا الشاشتين | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42025570718> |
-| `Release gate` | **42025570931** | **أحمر كما يجب** — أسرار الإنتاج غير مضبوطة | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42025570931> |
+| `Build and verify` | **42031282911** | **أخضر** — ٢٠ خطوة من ٢٠ | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42031282911> |
+| `Database security checks` | **42031282846** | **أخضر** | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42031282846> |
+| `Verify the interface on an emulator` | **42031282868** | **أخضر** — التطبيقان عملا ولُقطتا الشاشتين | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42031282868> |
+| `Release gate` | **42031282943** | **أحمر كما يجب** — أسرار الإنتاج غير مضبوطة | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42031282943> |
 
 - `./gradlew test lint` نجح.
 - `./gradlew :customer:assembleRelease :admin:assembleRelease` نجح (`BUILD SUCCESSFUL`).
@@ -191,7 +191,7 @@ bash scripts/db-security-tests.sh
 - `./gradlew test`: **10 ملفات اختبار** تشمل اختبارات واجهة Compose على الـ JVM
   واختبارات تكامل تقود `CatalogApi` و`AuthManager` و`OrderRepository` الحقيقية
   ضد قاعدة البيانات المعزولة.
-- **محاكي Android في CI**: التشغيل `42025570718` ثبّت الحزمتين على محاكي
+- **محاكي Android في CI**: التشغيل `42031282868` ثبّت الحزمتين على محاكي
   `android-34`، وشغّل الشاشة الرئيسية لكل منهما (`LaunchState: COLD`)،
   وتأكد أن العملية حية وأن لا يوجد استثناء قاتل، والتقط لقطة شاشة لكل
   تطبيق (320x640). اللقطات منشورة على الفرع `ci-emulator` تحت
