@@ -1,6 +1,8 @@
 package com.zakeleo877.saeedadmin.ui
 
 import androidx.lifecycle.ViewModel
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import androidx.lifecycle.viewModelScope
 import com.zakeleo877.saeedadmin.data.AdminAuthorization
 import com.zakeleo877.saeedadmin.data.AdminRepository
@@ -35,7 +37,8 @@ data class AdminUiState(
     val errorMessage: String? = null,
 )
 
-class AdminViewModel(private val repository: AdminRepository) : ViewModel() {
+@HiltViewModel
+class AdminViewModel @Inject constructor(private val repository: AdminRepository) : ViewModel() {
     private val _orders = MutableStateFlow<List<Order>>(emptyList())
     private val _products = MutableStateFlow<List<Product>>(emptyList())
     private val _filter = MutableStateFlow<OrderStatus?>(null)

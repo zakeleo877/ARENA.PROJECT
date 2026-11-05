@@ -103,6 +103,8 @@ dependencies {
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.window)
     ksp(libs.hilt.compiler)
+    // The compiler of the AndroidX Hilt builds the factory that creates the view models.
+    ksp(libs.androidx.hilt.compiler)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
 }

@@ -8,7 +8,6 @@ import com.zakeleo877.saeedcore.data.remote.CatalogApi
 import com.zakeleo877.saeedcore.data.remote.SupabasePublicConfig
 import com.zakeleo877.saeedcore.network.NetworkMonitor
 import com.zakeleo877.saeedstore.BuildConfig
-import com.zakeleo877.saeedstore.ui.CustomerViewModel
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -38,14 +37,4 @@ object CustomerModule {
     @Singleton
     fun orderRepository(api: CatalogApi, pendingDao: PendingOrderDao): OrderRepository =
         OrderRepository(api, pendingDao)
-
-    @Provides
-    @Singleton
-    fun customerViewModel(
-        dao: com.zakeleo877.saeedcore.data.local.CatalogDao,
-        api: CatalogApi,
-        orderRepository: OrderRepository,
-        cart: CartStore,
-        monitor: NetworkMonitor,
-    ): CustomerViewModel = CustomerViewModel(dao, api, orderRepository, cart) { monitor.isOnline() }
 }

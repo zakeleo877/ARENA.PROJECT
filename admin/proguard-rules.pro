@@ -29,4 +29,4 @@
 -keep class * extends androidx.lifecycle.ViewModel { <init>(...); }
 -keep class * extends androidx.lifecycle.AndroidViewModel { <init>(...); }
 -keep class * extends androidx.lifecycle.SavedStateViewModel { <init>(...); }
--keep @dagger.hilt.android.lifecycle.HiltViewModel class * { <init>(...); }
+-keep @dagger.hilt.android.lifecycle.HiltViewModel class * { *; }

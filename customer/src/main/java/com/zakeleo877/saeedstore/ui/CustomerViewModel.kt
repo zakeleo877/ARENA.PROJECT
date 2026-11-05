@@ -1,6 +1,8 @@
 package com.zakeleo877.saeedstore.ui
 
 import androidx.lifecycle.ViewModel
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 import androidx.lifecycle.viewModelScope
 import com.zakeleo877.saeedcore.data.Cached
 import com.zakeleo877.saeedcore.data.CartStore
@@ -16,6 +18,7 @@ import com.zakeleo877.saeedcore.model.PendingOrder
 import com.zakeleo877.saeedcore.model.PendingOrderItem
 import com.zakeleo877.saeedcore.model.Product
 import com.zakeleo877.saeedcore.model.StoreSettings
+import com.zakeleo877.saeedcore.network.NetworkMonitor
 import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,13 +38,17 @@ data class CustomerUiState(
     val everLoaded: Boolean = false,
 )
 
-class CustomerViewModel(
+@HiltViewModel
+class CustomerViewModel @Inject constructor(
     private val dao: CatalogDao,
     private val api: CatalogApi,
     private val orderRepository: OrderRepository,
     val cart: CartStore,
-    private val isOnline: () -> Boolean,
+    private val monitor: NetworkMonitor,
 ) : ViewModel() {
+
+    /** The state of the network is read on demand, so a queued order is the answer when the device is offline. */
+    private val isOnline: () -> Boolean = { monitor.isOnline() }
 
     val cartItems: StateFlow<List<CartItem>> = cart.items.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList(),

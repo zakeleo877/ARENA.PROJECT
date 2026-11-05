@@ -268,6 +268,67 @@ def check_compose_test_api(path: pathlib.Path, code: str) -> None:
         )
 
 
+
+def check_hilt_view_models(paths: list[pathlib.Path]) -> None:
+    """Catch a view model that the framework cannot create.
+
+    `hiltViewModel()` asks the factory of the activity for the view model.
+    The default factory of the framework looks for a constructor without
+    arguments with the reflection, so a view model that has arguments can
+    only be created when it carries the Hilt annotation. The device reported
+    the missing constructor, and this check reports it in seconds.
+    """
+    requested: dict[str, pathlib.Path] = {}
+    for path in paths:
+        source = path.read_text(encoding="utf-8")
+        for match in re.finditer(r"hiltViewModel\s*<\s*([A-Za-z_][\w.]*)\s*>", source):
+            requested[match.group(1).rsplit(".", 1)[-1]] = path
+        for match in re.finditer(r"hiltViewModel\s*\(\s*\)\s*(?:\)|as\s+[A-Za-z_][\w.]*)", source):
+            pass
+
+    for path in paths:
+        source = path.read_text(encoding="utf-8")
+        for match in re.finditer(
+            r"hiltViewModel\s*<\s*([A-Za-z_][\w.]*)\s*>", source
+        ):
+            name = match.group(1).rsplit(".", 1)[-1]
+            requested[name] = path
+
+    # The composables that ask for the view model without a type, the type is
+    # taken from the parameter of the composable.
+    for path in paths:
+        source = path.read_text(encoding="utf-8")
+        for match in re.finditer(
+            r"fun\s+\w+\s*\([^)]*viewModel\s*:\s*([A-Za-z_][\w.]*)\s*=\s*hiltViewModel\(\)",
+            source,
+        ):
+            name = match.group(1).rsplit(".", 1)[-1]
+            requested[name] = path
+
+    if not requested:
+        return
+
+    declarations: dict[str, pathlib.Path] = {}
+    for path in paths:
+        source = path.read_text(encoding="utf-8")
+        for match in re.finditer(
+            r"(?m)^(?:@\w+(?:\([^\n]*\))?\s*)*class\s+([A-Za-z_]\w*)\b", source
+        ):
+            declarations[match.group(1)] = path
+
+    for name, requester in sorted(requested.items()):
+        declaration = declarations.get(name)
+        if declaration is None:
+            continue
+        source = declaration.read_text(encoding="utf-8")
+        if "@HiltViewModel" not in source:
+            errors.append(
+                f"{requester.relative_to(ROOT)}: {name} is requested with "
+                f"hiltViewModel() but {declaration.relative_to(ROOT)} does not "
+                f"carry the HiltViewModel annotation"
+            )
+
+
 def main() -> int:
     files = kotlin_files()
     for path in files:
@@ -284,6 +345,8 @@ def main() -> int:
         check_predictive_back_collect(path, code)
         check_compose_test_api(path, code)
         check_required_imports(path, code, imports)
+
+    check_hilt_view_models(files)
 
     if errors:
         print("Static reference check failed:\n")
