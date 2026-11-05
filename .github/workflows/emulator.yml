@@ -106,35 +106,103 @@ jobs:
           # The AVD is created with the first image that is installed. The
           # default image needs no extra system services, so it starts faster.
           AVD_CREATED=0
+          IMAGE_FLAVOUR=""
           for image in "system-images;android-34;default;x86_64" "system-images;android-34;google_apis;x86_64"; do
-            if "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --list_installed 2>/dev/null | grep -q "$image"; then
+            # The image is looked up on disk, because the listing of the
+            # installed packages is not available on every image.
+            IMAGE_DIR="$ANDROID_HOME/${image//;/\/}"
+            if [ -d "$IMAGE_DIR" ]; then
+              IMAGE_FLAVOUR="$(echo "$image" | cut -d';' -f3)"
+              echo "Creating the AVD from $image"
               echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" \
                 create avd -n test -k "$image" --force > /tmp/avd-create.txt 2>&1 || true
               cat /tmp/avd-create.txt
-              if "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" list avd 2>/dev/null | grep -q 'Name: test'; then
+              if [ -f "$HOME/.android/avd/test.ini" ] || \
+                 "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" list avd 2>/dev/null | grep -q 'test'; then
                 echo "The AVD was created from $image"
                 AVD_CREATED=1
                 break
               fi
+            else
+              echo "The image $image is not installed at $IMAGE_DIR."
             fi
           done
-          if [ "$AVD_CREATED" != "1" ]; then
-            echo "FAIL: the AVD could not be created."
-            "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" list avd 2>&1 | head -n 20 || true
-            exit 1
+          if [ -z "$IMAGE_FLAVOUR" ]; then
+            if [ -d "$ANDROID_HOME/system-images/android-34/default/x86_64" ]; then
+              IMAGE_FLAVOUR="default"
+            else
+              IMAGE_FLAVOUR="google_apis"
+            fi
           fi
-          "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" list avd 2>&1 | head -n 20 || true
+          if [ "$AVD_CREATED" != "1" ]; then
+            echo "The AVD manager did not create the device, so the files are written directly."
+            mkdir -p "$HOME/.android/avd/test.avd"
+            {
+              echo 'avd.ini.encoding=UTF-8'
+              echo 'path.rel=avd/test.avd'
+              echo "path=$HOME/.android/avd/test.avd"
+              echo 'target=android-34'
+            } > "$HOME/.android/avd/test.ini"
+            {
+              echo 'AvdId=test'
+              echo 'PlayStore.enabled=false'
+              echo 'abi.type=x86_64'
+              echo 'fastboot.forceColdBoot=yes'
+              echo 'hw.accelerometer=yes'
+              echo 'hw.audioInput=no'
+              echo 'hw.battery=yes'
+              echo 'hw.camera.back=none'
+              echo 'hw.camera.front=none'
+              echo 'hw.cpu.arch=x86_64'
+              echo 'hw.cpu.ncore=2'
+              echo 'hw.dPad=no'
+              echo 'hw.device.manufacturer=Google'
+              echo 'hw.device.name=pixel_2'
+              echo 'hw.gps=yes'
+              echo 'hw.gpu.enabled=yes'
+              echo 'hw.gpu.mode=auto'
+              echo 'hw.keyboard=yes'
+              echo 'hw.lcd.density=420'
+              echo 'hw.lcd.height=1920'
+              echo 'hw.lcd.width=1080'
+              echo 'hw.mainKeys=no'
+              echo 'hw.ramSize=2048'
+              echo 'hw.sdCard=no'
+              echo 'hw.sensors.orientation=yes'
+              echo 'hw.sensors.proximity=yes'
+              echo 'hw.trackBall=no'
+              echo "image.sysdir.1=system-images/android-34/$IMAGE_FLAVOUR/x86_64/"
+              echo 'runtime.network.latency=none'
+              echo 'runtime.network.speed=full'
+              echo 'showDeviceFrame=no'
+              echo 'skin.dynamic=yes'
+              echo 'skin.name=1080x1920'
+              echo 'skin.path=_no_skin'
+              echo 'tag.display=Default'
+              echo 'tag.id=default'
+              echo 'vm.heapSize=256'
+            } > "$HOME/.android/avd/test.avd/config.ini"
+            echo "The AVD was written directly into $HOME/.android/avd."
+          fi
+          ls -la "$HOME/.android/avd" 2>&1 || true
+          "$ANDROID_HOME/emulator/emulator" -list-avds 2>&1 | head -n 10 || true
 
       - name: Start the emulator
         run: |
           set -euo pipefail
           echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
-          # The AVD is created by the previous step. If it is missing, the
-          # emulator is started without one so the failure is visible in the
-          # log instead of being swallowed.
-          if ! "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" list avd 2>/dev/null | grep -q 'Name: test'; then
-            echo "NOTE: the test AVD was not created, the emulator will start without a device."
+          # The emulator looks for the devices in this directory.
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          export ANDROID_SDK_HOME="$HOME/.android"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_HOME=$ANDROID_SDK_HOME" >> "$GITHUB_ENV"
+          if ! "$ANDROID_HOME/emulator/emulator" -list-avds 2>/dev/null | grep -q '^test$'; then
+            echo "FAIL: the emulator does not see the test device."
+            "$ANDROID_HOME/emulator/emulator" -list-avds 2>&1 | head -n 10 || true
+            ls -la "$HOME/.android/avd" 2>&1 || true
+            exit 1
           fi
+          echo "The emulator sees the test device."
           nohup emulator \
             -avd test \
             -no-window \
