@@ -1,8 +1,8 @@
 # محلات السعيد — تطبيق الزبائن وتطبيق الإدارة
 
-> **الحالة: المرحلة الثالثة — الشاشات منفّذة، البناء والاختبار ناجحان في GitHub Actions.**
+> **الحالة: الشاشات منفّذة، وكل سير العمل الأربعة مخضراء عدا بوابة النشر.**
 > نتائج معايير القبول الفعلية في `docs/acceptance-results.md`.
-> ما زال ينقص: اختبار Supabase حقيقي، وفحوص الواجهة على جهاز، والتوقيع الإنتاجي.
+> ما زال ينقص: مشروع Supabase سحابي اختباري حقيقي، والتوقيع الإنتاجي الدائم.
 
 ## المشروع
 
@@ -152,15 +152,18 @@ bash scripts/db-security-tests.sh
 ## ما لم يُتحقق منه بعد
 
 - **لا يوجد اختبار على Supabase حقيقي.** فحوص PGlite محلية مع محاكاة Auth وREST وStorage.
-- **لا توجد لقطات شاشة ولا اختبار على جهاز.** لم يتوفّر محاكي في بيئة التطوير.
 - **لا يوجد FCM.** الإشعار محلي فقط عبر WorkManager، وقد يتأخر 15 دقيقة أو أكثر.
 - **لا يوجد تحميل صور من Photo Picker.** حقل رابط الصورة موجود، وآلية الرفع إلى Storage
   موجودة في `AdminApi`، لكن اختيار الصورة وضغطها لم يُوصَل بواجهة Photo Picker.
 
 ## الفحوص المنفّذة
 
-آخر تشغيل ناجح: **41980992639** — كل الخطوات خضراء.
-<https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/41980992639>
+| سير العمل | آخر تشغيل | النتيجة | الرابط |
+|---|---|---|---|
+| `Build and verify` | **42025570333** | **أخضر** — كل الخطوات | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42025570333> |
+| `Database security checks` | **42025570596** | **أخضر** | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42025570596> |
+| `Verify the interface on an emulator` | **42025570718** | **أخضر** — التطبيقان عملا ولُقطتا الشاشتين | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42025570718> |
+| `Release gate` | **42025570931** | **أحمر كما يجب** — أسرار الإنتاج غير مضبوطة | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42025570931> |
 
 - `./gradlew test lint` نجح.
 - `./gradlew :customer:assembleRelease :admin:assembleRelease` نجح (`BUILD SUCCESSFUL`).
@@ -173,6 +176,12 @@ bash scripts/db-security-tests.sh
 - `./gradlew test`: **10 ملفات اختبار** تشمل اختبارات واجهة Compose على الـ JVM
   واختبارات تكامل تقود `CatalogApi` و`AuthManager` و`OrderRepository` الحقيقية
   ضد قاعدة البيانات المعزولة.
+- **محاكي Android في CI**: التشغيل `42025570718` ثبّت الحزمتين على محاكي
+  `android-34`، وشغّل الشاشة الرئيسية لكل منهما (`LaunchState: COLD`)،
+  وتأكد أن العملية حية وأن لا يوجد استثناء قاتل، والتقط لقطة شاشة لكل
+  تطبيق (320x640). اللقطات منشورة على الفرع `ci-emulator` تحت
+  `artifacts/screenshots/`، والتقرير الكامل في `emulator-diagnostics.md`
+  على الفرع نفسه.
 - فحص ثابت محلي (`scripts/verify-kotlin-refs.py`) يلتقط الاستيرادات الناقصة
   وأسماء المعاملات الخاطئة قبل البناء بخمس دقائق.
 

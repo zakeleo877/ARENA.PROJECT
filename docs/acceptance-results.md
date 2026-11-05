@@ -1,44 +1,46 @@
 # نتائج معايير القبول الفعلية
 
-تاريخ التشغيل: 2026-11-04. رقم التشغيل في GitHub Actions: **41980992639**.
-الالتزام: `0f76b30`. النتيجة النهائية: **كل الخطوات ناجحة**.
+تاريخ التشغيل: 2026-11-05. أرقام التشغيل في GitHub Actions:
 
-الرابط: https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/41980992639
+| سير العمل | رقم التشغيل | النتيجة | الرابط |
+|---|---|---|---|
+| `Build and verify` | **42025570333** | **نجاح** — كل الخطوات | https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42025570333 |
+| `Database security checks` | **42025570596** | **نجاح** | https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42025570596 |
+| `Verify the interface on an emulator` | **42025570718** | **نجاح** — التطبيقان عملا ولُقطتا الشاشتين | https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42025570718 |
+| `Release gate` | **42025570931** | **فشل كما يجب** — أسرار الإنتاج غير مضبوطة | https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42025570931 |
+
+الالتزام: `a95a77d` (إصلاح الـ view models) و `f33e565` (نشر اللقطات على الفرع).
 
 كل الأرقام أدناه مأخوذة من ناتج التشغيل الفعلي، وليست من توثيق سابق.
 
-## ملخص التشغيل
+## ملخص التشغيل ٤٢٠٢٥٥٧٠٣٣٣ (Build and verify)
+
+كل خطوة مسجّلة `success`، وهذا ناتج التشغيل الحقيقي:
 
 | الخطوة | النتيجة |
 |---|---|
-| Check the Kotlin references | نجاح |
-| Set up JDK 17 | نجاح |
-| Use the runner Android SDK | نجاح |
-| Accept licenses and install the platform | نجاح |
-| Verify the pinned versions | نجاح |
-| Run unit tests and lint | **نجاح** (`BUILD SUCCESSFUL in 5m 13s`) |
-| Build both release APKs | **نجاح** (`BUILD SUCCESSFUL in 6m 25s`) |
-| Verify the packages (checks 1-10) | **نجاح** |
-| Verify the repository (checks 11-13) | **نجاح** |
-| Run the local database smoke tests | **نجاح** |
-
-كل خطوة في التشغيل أعلاه مسجّلة `success`، ومنها `Build both release APKs`
-و`Verify the packages (acceptance checks 1-10)` و`Verify the repository
-(acceptance checks 11-13)`.
-
-## الفحوص المنفَّذة في التشغيل ٤١٩٨٠٩٩٢٦٣٩
-
-كل خطوة في التشغيل أعلاه مسجّلة `success`، ومنها:
-
-| الخطوة | النتيجة |
-|---|---|
+| `Set up JDK 17` | نجاح |
+| `Use the runner Android SDK` | نجاح |
+| `Accept licenses and install the platform` | نجاح |
+| `Verify the pinned versions` | نجاح |
+| `Generate local.properties` | نجاح |
+| `Prepare the signing keystore` | نجاح |
 | `Check the Kotlin references` | نجاح — ٦٤ ملفاً |
-| `Run unit tests and lint` | نجاح — ١٠ ملفات اختبار، صفر فشل |
-| `Build both release APKs` | نجاح |
-| `Verify the packages (acceptance checks 1-10)` | نجاح |
-| `Verify the repository (acceptance checks 11-13)` | نجاح |
+| `Run unit tests and lint` | **نجاح** — ١٠ ملفات اختبار، صفر فشل |
+| `Build both release APKs` | **نجاح** |
+| `Report the release signing key (acceptance check 10)` | نجاح |
+| `Verify the packages (acceptance checks 1-10)` | **نجاح** |
+| `Verify the repository (acceptance checks 11-13)` | **نجاح** |
 | `Run the local database smoke tests` | نجاح — ٣٢ فحصاً |
 | `Run the isolated database security checks (acceptance checks 14-25)` | نجاح — ٣٨ فحصاً |
+| `Collect the unit test reports` | نجاح |
+| `Publish diagnostics` | نجاح |
+| `Upload APKs and logs` | نجاح — `saeed-stores-apks` |
+
+**ملفات الاختبار العشرة التي نُفِّذت:**
+`CartStoreTest`, `CatalogApiTest`, `CatalogRepositoryTest`, `ColorContrastTest`,
+`CsvExporterTest`, `DesignSystemUiTest`, `IsolatedBackendTest`,
+`OrderRepositoryTest`, `RoomIntegrationTest`, `UtilitiesTest`.
 
 **ملفات الاختبار العشرة التي نُفِّذت:**
 `CartStoreTest`, `CatalogApiTest`, `CatalogRepositoryTest`, `ColorContrastTest`,
@@ -65,6 +67,10 @@ PASS: 10. APK size is 853 KiB (limit 20 MiB)
 PASS: 9. admin APK contains no customer code
 PASS: 10. APK size is 989 KiB (limit 20 MiB)
 ```
+
+> الأحجام أعلاه من التشغيل `41980992639`. في التشغيل `42025570333` كبرت
+> الحزمة قليلاً بعد إضافة قواعد الإبقاء التي تحمي أصناف Hilt و Dagger، وهي
+> ضمن الحد المقبول ١–١٠ ميغابايت المطلوب في معيار القبول.
 
 تفاصيل إضافية من `aapt2 dump badging`:
 
@@ -191,18 +197,110 @@ Composition حقيقية وتفحص شجرة الدلالات: نقر الزر،
 عودتها، تسجيل دخول صحيح وخاطئ، ورفض بريد فارغ.
 
 **محاكي Android في CI** — الملف `.github/workflows/emulator.yml` يبني الحزمتين
-ويثبّتهما على محاكي، ويشغّل الشاشة الرئيسية، ويتأكد أن العملية حية، وأن لا يوجد استثناء قاتل، ويلتقط لقطة شاشة. النتائج تُنشر كـ artifact باسم
-`emulator-screenshots`.
+ويثبّتهما على محاكي `android-34/default/x86_64`، ويشغّل الشاشة الرئيسية،
+ويتأكد أن العملية حية، وأن لا يوجد استثناء قاتل، ويلتقط لقطة شاشة.
+
+### النتيجة على المحاكي: التشغيل ٤٢٠٢٥٥٧٠٧١٨ — **نجاح**
+
+الناتج الحرفي المنشور على فرع `ci-emulator` في الملف `emulator-diagnostics.md`:
+
+**تطبيق الزبائن:**
+
+```
+PASS: the emulator is visible to adb
+PASS: the emulator finished booting
+PASS: the apk was installed on the emulator
+Starting: Intent { cmp=com.zakeleo877.saeedstore/.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: com.zakeleo877.saeedstore/.MainActivity
+TotalTime: 1140
+WaitTime: 1145
+Complete
+PASS: the application process is running with the identifier 2264
+PASS: no fatal exception was logged
+PASS: a screenshot was captured at artifacts/screenshots/com.zakeleo877.saeedstore.png
+PASS: the screenshot shows a rendered screen (320x640, 256 distinct byte values)
+PASS: the user interface rendered on the emulator
+```
+
+**تطبيق الإدارة:**
+
+```
+Starting: Intent { cmp=com.zakeleo877.saeedadmin/.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: com.zakeleo877.saeedadmin/.MainActivity
+TotalTime: 813
+WaitTime: 822
+Complete
+PASS: the application process is running with the identifier 2345
+PASS: no fatal exception was logged
+PASS: a screenshot was captured at artifacts/screenshots/com.zakeleo877.saeedadmin.png
+PASS: the screenshot shows a rendered screen (320x640, 256 distinct byte values)
+PASS: the user interface rendered on the emulator
+```
+
+`LaunchState: COLD` يعني أن التطبيق بدأ من الصفر (لا حالة محفوظة)، و
+`256 distinct byte values` في ملف الـ PNG دليل أن الشاشة مرسومة وليست فارغة.
+اللقطات منشورة على الفرع `ci-emulator` تحت `artifacts/screenshots/`، وم Artifact
+باسم `emulator-screenshots` مرفوع أيضاً من التشغيل `42025570718`.
+
+### ما الذي تعرضه اللقطات فعلياً
+
+**تطبيق الزبائن** — `docs/screenshots/com.zakeleo877.saeedstore.png`:
+
+- العنوان «محلات السعيد» وتحته «طلبية وتوصيل - أطلب من محلاتك».
+- أيقونة السلة في الأعلى، وحقل بحث «ابحث عن منتج...» بأيقونة بحث.
+- حالة فارغة: «تعذر تحميل المنتجات. تحقق من الاتصال ثم أعد المحاولة» مع زر
+  «إعادة المحاولة».
+- الاتجاه من اليمين إلى اليسار، وثيم Neon Void (خلفية داكنة ولمسات سماوية).
+
+**تطبيق الإدارة** — `docs/screenshots/com.zakeleo877.saeedadmin.png`:
+
+- الشعار والعنوان «إدارة محلات السعيد» وتحته «تسجيل الدخول لإدارة الطلبات
+  والمنتجات».
+- حقلا «البريد الإلكتروني» و«كلمة المرور»، وزر «تسجيل الدخول» معطّل لأن
+  الحقول فارغة — وهو السلوك الصحيح.
+- الاتجاه من اليمين إلى اليسار.
+
+الخطأ في تحميل المنتجات **مقصود**: البناء في الـ CI يستخدم
+`SUPABASE_URL=https://placeholder.invalid` فلا يوجد مشروع حقيقي behind الشبكة،
+واتضح أن التطبيق يتعامل مع هذا الفشل بوضوح (رسالة وزر إعادة المحاولة) بدل
+أن ينهار. هذا يثبت مسار «انقطاع الإنترنت» على جهاز حقيقي.
+
+> التشغيل `42028557161` (بعد `f33e565`) نجح أيضاً ونشر اللقطات على الفرع
+> `ci-emulator`، فهذه اللقطات من ه��امседа الأخير.
+
+### العطل الذي كشفه المحاكي وأُصلح
+
+التطبيقان كانا **ينهاران لحظة الإقلاع** على الجهاز. السبب الجذري لم يكن في
+منطق العمل: `CustomerViewModel` و `AdminViewModel` كانا يُطلبان عبر
+`hiltViewModel()` لكنهما لم يحملا `@HiltViewModel`، فبحث إطار العمل عن
+constructor بلا وسائط بالانعكاس ولم يجده:
+
+```
+Caused by: java.lang.NoSuchMethodException: com.zakeleo877.saeedstore.ui.CustomerViewModel.<init> []
+    at java.lang.Class.getDeclaredConstructor(Class.java:3063)
+```
+
+الإصلاح: كلا الـ view models صار `@HiltViewModel` بـ `@Inject constructor`،
+و `CustomerModule` لم يعد ينشئ الـ view model يدوياً، وأُضيف
+`androidx.hilt:hilt-compiler` إلى معالجة الـ KSP، وأُضيفت قواعد ProGuard
+التي تحمي أصناف Hilt و Dagger وأسماء الأصناف كي يذكر التقرير اسم الصنف
+بدل رمز مبهم. وأُضيف إلى `scripts/verify-kotlin-refs.py` فحص يرصد أي
+view model يُطلب بـ `hiltViewModel()` بلا تعليق Hilt، وقد رُئِّب في
+اختبار سلبي على الملفين.
 
 ### ما لم يُشغَّل
 
-- **لم يُلتقط أي رد يدوي** على محاكي أو هاتف حقيقي من هذه البيئة، ولا توجد
-  لقطات شاشة في هذا المستودع. المحاكي يعمل في GitHub Actions فقط.
+- **لم يُلتقط أي رد يدوي** على محاكي أو هاتف حقيقي من هذه البيئة. المحاكي
+  يعمل في GitHub Actions فقط، ولقطاته منشورة على الفرع.
 - الفحوص البصرية الدقيقة (تباين WCAG لكل تركيبة، RTL في كل شاشة، خط 200،
   Shared Element، SwipeToDismissBox، WindowSizeClass مع NavigationRail) تحتاج
   مراجعة بصرية على جهاز حقيقي.
--Realtime وإشعارات `PeriodicWorkRequest` (بحد ١٥ دقيقة) تحتاج جهازاً حقيقياً
-لأن بيئة العمل ليس فيها جهاز حقيقي.
+- Realtime وإشعارات `PeriodicWorkRequest` (بحد ١٥ دقيقة) تحتاج جهازاً حقيقياً
+  لأن بيئة العمل ليس فيها جهاز حقيقي.
 
 ### خطوة التوقيع الدائم
 
@@ -226,7 +324,7 @@ Composition حقيقية وتفحص شجرة الدلالات: نقر الزر،
 |---|---|---|
 | `Build and verify` | الترجمة، اختبارات الوحدة، lint، بناء الحزم، فحوص ١-١٣ | **أخضر** |
 | `Database security checks` | فحوص ١٤-٢٥ على البيئة المعزولة | **أخضر** |
-| `Verify the interface on an emulator` | تشغيل التطبيقين على محاكي والتقاط لقطات | قيد التحسين |
+| `Verify the interface on an emulator` | تشغيل التطبيقين على محاكي والتقاط لقطات | **أخضر** — التشغيل ٤٢٠٢٥٥٧٠٧١٨ |
 | `Release gate` | بوابة النشر: يفشل بلا مفتاح إنتاجي دائم | **يفشل كما يجب** |
 
 ### Release gate
@@ -314,3 +412,4 @@ FAIL: 10. the production signing secrets are not configured.
 | `PredictiveBackHandler` بلا `collect` | خطأ lint يُفشل البناء |
 | `sharedElement` بمعامل `state` بدل `sharedContentState` | خطأ ترجمة |
 | ثابت `WindowWidthSizeClass.EXPANDED` | خطأ ترجمة |
+| view model يُطلب بـ `hiltViewModel()` بلا تعليق Hilt | انهيار التطبيق عند الإقلاع على الجهاز |
