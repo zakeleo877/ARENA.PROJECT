@@ -34,6 +34,8 @@ done
 if [ "$DEVICE_SEEN" != "1" ]; then
   printf 'FAIL: no emulator appeared in adb devices\n'
   adb devices
+  printf '\nThe emulator log follows.\n'
+  tail -n 60 /tmp/emulator.log 2>/dev/null || true
   exit 1
 fi
 printf 'PASS: the emulator is visible to adb\n'
@@ -47,7 +49,10 @@ for _ in $(seq 1 90); do
 done
 if [ "$BOOTED" != "1" ]; then
   printf 'FAIL: the emulator did not finish booting\n'
+  printf 'sys.boot_completed is "%s"\n' "$BOOTED"
   adb shell getprop 2>/dev/null | head -n 20 || true
+  printf '\nThe emulator log follows.\n'
+  tail -n 60 /tmp/emulator.log 2>/dev/null || true
   exit 1
 fi
 printf 'PASS: the emulator finished booting\n'

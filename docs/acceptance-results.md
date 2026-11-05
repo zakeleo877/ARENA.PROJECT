@@ -1,9 +1,9 @@
 # نتائج معايير القبول الفعلية
 
-تاريخ التشغيل: 2026-11-04. رقم التشغيل في GitHub Actions: **41918818858**.
-الالتزام: `a00c45f`. النتيجة النهائية: **كل الخطوات ناجحة**.
+تاريخ التشغيل: 2026-11-04. رقم التشغيل في GitHub Actions: **41980992639**.
+الالتزام: `0f76b30`. النتيجة النهائية: **كل الخطوات ناجحة**.
 
-الرابط: https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/41918818858
+الرابط: https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/41980992639
 
 كل الأرقام أدناه مأخوذة من ناتج التشغيل الفعلي، وليست من توثيق سابق.
 
@@ -25,6 +25,25 @@
 كل خطوة في التشغيل أعلاه مسجّلة `success`، ومنها `Build both release APKs`
 و`Verify the packages (acceptance checks 1-10)` و`Verify the repository
 (acceptance checks 11-13)`.
+
+## الفحوص المنفَّذة في التشغيل ٤١٩٨٠٩٩٢٦٣٩
+
+كل خطوة في التشغيل أعلاه مسجّلة `success`، ومنها:
+
+| الخطوة | النتيجة |
+|---|---|
+| `Check the Kotlin references` | نجاح — ٦٤ ملفاً |
+| `Run unit tests and lint` | نجاح — ١٠ ملفات اختبار، صفر فشل |
+| `Build both release APKs` | نجاح |
+| `Verify the packages (acceptance checks 1-10)` | نجاح |
+| `Verify the repository (acceptance checks 11-13)` | نجاح |
+| `Run the local database smoke tests` | نجاح — ٣٢ فحصاً |
+| `Run the isolated database security checks (acceptance checks 14-25)` | نجاح — ٣٨ فحصاً |
+
+**ملفات الاختبار العشرة التي نُفِّذت:**
+`CartStoreTest`, `CatalogApiTest`, `CatalogRepositoryTest`, `ColorContrastTest`,
+`CsvExporterTest`, `DesignSystemUiTest`, `IsolatedBackendTest`,
+`OrderRepositoryTest`, `RoomIntegrationTest`, `UtilitiesTest`.
 
 ## فحوص الحزمة ١-١٠ — للتطبيقين
 
@@ -198,6 +217,33 @@ Composition حقيقية وتفحص شجرة الدلالات: نقر الزر،
 **الحالة الراهنة:** لم تُضبط أسرار الإنتاج، فالمفتاح الحالي مؤقت. هذه
 الفحوص لا تُعلن نجاحاً وهمياً؛ الـ Release gate يعلن الفشل حتى تُضبط الأسرار.
 
+
+## سير العمل الأربعة
+
+المشروع يعمل بأربعة سير عمل مستقلة، ولكل واحد غرض مختلف:
+
+| سير العمل | الغرض | الحالة الحالية |
+|---|---|---|
+| `Build and verify` | الترجمة، اختبارات الوحدة، lint، بناء الحزم، فحوص ١-١٣ | **أخضر** |
+| `Database security checks` | فحوص ١٤-٢٥ على البيئة المعزولة | **أخضر** |
+| `Verify the interface on an emulator` | تشغيل التطبيقين على محاكي والتقاط لقطات | قيد التحسين |
+| `Release gate` | بوابة النشر: يفشل بلا مفتاح إنتاجي دائم | **يفشل كما يجب** |
+
+### Release gate
+
+هذا الفشل **مقصود** وليس عطلاً. البوابة ترفض النشر عندما لا تكون أسرار
+الإنتاج مضبوطة:
+
+```
+FAIL: 10. the production signing secrets are not configured.
+      KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS and KEY_PASSWORD
+      must be set before the project can be published.
+```
+
+المفتاح المؤقت الذي يولّده الـ runner يختفي بانتهاء المهمة، فلا يستطيع
+تحديث تطبيق مثبَّت. لذلك بوابة النشر تبقى حمراء حتى تُضبط الأسرار، وكل
+ملف APK مبنيّ بمفتاح مؤقت **غير قابل للنشر**.
+
 ## سلسلة أخطاء الترجمة التي عولجت
 
 كل خطأ أدناه كان يمنع `:core` أو `:customer` أو `:admin` من الترجمة، ولهذا لم
@@ -250,3 +296,21 @@ Composition حقيقية وتفحص شجرة الدلالات: نقر الزر،
 3. **لون BottomSheet**: `RoyalPurple` ← `surfaceContainerHigh` مع `DeepVoidViolet`.
 4. **فقدان الطلب**: كان أول فشل في الإرسال يُسقط الطلب نهائيًا، والآن يُحفظ في الطابور لإعادة المحاولة.
 5. **ترميز طابور الطلبات**: كان يفشل لأن `Map<String, Any>` لا يملك مُسلسِّلًا.
+6. **زر مسح البحث**: كان بلا `contentDescription`، فلم يكن قارئ الشاشة قادراً على
+   وصفه. أُضيف له تسمية «مسح البحث».
+7. **نمط استيراد مفقود**: عدة ملفات كانت تستخدم `mutableStateOf` بلا
+   استيراد، والفحص الثابت الآن يبلّغ عنها خلال ثوانٍ بدل أربع دقائق من
+   الترجمة في الـ CI.
+
+### الفحص الثابت
+
+`scripts/verify-kotlin-refs.py` يفحص ٦٤ ملف Kotlin محلياً خلال ثوانٍ، ويلتقط:
+
+| النمط | الأثر |
+|---|---|
+| استيراد ناقص لرمز مستخدم | خطأ ترجمة بعد ٤ دقائق |
+| `onAllNodesWithText` على قاعدة الاختبار | خطأ ترجمة بعد ٤ دقائق |
+| `request.body.toString()` بدل `TextContent` | تحقق فاشل |
+| `PredictiveBackHandler` بلا `collect` | خطأ lint يُفشل البناء |
+| `sharedElement` بمعامل `state` بدل `sharedContentState` | خطأ ترجمة |
+| ثابت `WindowWidthSizeClass.EXPANDED` | خطأ ترجمة |

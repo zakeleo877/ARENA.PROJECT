@@ -159,8 +159,8 @@ bash scripts/db-security-tests.sh
 
 ## الفحوص المنفّذة
 
-آخر تشغيل ناجح: **41918818858** — كل الخطوات خضراء.
-<https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/41918818858>
+آخر تشغيل ناجح: **41980992639** — كل الخطوات خضراء.
+<https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/41980992639>
 
 - `./gradlew test lint` نجح.
 - `./gradlew :customer:assembleRelease :admin:assembleRelease` نجح (`BUILD SUCCESSFUL`).
@@ -168,6 +168,11 @@ bash scripts/db-security-tests.sh
   الهوية، عدم قابلية التصحيح، الصلاحيات، عزل الأكواد، والحجم (853 KiB و989 KiB).
 - فحوص المستودع ١١-١٣ نجحت.
 - `npm ci && npm test`: **32 فحص SQL** نجحت، منها أن الزائر يرى المتاح فقط.
+- `npm run test:acceptance`: **38 فحصاً** على قاعدة بيانات معزولة مبنية من
+  `supabase/schema.sql`، تشمل سياسات RLS وتسجيل الدخول ولوحة الإدارة.
+- `./gradlew test`: **10 ملفات اختبار** تشمل اختبارات واجهة Compose على الـ JVM
+  واختبارات تكامل تقود `CatalogApi` و`AuthManager` و`OrderRepository` الحقيقية
+  ضد قاعدة البيانات المعزولة.
 - فحص ثابت محلي (`scripts/verify-kotlin-refs.py`) يلتقط الاستيرادات الناقصة
   وأسماء المعاملات الخاطئة قبل البناء بخمس دقائق.
 

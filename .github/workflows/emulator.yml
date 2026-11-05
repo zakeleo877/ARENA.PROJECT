@@ -76,6 +76,7 @@ jobs:
           echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
           echo "$SDK_ROOT/emulator" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
 
       - name: Accept licenses and install the platform
         run: |
@@ -96,14 +97,32 @@ jobs:
 
       - name: Install the emulator and the system image
         run: |
-          set -euo pipefail
+          set -uo pipefail
           "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
-            "emulator" "system-images;android-34;google_apis;x86_64" \
+            "emulator" "system-images;android-34;default;x86_64" \
+            "system-images;android-34;google_apis;x86_64" \
             > /tmp/emulator-install.txt 2>&1
           cat /tmp/emulator-install.txt
-          echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" \
-            create avd -n test -k "system-images;android-34;google_apis;x86_64" \
-            --force 2>&1 || true
+          # The AVD is created with the first image that is installed. The
+          # default image needs no extra system services, so it starts faster.
+          AVD_CREATED=0
+          for image in "system-images;android-34;default;x86_64" "system-images;android-34;google_apis;x86_64"; do
+            if "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --list_installed 2>/dev/null | grep -q "$image"; then
+              echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" \
+                create avd -n test -k "$image" --force > /tmp/avd-create.txt 2>&1 || true
+              cat /tmp/avd-create.txt
+              if "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" list avd 2>/dev/null | grep -q 'Name: test'; then
+                echo "The AVD was created from $image"
+                AVD_CREATED=1
+                break
+              fi
+            fi
+          done
+          if [ "$AVD_CREATED" != "1" ]; then
+            echo "FAIL: the AVD could not be created."
+            "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" list avd 2>&1 | head -n 20 || true
+            exit 1
+          fi
           "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" list avd 2>&1 | head -n 20 || true
 
       - name: Start the emulator
@@ -244,18 +263,29 @@ jobs:
             echo '```'
           } > emulator-diagnostics.md
 
-          python3 -c "import base64,json,os; d=open('emulator-diagnostics.md','rb').read(); open('/tmp/emu-payload.json','w').write(json.dumps({'message':'Emulator diagnostics for run '+os.environ['RUN_ID'],'content':base64.b64encode(d).decode('ascii'),'branch':'ci-diagnostics'}))"
+          python3 -c "import base64,json,os; d=open('emulator-diagnostics.md','rb').read(); open('/tmp/emu-payload.json','w').write(json.dumps({'message':'Emulator diagnostics for run '+os.environ['RUN_ID'],'content':base64.b64encode(d).decode('ascii'),'branch':'ci-emulator'}))"
 
-          curl -sS -X PATCH \
+          # The branch is created on the first run and then updated.
+          if ! curl -sS -o /dev/null -w '%{http_code}' \
             -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$REPO/git/refs/heads/ci-diagnostics" \
-            -d "{\"sha\":\"$SHA\",\"force\":true}" > /dev/null
+            "https://api.github.com/repos/$REPO/git/refs/heads/ci-emulator" | grep -q '200'; then
+            curl -sS -X POST \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/git/refs" \
+              -d "{\"ref\":\"refs/heads/ci-emulator\",\"sha\":\"$SHA\"}" > /dev/null
+          else
+            curl -sS -X PATCH \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/git/refs/heads/ci-emulator" \
+              -d "{\"sha\":\"$SHA\",\"force\":true}" > /dev/null
+          fi
 
           curl -sS -X PUT \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$REPO/contents/emulator-diagnostics.md?branch=ci-diagnostics" \
+            "https://api.github.com/repos/$REPO/contents/emulator-diagnostics.md?branch=ci-emulator" \
             --data-binary @/tmp/emu-payload.json \
             -o /tmp/emu-response.json -w 'HTTP %{http_code}\n'
           head -c 300 /tmp/emu-response.json
