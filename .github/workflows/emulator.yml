@@ -75,8 +75,6 @@ jobs:
           echo "SDKMANAGER=$SDKMANAGER_PATH" >> "$GITHUB_ENV"
           echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
-          echo "$SDK_ROOT/emulator" >> "$GITHUB_PATH"
-          echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
 
       - name: Accept licenses and install the platform
         run: |
@@ -95,136 +93,16 @@ jobs:
           fi
           cat /tmp/sdk-install.txt || true
 
-      - name: Install the emulator and the system image
-        env:
-          ANDROID_AVD_HOME: /home/runner/.android/avd
-          ANDROID_SDK_HOME: /home/runner/.android
-        run: |
-          set -uo pipefail
-          mkdir -p "$ANDROID_AVD_HOME"
-          # The emulator looks for the devices in the same directory, so the
-          # location is passed on to the later steps.
-          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_HOME=$ANDROID_SDK_HOME" >> "$GITHUB_ENV"
-          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
-            "emulator" "system-images;android-34;default;x86_64" \
-            "system-images;android-34;google_apis;x86_64" \
-            > /tmp/emulator-install.txt 2>&1
-          cat /tmp/emulator-install.txt
-          # The device is created from the image that was actually installed.
-          IMAGE_DIR="$ANDROID_HOME/${INSTALLED_IMAGE//;/}"
-          IMAGE_FLAVOUR="$(echo "$INSTALLED_IMAGE" | cut -d';' -f3)"
-          IMAGE_LEVEL="$(echo "$INSTALLED_IMAGE" | cut -d';' -f2)"
-          echo "The image directory is $IMAGE_DIR"
-
-          AVD_CREATED=0
-          if [ -d "$IMAGE_DIR" ]; then
-            echo "Creating the AVD from $INSTALLED_IMAGE"
-            echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" \
-              create avd -n test -k "$INSTALLED_IMAGE" --force > /tmp/avd-create.txt 2>&1 || true
-            cat /tmp/avd-create.txt
-            if [ -f "$ANDROID_AVD_HOME/test.ini" ]; then
-              echo "The AVD was created by the AVD manager."
-              AVD_CREATED=1
-            fi
-          else
-            echo "The image is not on disk at $IMAGE_DIR."
-          fi
-
-          if [ "$AVD_CREATED" != "1" ]; then
-            echo "The AVD manager did not create the device, so the files are written directly."
-            mkdir -p "$ANDROID_AVD_HOME/test.avd"
-            {
-              echo 'avd.ini.encoding=UTF-8'
-              echo 'path.rel=avd/test.avd'
-              echo "path=$ANDROID_AVD_HOME/test.avd"
-              echo "target=$IMAGE_LEVEL"
-            } > "$ANDROID_AVD_HOME/test.ini"
-            {
-              echo 'AvdId=test'
-              echo 'PlayStore.enabled=false'
-              echo 'abi.type=x86_64'
-              echo 'fastboot.forceColdBoot=yes'
-              echo 'hw.accelerometer=yes'
-              echo 'hw.audioInput=no'
-              echo 'hw.battery=yes'
-              echo 'hw.camera.back=none'
-              echo 'hw.camera.front=none'
-              echo 'hw.cpu.arch=x86_64'
-              echo 'hw.cpu.ncore=2'
-              echo 'hw.dPad=no'
-              echo 'hw.device.manufacturer=Google'
-              echo 'hw.device.name=pixel_2'
-              echo 'hw.gps=yes'
-              echo 'hw.gpu.enabled=yes'
-              echo 'hw.gpu.mode=auto'
-              echo 'hw.keyboard=yes'
-              echo 'hw.lcd.density=420'
-              echo 'hw.lcd.height=1920'
-              echo 'hw.lcd.width=1080'
-              echo 'hw.mainKeys=no'
-              echo 'hw.ramSize=2048'
-              echo 'hw.sdCard=no'
-              echo 'hw.sensors.orientation=yes'
-              echo 'hw.sensors.proximity=yes'
-              echo 'hw.trackBall=no'
-              echo "image.sysdir.1=system-images/android-$IMAGE_LEVEL/$IMAGE_FLAVOUR/x86_64/"
-              echo 'runtime.network.latency=none'
-              echo 'runtime.network.speed=full'
-              echo 'showDeviceFrame=no'
-              echo 'skin.dynamic=yes'
-              echo 'skin.name=1080x1920'
-              echo 'skin.path=_no_skin'
-              echo 'tag.display=Default'
-              echo 'tag.id=default'
-              echo 'vm.heapSize=256'
-            } > "$ANDROID_AVD_HOME/test.avd/config.ini"
-            echo "The AVD was written directly into $ANDROID_AVD_HOME."
-          fi
-          ls -la "$ANDROID_AVD_HOME" 2>&1 || true
-          "$ANDROID_HOME/emulator/emulator" -list-avds 2>&1 | head -n 10 || true
-
+      # The action starts the emulator, waits for it to boot and hands a
+      # ready device to the following steps.
       - name: Start the emulator
-        run: |
-          set -euo pipefail
-          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
-          # The device manager and the emulator look in different directories.
-          # Every place that can hold the device is searched, and the first
-          # one that has it is used.
-          echo "--- the device directory ---"
-          ls -la "$HOME/.android/avd" 2>&1 || true
-          if [ ! -f "$HOME/.android/avd/test.ini" ]; then
-            echo "FAIL: the device was not created."
-            exit 1
-          fi
-          AVD_DIR="$HOME/.android/avd"
-          echo "The device lives in $AVD_DIR"
-          export ANDROID_AVD_HOME="$AVD_DIR"
-          export ANDROID_SDK_HOME="$HOME/.android"
-          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_HOME=$ANDROID_SDK_HOME" >> "$GITHUB_ENV"
-          echo "--- the devices the emulator sees ---"
-          "$ANDROID_HOME/emulator/emulator" -list-avds 2>&1 | head -n 10 || true
-          if ! "$ANDROID_HOME/emulator/emulator" -list-avds 2>/dev/null | grep -qw 'test'; then
-            echo "FAIL: the emulator does not see the test device."
-            exit 1
-          fi
-          echo "The emulator sees the test device."
-          nohup emulator \
-            -avd test \
-            -no-window \
-            -no-audio \
-            -no-boot-anim \
-            -gpu swiftshader_indirect \
-            -no-snapshot \
-            -accel auto \
-            -wipe-data \
-            -memory 2048 \
-            > /tmp/emulator.log 2>&1 &
-          echo $! > /tmp/emulator.pid
-          printf 'The emulator was started with pid %s\n' "$(cat /tmp/emulator.pid)"
-          sleep 5
-          head -n 30 /tmp/emulator.log || true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_2
+          script: echo "The emulator is ready."
+          disable-animations: true
 
       - name: Prepare a throwaway signing key
         run: |
