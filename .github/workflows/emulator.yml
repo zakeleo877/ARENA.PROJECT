@@ -188,7 +188,7 @@ jobs:
               echo 'hw.camera.back=none'
               echo 'hw.camera.front=none'
               echo 'hw.cpu.arch=x86_64'
-              echo 'hw.cpu.ncore=4'
+              echo 'hw.cpu.ncore=2'
               echo 'hw.dPad=no'
               echo 'hw.device.manufacturer=Google'
               echo 'hw.device.name=pixel_2'
@@ -200,7 +200,7 @@ jobs:
               echo 'hw.lcd.height=1920'
               echo 'hw.lcd.width=1080'
               echo 'hw.mainKeys=no'
-              echo 'hw.ramSize=3072'
+              echo 'hw.ramSize=1536'
               echo 'hw.sdCard=no'
               echo 'hw.sensors.orientation=yes'
               echo 'hw.sensors.proximity=yes'
@@ -231,8 +231,8 @@ jobs:
             -gpu swiftshader_indirect \
             -accel auto \
             -wipe-data \
-            -memory 3072 \
-            -cores 4 \
+            -memory 1536 \
+            -cores 2 \
             -no-metrics \
             -netdelay none \
             -netspeed full \
