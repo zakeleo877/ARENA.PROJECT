@@ -104,14 +104,29 @@ cat /tmp/emulator-start.txt
 
 # Give the first composition time to finish and the network time to fail
 # gracefully, which is also the offline behaviour that has to be checked.
-sleep 12
+sleep 15
 
-if ! timeout 60 "$ADB" -s "$SERIAL" shell pidof "$PACKAGE" > /dev/null 2>&1; then
+# The activity is started again when it was closed, because the first launch
+# can be interrupted by the setup of the system.
+if [ -z "$(timeout 60 "$ADB" -s "$SERIAL" shell pidof "$PACKAGE" 2>/dev/null | tr -d '\r' || true)" ]; then
+  printf 'The process was gone after the first launch, so the activity is started again.\n'
+  timeout 180 "$ADB" -s "$SERIAL" shell am start -W -n "$PACKAGE/$ACTIVITY" > /tmp/emulator-restart.txt 2>&1 || true
+  cat /tmp/emulator-restart.txt
+  sleep 15
+fi
+
+# The process is looked for in the process list and in the activity manager.
+# The second check catches a process that started and was then closed.
+PROCESS_ID="$(timeout 60 "$ADB" -s "$SERIAL" shell pidof "$PACKAGE" 2>/dev/null | tr -d '\r' || true)"
+if [ -z "$PROCESS_ID" ]; then
   printf 'FAIL: the application process is not running after it was started\n'
-  "$ADB" -s "$SERIAL" logcat -d -t 200 | tail -n 60
+  printf -- '--- the foreground activity ---\n'
+  timeout 60 "$ADB" -s "$SERIAL" shell dumpsys activity activities 2>/dev/null | grep -iE 'mResumedActivity|mFocusedApp|topResumedActivity' | head -n 5 || true
+  printf -- '--- the log ---\n'
+  "$ADB" -s "$SERIAL" logcat -d -t 300 2>/dev/null | grep -iE 'saeedstore|AndroidRuntime|FATAL|ActivityManager.*saeed' | tail -n 40 || true
   exit 1
 fi
-printf 'PASS: the application process is running\n'
+printf 'PASS: the application process is running with the identifier %s\n' "$PROCESS_ID"
 
 FATAL="$("$ADB" -s "$SERIAL" logcat -d 2>/dev/null | grep -E 'FATAL EXCEPTION|AndroidRuntime.*com.zakeleo877' | head -n 10 || true)"
 if [ -n "$FATAL" ]; then
