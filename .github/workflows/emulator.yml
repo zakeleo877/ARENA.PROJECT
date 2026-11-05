@@ -96,53 +96,50 @@ jobs:
           cat /tmp/sdk-install.txt || true
 
       - name: Install the emulator and the system image
+        env:
+          ANDROID_AVD_HOME: /home/runner/.android/avd
+          ANDROID_SDK_HOME: /home/runner/.android
         run: |
           set -uo pipefail
+          mkdir -p "$ANDROID_AVD_HOME"
+          # The emulator looks for the devices in the same directory, so the
+          # location is passed on to the later steps.
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_HOME=$ANDROID_SDK_HOME" >> "$GITHUB_ENV"
           "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
             "emulator" "system-images;android-34;default;x86_64" \
             "system-images;android-34;google_apis;x86_64" \
             > /tmp/emulator-install.txt 2>&1
           cat /tmp/emulator-install.txt
-          # The AVD is created with the first image that is installed. The
-          # default image needs no extra system services, so it starts faster.
+          # The device is created from the image that was actually installed.
+          IMAGE_DIR="$ANDROID_HOME/${INSTALLED_IMAGE//;/}"
+          IMAGE_FLAVOUR="$(echo "$INSTALLED_IMAGE" | cut -d';' -f3)"
+          IMAGE_LEVEL="$(echo "$INSTALLED_IMAGE" | cut -d';' -f2)"
+          echo "The image directory is $IMAGE_DIR"
+
           AVD_CREATED=0
-          IMAGE_FLAVOUR=""
-          for image in "system-images;android-34;default;x86_64" "system-images;android-34;google_apis;x86_64"; do
-            # The image is looked up on disk, because the listing of the
-            # installed packages is not available on every image.
-            IMAGE_DIR="$ANDROID_HOME/${image//;/\/}"
-            if [ -d "$IMAGE_DIR" ]; then
-              IMAGE_FLAVOUR="$(echo "$image" | cut -d';' -f3)"
-              echo "Creating the AVD from $image"
-              echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" \
-                create avd -n test -k "$image" --force > /tmp/avd-create.txt 2>&1 || true
-              cat /tmp/avd-create.txt
-              if [ -f "$HOME/.android/avd/test.ini" ] || \
-                 "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" list avd 2>/dev/null | grep -q 'test'; then
-                echo "The AVD was created from $image"
-                AVD_CREATED=1
-                break
-              fi
-            else
-              echo "The image $image is not installed at $IMAGE_DIR."
+          if [ -d "$IMAGE_DIR" ]; then
+            echo "Creating the AVD from $INSTALLED_IMAGE"
+            echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" \
+              create avd -n test -k "$INSTALLED_IMAGE" --force > /tmp/avd-create.txt 2>&1 || true
+            cat /tmp/avd-create.txt
+            if [ -f "$ANDROID_AVD_HOME/test.ini" ]; then
+              echo "The AVD was created by the AVD manager."
+              AVD_CREATED=1
             fi
-          done
-          if [ -z "$IMAGE_FLAVOUR" ]; then
-            if [ -d "$ANDROID_HOME/system-images/android-34/default/x86_64" ]; then
-              IMAGE_FLAVOUR="default"
-            else
-              IMAGE_FLAVOUR="google_apis"
-            fi
+          else
+            echo "The image is not on disk at $IMAGE_DIR."
           fi
+
           if [ "$AVD_CREATED" != "1" ]; then
             echo "The AVD manager did not create the device, so the files are written directly."
-            mkdir -p "$HOME/.android/avd/test.avd"
+            mkdir -p "$ANDROID_AVD_HOME/test.avd"
             {
               echo 'avd.ini.encoding=UTF-8'
               echo 'path.rel=avd/test.avd'
-              echo "path=$HOME/.android/avd/test.avd"
-              echo 'target=android-34'
-            } > "$HOME/.android/avd/test.ini"
+              echo "path=$ANDROID_AVD_HOME/test.avd"
+              echo "target=$IMAGE_LEVEL"
+            } > "$ANDROID_AVD_HOME/test.ini"
             {
               echo 'AvdId=test'
               echo 'PlayStore.enabled=false'
@@ -171,7 +168,7 @@ jobs:
               echo 'hw.sensors.orientation=yes'
               echo 'hw.sensors.proximity=yes'
               echo 'hw.trackBall=no'
-              echo "image.sysdir.1=system-images/android-34/$IMAGE_FLAVOUR/x86_64/"
+              echo "image.sysdir.1=system-images/android-$IMAGE_LEVEL/$IMAGE_FLAVOUR/x86_64/"
               echo 'runtime.network.latency=none'
               echo 'runtime.network.speed=full'
               echo 'showDeviceFrame=no'
@@ -181,25 +178,35 @@ jobs:
               echo 'tag.display=Default'
               echo 'tag.id=default'
               echo 'vm.heapSize=256'
-            } > "$HOME/.android/avd/test.avd/config.ini"
-            echo "The AVD was written directly into $HOME/.android/avd."
+            } > "$ANDROID_AVD_HOME/test.avd/config.ini"
+            echo "The AVD was written directly into $ANDROID_AVD_HOME."
           fi
-          ls -la "$HOME/.android/avd" 2>&1 || true
+          ls -la "$ANDROID_AVD_HOME" 2>&1 || true
           "$ANDROID_HOME/emulator/emulator" -list-avds 2>&1 | head -n 10 || true
 
       - name: Start the emulator
         run: |
           set -euo pipefail
           echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
-          # The emulator looks for the devices in this directory.
-          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          # The device manager and the emulator look in different directories.
+          # Every place that can hold the device is searched, and the first
+          # one that has it is used.
+          echo "--- the device directory ---"
+          ls -la "$HOME/.android/avd" 2>&1 || true
+          if [ ! -f "$HOME/.android/avd/test.ini" ]; then
+            echo "FAIL: the device was not created."
+            exit 1
+          fi
+          AVD_DIR="$HOME/.android/avd"
+          echo "The device lives in $AVD_DIR"
+          export ANDROID_AVD_HOME="$AVD_DIR"
           export ANDROID_SDK_HOME="$HOME/.android"
           echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_HOME=$ANDROID_SDK_HOME" >> "$GITHUB_ENV"
-          if ! "$ANDROID_HOME/emulator/emulator" -list-avds 2>/dev/null | grep -q '^test$'; then
+          echo "--- the devices the emulator sees ---"
+          "$ANDROID_HOME/emulator/emulator" -list-avds 2>&1 | head -n 10 || true
+          if ! "$ANDROID_HOME/emulator/emulator" -list-avds 2>/dev/null | grep -qw 'test'; then
             echo "FAIL: the emulator does not see the test device."
-            "$ANDROID_HOME/emulator/emulator" -list-avds 2>&1 | head -n 10 || true
-            ls -la "$HOME/.android/avd" 2>&1 || true
             exit 1
           fi
           echo "The emulator sees the test device."
