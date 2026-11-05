@@ -23,3 +23,10 @@
 -keep class dagger.hilt.internal.aggregatedroot.codegen.** { *; }
 -keep class dagger.hilt.android.internal.** { *; }
 -keep class dagger.internal.** { *; }
+
+# The framework creates the view models with the reflection, so the class and
+# the constructor of every view model have to survive the shrinking step.
+-keep class * extends androidx.lifecycle.ViewModel { <init>(...); }
+-keep class * extends androidx.lifecycle.AndroidViewModel { <init>(...); }
+-keep class * extends androidx.lifecycle.SavedStateViewModel { <init>(...); }
+-keep @dagger.hilt.android.lifecycle.HiltViewModel class * { <init>(...); }
