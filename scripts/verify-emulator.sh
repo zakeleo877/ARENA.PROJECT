@@ -15,17 +15,29 @@ ACTIVITY="${4:-.MainActivity}"
 
 mkdir -p "$OUTPUT"
 
-if ! command -v adb > /dev/null 2>&1; then
+# The adb on the path is the one the emulator action used, so it sees the
+# same server and the same device. Every call uses the serial number of the
+# device that was found.
+ADB="$(command -v adb || true)"
+if [ -z "$ADB" ] && [ -n "${ANDROID_HOME:-}" ]; then
+  ADB="$ANDROID_HOME/platform-tools/adb"
+fi
+if [ -z "$ADB" ]; then
   printf 'FAIL: adb is not on the path, so no device can be reached\n'
   exit 1
 fi
+printf 'Using adb at %s\n' "$ADB"
 
-adb start-server > /dev/null 2>&1 || true
+"$ADB" start-server > /dev/null 2>&1 || true
 
 # Wait for the device to show up, with a hard limit so the job cannot hang.
+SERIAL=""
 DEVICE_SEEN=0
 for _ in $(seq 1 60); do
-  if adb devices | grep -q 'emulator-[0-9]*[[:space:]]*device'; then
+  # The device shows up as offline for a moment after it starts, so both
+  # states are accepted and the boot is waited for afterwards.
+  SERIAL="$("$ADB" devices 2>/dev/null | awk '$1 ~ /^emulator-[0-9]+$/ && ($2 == "device" || $2 == "offline") { print $1; exit }')"
+  if [ -n "$SERIAL" ]; then
     DEVICE_SEEN=1
     break
   fi
@@ -33,7 +45,7 @@ for _ in $(seq 1 60); do
 done
 if [ "$DEVICE_SEEN" != "1" ]; then
   printf 'FAIL: no emulator appeared in adb devices\n'
-  adb devices
+  "$ADB" devices
   printf '\nThe emulator log follows.\n'
   tail -n 60 /tmp/emulator.log 2>/dev/null || true
   exit 1
@@ -43,29 +55,29 @@ printf 'PASS: the emulator is visible to adb\n'
 # Wait for the package manager to finish booting, again with a hard limit.
 BOOTED=""
 for _ in $(seq 1 90); do
-  BOOTED="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+  BOOTED="$("$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
   [ "$BOOTED" = "1" ] && break
   sleep 4
 done
 if [ "$BOOTED" != "1" ]; then
   printf 'FAIL: the emulator did not finish booting\n'
   printf 'sys.boot_completed is "%s"\n' "$BOOTED"
-  adb shell getprop 2>/dev/null | head -n 20 || true
+  "$ADB" -s "$SERIAL" shell getprop 2>/dev/null | head -n 20 || true
   printf '\nThe emulator log follows.\n'
   tail -n 60 /tmp/emulator.log 2>/dev/null || true
   exit 1
 fi
 printf 'PASS: the emulator finished booting\n'
 
-adb logcat -c
-if ! timeout 300 adb install -r -t "$APK" > /tmp/emulator-install.txt 2>&1; then
+"$ADB" -s "$SERIAL" logcat -c
+if ! timeout 300 "$ADB" -s "$SERIAL" install -r -t "$APK" > /tmp/emulator-install.txt 2>&1; then
   printf 'FAIL: the apk could not be installed\n'
   cat /tmp/emulator-install.txt
   exit 1
 fi
 printf 'PASS: the apk was installed on the emulator\n'
 
-if ! timeout 180 adb shell am start -W -n "$PACKAGE/$ACTIVITY" > /tmp/emulator-start.txt 2>&1; then
+if ! timeout 180 "$ADB" -s "$SERIAL" shell am start -W -n "$PACKAGE/$ACTIVITY" > /tmp/emulator-start.txt 2>&1; then
   printf 'FAIL: the launcher activity did not start\n'
   cat /tmp/emulator-start.txt
   exit 1
@@ -76,23 +88,23 @@ cat /tmp/emulator-start.txt
 # gracefully, which is also the offline behaviour that has to be checked.
 sleep 12
 
-if ! timeout 60 adb shell pidof "$PACKAGE" > /dev/null 2>&1; then
+if ! timeout 60 "$ADB" -s "$SERIAL" shell pidof "$PACKAGE" > /dev/null 2>&1; then
   printf 'FAIL: the application process is not running after it was started\n'
-  adb logcat -d -t 200 | tail -n 60
+  "$ADB" -s "$SERIAL" logcat -d -t 200 | tail -n 60
   exit 1
 fi
 printf 'PASS: the application process is running\n'
 
-FATAL="$(adb logcat -d 2>/dev/null | grep -E 'FATAL EXCEPTION|AndroidRuntime.*com.zakeleo877' | head -n 10 || true)"
+FATAL="$("$ADB" -s "$SERIAL" logcat -d 2>/dev/null | grep -E 'FATAL EXCEPTION|AndroidRuntime.*com.zakeleo877' | head -n 10 || true)"
 if [ -n "$FATAL" ]; then
   printf 'FAIL: a fatal exception was logged while the application was starting\n'
   printf '%s\n' "$FATAL"
-  adb logcat -d -t 200 | tail -n 60
+  "$ADB" -s "$SERIAL" logcat -d -t 200 | tail -n 60
   exit 1
 fi
 printf 'PASS: no fatal exception was logged\n'
 
-timeout 120 adb exec-out screencap -p > "$OUTPUT/$PACKAGE.png"
+timeout 120 "$ADB" -s "$SERIAL" exec-out screencap -p > "$OUTPUT/$PACKAGE.png"
 if [ ! -s "$OUTPUT/$PACKAGE.png" ]; then
   printf 'FAIL: the screenshot is empty\n'
   exit 1
