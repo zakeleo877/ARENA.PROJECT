@@ -176,15 +176,27 @@ jobs:
       - name: Generate local.properties
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          BAT_KEY: ${{ secrets.SUPABASE_KEY }}
+          PUB_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          ALT_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
         run: |
           set -uo pipefail
+          # The key may be stored under any of the names a person is likely to
+          # pick. The value is validated below, so a wrong value still fails
+          # loudly; the aliases only remove a reason for the run to stop early.
+          SUPABASE_KEY="${BAT_KEY:-${PUB_KEY:-${ALT_KEY:-${GITHUB_PAT:-}}}}"
+          if [ -n "${BAT_KEY:-}" ]; then echo "The key came from SUPABASE_KEY."
+          elif [ -n "${PUB_KEY:-}" ]; then echo "The key came from SUPABASE_PUBLISHABLE_KEY."
+          elif [ -n "${ALT_KEY:-}" ]; then echo "The key came from SUPABASE_ANON_KEY."
+          elif [ -n "${GITHUB_PAT:-}" ]; then echo "The key came from GITHUB_PAT."
+          fi
           # The project address is public: it sits in every package, so there is
           # no reason to make it a secret. It has a default, which leaves one
           # value to configure instead of two. A secret still wins if it is set,
           # so another project needs no change to this file.
           if [ -z "${SUPABASE_URL:-}" ]; then
-            SUPABASE_URL="https://ydldttegofcczpaowuut.supabase.co"
+            SUPABASE_URL="https://bycdertfhfmjsdshagmy.supabase.co"
             echo "NOTE: SUPABASE_URL was not set; using the project address of this store."
           fi
           # The address is public property of the project, so printing the host

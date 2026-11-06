@@ -106,14 +106,23 @@ for module in customer admin; do
     fail "12c. $module does not guard against a high-privilege key"
   fi
 done
-# The workflows build the two packages from the publishable key only.
-# The window has to be wide enough to reach the guard after the address block.
-if grep -A 60 'Generate local.properties' .github/workflows/build.yml | grep -q 'sb_secret_'; then
+# The build must refuse a secret key, and it must mask both values. The check
+# reads the step block itself rather than a fixed number of following lines,
+# because a count silently stops reaching the guard once the step grows.
+# The block runs from the step name to the next step name.
+STEP_BLOCK="$(awk '
+  /^      - name: Generate local\.properties$/ { inside = 1; print; next }
+  inside && /^      - name: / { exit }
+  inside { print }
+' .github/workflows/build.yml)"
+if printf '%s\n' "$STEP_BLOCK" | grep -q 'sb_secret_'; then
   pass "12d. the build refuses a secret key before compiling"
 else
   fail "12d. the build does not refuse a secret key"
 fi
-if grep -A 40 'Generate local.properties' .github/workflows/build.yml | grep -q 'add-mask'; then
+# The key is the value that must never appear, so it needs its own mask; the
+# address mask alone used to satisfy this check.
+if printf '%s\n' "$STEP_BLOCK" | grep -q 'add-mask::\$SUPABASE_KEY'; then
   pass "12e. the values are masked in the build log"
 else
   fail "12e. the values are not masked in the build log"
