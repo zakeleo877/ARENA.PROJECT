@@ -329,6 +329,54 @@ def check_hilt_view_models(paths: list[pathlib.Path]) -> None:
             )
 
 
+# Extension functions and DSL receivers that a fully qualified name cannot
+# resolve. Writing `io.ktor.serialization.kotlinx.json.json(...)` fails at
+# compile time even though the path looks right, because the function is
+# declared on the client config receiver and has to be imported.
+EXTENSION_FUNCTIONS = {
+    "io.ktor.serialization.kotlinx.json.json": "json",
+    "io.ktor.client.request.header": "header",
+    "io.ktor.client.request.setBody": "setBody",
+}
+
+
+def check_extension_functions(path: Path, source: str) -> list[str]:
+    problems: list[str] = []
+    imports = set(re.findall(r"^import\s+([\w.]+)", source, re.M))
+    lines = source.splitlines()
+    for dotted, name in EXTENSION_FUNCTIONS.items():
+        for number, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("import") or stripped.startswith("//"):
+                continue
+            # A fully qualified call of an extension function never resolves.
+            if re.search(rf"\b{re.escape(dotted)}\s*\(", line):
+                problems.append(
+                    f"{path}:{number}: {dotted} is an extension function; import "
+                    f"`{dotted}` and call `{name}(...)` instead"
+                )
+                continue
+            # An argument that carries a package prefix instead of an import,
+            # for example `json(io.ktor....DefaultJson)`, compiles, but it is a
+            # sign that the import was forgotten elsewhere in the file.
+            if re.search(rf"\b{re.escape(name)}\s*\(\s*io\.ktor\.", line):
+                problems.append(
+                    f"{path}:{number}: `{name}(...)` takes a named argument; add the "
+                    f"import and pass the simple name"
+                )
+                continue
+            if re.search(rf"(?<![\w.]){re.escape(name)}\s*\(", line) and dotted not in imports:
+                # Only report when the call looks like the DSL use, which is
+                # `json(config)` or `json {`, not a member of another type.
+                if re.search(rf"(?<![\w.]){re.escape(name)}\s*(\(|\{{)", stripped):
+                    if dotted not in imports:
+                        problems.append(
+                            f"{path}:{number}: `{name}` is used without "
+                            f"`import {dotted}`"
+                        )
+    return problems
+
+
 def check_gradle_scripts(root: Path) -> list[str]:
     """Catches the mistakes that only appear when Gradle compiles a script.
 
@@ -392,6 +440,8 @@ def main() -> int:
 
     check_hilt_view_models(files)
     errors.extend(check_gradle_scripts(ROOT))
+    for path in files:
+        errors.extend(check_extension_functions(path, path.read_text(encoding="utf-8")))
 
     if errors:
         print("Static reference check failed:\n")

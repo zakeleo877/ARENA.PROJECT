@@ -15,6 +15,9 @@ import com.zakeleo877.saeedcore.model.PendingOrder
 import com.zakeleo877.saeedcore.model.PendingOrderItem
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.serialization.kotlinx.json.DefaultJson
+import io.ktor.serialization.kotlinx.json.json
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -312,8 +315,8 @@ class IsolatedBackendTest {
             )
         }
         val httpClient = HttpClient(engine) {
-            install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) {
-                json(io.ktor.serialization.kotlinx.json.json(io.ktor.serialization.kotlinx.json.DefaultJson))
+            install(ContentNegotiation) {
+                json(DefaultJson)
             }
         }
         try {
@@ -345,8 +348,8 @@ class IsolatedBackendTest {
             )
         }
         val httpClient = HttpClient(engine) {
-            install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) {
-                json(io.ktor.serialization.kotlinx.json.json(io.ktor.serialization.kotlinx.json.DefaultJson))
+            install(ContentNegotiation) {
+                json(DefaultJson)
             }
         }
         try {
