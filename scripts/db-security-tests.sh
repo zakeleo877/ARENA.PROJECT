@@ -7,9 +7,19 @@
 set -euo pipefail
 
 : "${TEST_SUPABASE_URL:?TEST_SUPABASE_URL is required}"
-: "${TEST_SUPABASE_KEY:?TEST_SUPABASE_KEY is required (the publishable/anon key)}"
+: "${TEST_SUPABASE_KEY:?TEST_SUPABASE_KEY is required (the publishable key)}"
 : "${TEST_USER_EMAIL:?TEST_USER_EMAIL is required}"
 : "${TEST_USER_PASSWORD:?TEST_USER_PASSWORD is required}"
+
+# A secret key bypasses row level security, so a security test that holds one
+# would prove nothing about the policies. Refuse it outright.
+case "$TEST_SUPABASE_KEY" in
+  sb_secret_*)
+    printf 'ABORT: TEST_SUPABASE_KEY is a secret key, which bypasses RLS.\n' >&2
+    printf '       Use the project publishable key instead.\n' >&2
+    exit 1
+    ;;
+esac
 
 # Refuse to touch production.
 if [ -n "${SUPABASE_URL:-}" ] && [ "$TEST_SUPABASE_URL" = "$SUPABASE_URL" ]; then
@@ -26,12 +36,23 @@ KEY="$TEST_SUPABASE_KEY"
 EMAIL="$TEST_USER_EMAIL"
 PASSWORD="$TEST_USER_PASSWORD"
 
+# A publishable key is an opaque token, not a JWT, and it must travel only in
+# the `apikey` header. The legacy anon key was a JWT and had to be repeated as
+# the Bearer token so that the request carried the `anon` role. Sending an
+# opaque token as Bearer makes the gateway read it as a malformed JWT and
+# answer 401, which used to fail this script against a migrated project.
+ANON_AUTH=()
+case "$KEY" in
+  sb_publishable_*) : ;;
+  *) ANON_AUTH=(-H "Authorization: Bearer $KEY") ;;
+esac
+
 pass() { printf 'PASS: %s\n' "$1"; }
 fail() { printf 'FAIL: %s\n' "$1"; exit 1; }
 
 anon_curl() {
   curl -sS -o /tmp/dbt-body-$$ -w '%{http_code}' \
-    -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+    -H "apikey: $KEY" "${ANON_AUTH[@]}" \
     -H 'Content-Type: application/json' "$@"
 }
 
@@ -73,7 +94,7 @@ for table in products settings; do
 done
 
 # 21. Anonymous product reads expose only available products.
-PRODUCTS_JSON="$(curl -sS -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+PRODUCTS_JSON="$(curl -sS -H "apikey: $KEY" "${ANON_AUTH[@]}" \
   "$BASE/rest/v1/products?select=name,available")"
 if echo "$PRODUCTS_JSON" | grep -q '"available":false'; then
   fail "21. an unavailable product is visible to anonymous readers"
@@ -82,7 +103,7 @@ else
 fi
 
 # Sign in as the test user for the remaining checks.
-TOKEN_JSON="$(curl -sS -H "apikey: $KEY" -H 'Content-Type: application/json' \
+TOKEN_JSON="$(curl -sS -H "apikey: $KEY" "${ANON_AUTH[@]}" -H 'Content-Type: application/json' \
   -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" \
   "$BASE/auth/v1/token?grant_type=password")"
 ACCESS_TOKEN="$(echo "$TOKEN_JSON" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')"
@@ -120,7 +141,7 @@ fi
 
 # 25 and 18. place_order twice with one client id returns the same number.
 CLIENT_ID="$(cat /proc/sys/kernel/random/uuid)"
-ITEM_ID="$(curl -sS -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+ITEM_ID="$(curl -sS -H "apikey: $KEY" "${ANON_AUTH[@]}" \
   "$BASE/rest/v1/products?select=id,available&available=eq.true&limit=1" \
   | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 [ -n "$ITEM_ID" ] || fail "no available product to order; seed one first"

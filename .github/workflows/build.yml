@@ -160,17 +160,84 @@ jobs:
           } > /tmp/versions.txt 2>&1
           cat /tmp/versions.txt
 
+      # The two values reach the build only through a git-ignored properties
+      # file. They are never echoed: GitHub masks registered secrets in the log,
+      # and `::add-mask::` covers the values that the masking would miss if the
+      # secret is reformatted.
       - name: Generate local.properties
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
           set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_KEY:-}" ]; then
+            echo "FAIL: SUPABASE_URL and SUPABASE_KEY must be set in the repository secrets."
+            echo "      The package cannot reach the project without them."
+            exit 1
+          fi
+          echo "::add-mask::$SUPABASE_URL"
+          echo "::add-mask::$SUPABASE_KEY"
+          # A secret key bypasses every row level security policy. It must never
+          # be compiled into a package that anyone can download and read.
+          case "$SUPABASE_KEY" in
+            sb_secret_*)
+              echo "FAIL: SUPABASE_KEY is a secret key. The applications use the publishable key only."
+              exit 1
+              ;;
+          esac
+          case "$SUPABASE_KEY" in
+            sb_publishable_*) : ;;
+            *) echo "FAIL: SUPABASE_KEY must be a publishable key (sb_publishable_...)."
+               exit 1 ;;
+          esac
+          case "$SUPABASE_URL" in
+            https://*.*) : ;;
+            *) echo "FAIL: SUPABASE_URL must be the https address of the project."
+               exit 1 ;;
+          esac
           {
             echo "SUPABASE_URL=$SUPABASE_URL"
             echo "SUPABASE_KEY=$SUPABASE_KEY"
             echo "sdk.dir=$ANDROID_HOME"
           } > local.properties
+          chmod 600 local.properties
+          echo "PASS: local.properties was written with the project address and a publishable key."
+          # Report the shape only, never the value.
+          echo "      address length: ${#SUPABASE_URL}, key length: ${#SUPABASE_KEY}, key prefix: ${SUPABASE_KEY%%_*}"
+
+      # Proves the project is reachable and the key is accepted before five
+      # minutes of Gradle run. A wrong address or a revoked key fails here.
+      - name: Check the connection to the project
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          set -uo pipefail
+          BASE="${SUPABASE_URL%/}"
+          CODE="$(curl -sS -o /tmp/auth-health.json -w '%{http_code}' \
+            -H "apikey: $SUPABASE_KEY" "$BASE/auth/v1/health" || echo 000)"
+          echo "auth health returned $CODE"
+          case "$CODE" in
+            200) echo "PASS: the project address answers and the key is accepted." ;;
+            000) echo "FAIL: the project address could not be reached."
+                 exit 1 ;;
+            401|403) echo "FAIL: the project refused the publishable key."
+                     exit 1 ;;
+            *) echo "NOTE: auth health returned $CODE; continuing, the catalog check decides." ;;
+          esac
+          CATALOG="$(curl -sS -o /tmp/catalog.json -w '%{http_code}' \
+            -H "apikey: $SUPABASE_KEY" "$BASE/rest/v1/products?select=id&limit=1" || echo 000)"
+          echo "the catalog returned $CATALOG"
+          case "$CATALOG" in
+            200) echo "PASS: the catalog is readable, so the schema is applied." ;;
+            404) echo "NOTE: the products table is missing."
+                 echo "      Apply supabase/schema.sql to the project before relying on this build."
+                 echo "      The package is still built so that checks 1-10 can run." ;;
+            401|403) echo "FAIL: reading the catalog was refused ($CATALOG)."
+                     echo "      Check the key and the row level security policies."
+                     exit 1 ;;
+            *) echo "NOTE: the catalog returned $CATALOG; the package is still built." ;;
+          esac
 
       # Production signing uses the GitHub Secrets when they are configured.
       # Otherwise a throwaway key is generated inside the runner so that the
@@ -312,6 +379,20 @@ jobs:
           } > /tmp/verify-apk.txt 2>&1 || true
           cat /tmp/verify-apk.txt
           if grep -q '^FAIL:' /tmp/verify-apk.txt; then
+            exit 1
+          fi
+
+      - name: Check the keys inside the packages (acceptance check 12b)
+        run: |
+          set -uo pipefail
+          {
+            bash scripts/verify-apk-keys.sh \
+              artifacts/apk/saeed-store-1.0.apk \
+              artifacts/apk/saeed-admin-1.0.apk
+          } > /tmp/verify-apk-keys.txt 2>&1 || true
+          cat /tmp/verify-apk-keys.txt
+          if grep -q '^FAIL:' /tmp/verify-apk-keys.txt; then
+            echo "The packages must never carry a high-privilege key."
             exit 1
           fi
 

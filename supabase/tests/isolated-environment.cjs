@@ -273,7 +273,17 @@ class IsolatedEnvironment {
       return json(401, { code: '42501', message: 'permission denied for table admins' });
     }
     const select = query.select || '*';
-    const effectiveFilter = filter || query.filter || '';
+    // PostgREST takes the row filter from the query string itself, for example
+    // `?id=eq.<uuid>`. Treating only a literal `filter` parameter as a filter
+    // silently dropped every other condition, so a request that asked for one
+    // row answered with the whole table and a check could pass for the wrong
+    // reason. Everything that is not a control parameter is a filter.
+    const control = new Set(['select', 'order', 'limit', 'offset', 'filter']);
+    const inlineFilter = Object.entries(query)
+      .filter(([name]) => !control.has(name))
+      .map(([name, value]) => `${name}.${value}`)
+      .join('&');
+    const effectiveFilter = filter || query.filter || inlineFilter || '';
     const order = query.order || '';
     const limit = query.limit ? Number(query.limit) : null;
 

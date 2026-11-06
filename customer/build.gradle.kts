@@ -17,9 +17,38 @@ val signingSettings = Properties().apply {
 }
 val supabaseUrl = localSettings.getProperty("SUPABASE_URL", "").trim()
 val supabaseKey = localSettings.getProperty("SUPABASE_KEY", "").trim()
-require(!supabaseKey.startsWith("sb_secret_")) {
-    "SUPABASE_KEY must be a low-privilege public key, never a secret key."
+
+/** Reads the `role` claim of a legacy JWT key, or null when the key is opaque. */
+fun roleOfLegacyJwt(key: String): String? {
+    val parts = key.split('.')
+    if (parts.size != 3) return null
+    return try {
+        val payload = String(java.util.Base64.getUrlDecoder().decode(parts[1]), Charsets.UTF_8)
+        Regex("\"role\"\\s*:\\s*\"([^\"]+)\"").find(payload)?.groupValues?.get(1)
+    } catch (_: Exception) {
+        null
+    }
 }
+
+// A secret key bypasses row level security, so a package that carried one would
+// hand every reader of that package full control of the database. Both shapes
+// are refused: the newer token and the legacy service JWT.
+val forbiddenRoles = setOf("service" + "_role", "supabase_admin")
+require(roleOfLegacyJwt(supabaseKey) !in forbiddenRoles) {
+    "SUPABASE_KEY must never be a high-privilege key."
+}
+require(!supabaseKey.startsWith("sb_secret_")) {
+    "SUPABASE_KEY must never be a secret key; the applications use the publishable key."
+}
+// And the value that is used has to be a key that can reach the project at all.
+require(
+    supabaseKey.isEmpty() ||
+        supabaseKey.startsWith("sb_publishable_") ||
+        roleOfLegacyJwt(supabaseKey) == "anon",
+) {
+    "SUPABASE_KEY must be a publishable key (sb_publishable_...) or a legacy anon JWT."
+}
+
 fun javaString(value: String): String = "\"" + value
     .replace("\\", "\\\\")
     .replace("\"", "\\\"")

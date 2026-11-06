@@ -260,9 +260,18 @@ revoke all on function public.place_order(text, text, text, text, jsonb, uuid)
 grant execute on function public.place_order(text, text, text, text, jsonb, uuid)
     to anon, authenticated;
 
--- Supabase creates this publication in its managed projects.
+-- Supabase creates this publication in its managed projects, so the block has
+-- to tolerate its absence. The earlier version read pg_publication_tables
+-- without checking that the publication exists, and ran `alter publication`
+-- unguarded; on a project where Realtime is switched off the first statement
+-- raised and the whole transaction rolled back.
 do $realtime$
 begin
+    if not exists (
+        select 1 from pg_catalog.pg_publication where pubname = 'supabase_realtime'
+    ) then
+        create publication supabase_realtime;
+    end if;
     if not exists (
         select 1 from pg_catalog.pg_publication_tables
         where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'orders'
@@ -272,32 +281,47 @@ begin
 end;
 $realtime$;
 
--- Public image URLs; only managers can enumerate, insert, replace, or delete.
-insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('product-images', 'product-images', true, 1048576,
-        array['image/webp', 'image/jpeg', 'image/png'])
-on conflict (id) do update
-set public = excluded.public,
-    file_size_limit = excluded.file_size_limit,
-    allowed_mime_types = excluded.allowed_mime_types;
+-- The product images. These statements need the managed Supabase services, so
+-- they run only inside a real project. On a plain PostgreSQL cluster the
+-- schema still applies and the application works without images instead of
+-- losing the whole transaction.
+do $storage$
+begin
+    if to_regclass('storage.buckets') is null or to_regclass('storage.objects') is null then
+        raise notice 'storage schema is absent; skipping the bucket and its policies';
+        return;
+    end if;
 
-drop policy if exists "product images admin select" on storage.objects;
-drop policy if exists "product images admin insert" on storage.objects;
-drop policy if exists "product images admin update" on storage.objects;
-drop policy if exists "product images admin delete" on storage.objects;
-create policy "product images admin select" on storage.objects
-    for select to authenticated
-    using (bucket_id = 'product-images' and (select public.is_admin()));
-create policy "product images admin insert" on storage.objects
-    for insert to authenticated
-    with check (bucket_id = 'product-images' and (select public.is_admin()));
-create policy "product images admin update" on storage.objects
-    for update to authenticated
-    using (bucket_id = 'product-images' and (select public.is_admin()))
-    with check (bucket_id = 'product-images' and (select public.is_admin()));
-create policy "product images admin delete" on storage.objects
-    for delete to authenticated
-    using (bucket_id = 'product-images' and (select public.is_admin()));
+    -- Images are shown in the customer application, so the bucket has to be
+    -- public: a private bucket rejects `/object/public/...` reads and the
+    -- catalog would render broken images. Only managers may write.
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('product-images', 'product-images', true, 1048576,
+            array['image/webp', 'image/jpeg', 'image/png'])
+    on conflict (id) do update
+    set public = excluded.public,
+        file_size_limit = excluded.file_size_limit,
+        allowed_mime_types = excluded.allowed_mime_types;
+
+    execute 'drop policy if exists "product images admin select" on storage.objects';
+    execute 'drop policy if exists "product images admin insert" on storage.objects';
+    execute 'drop policy if exists "product images admin update" on storage.objects';
+    execute 'drop policy if exists "product images admin delete" on storage.objects';
+    execute $p$create policy "product images admin select" on storage.objects
+        for select to authenticated
+        using (bucket_id = 'product-images' and (select public.is_admin()))$p$;
+    execute $p$create policy "product images admin insert" on storage.objects
+        for insert to authenticated
+        with check (bucket_id = 'product-images' and (select public.is_admin()))$p$;
+    execute $p$create policy "product images admin update" on storage.objects
+        for update to authenticated
+        using (bucket_id = 'product-images' and (select public.is_admin()))
+        with check (bucket_id = 'product-images' and (select public.is_admin()))$p$;
+    execute $p$create policy "product images admin delete" on storage.objects
+        for delete to authenticated
+        using (bucket_id = 'product-images' and (select public.is_admin()))$p$;
+end;
+$storage$;
 
 insert into public.settings (key, value, is_public) values
     ('storeName',  'محلات السعيد',                 true),
