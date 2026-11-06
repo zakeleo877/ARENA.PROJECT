@@ -187,6 +187,9 @@ jobs:
             SUPABASE_URL="https://ydldttegofcczpaowuut.supabase.co"
             echo "NOTE: SUPABASE_URL was not set; using the project address of this store."
           fi
+          # The address is public property of the project, so printing the host
+          # is safe and shows which project the package will talk to.
+          echo "The project host is ${SUPABASE_URL#https://}"
           if [ -z "${SUPABASE_KEY:-}" ]; then
             echo "FAIL: SUPABASE_KEY is not configured."
             echo "      Add it in Settings, Secrets and variables, Actions, tab Secrets."
