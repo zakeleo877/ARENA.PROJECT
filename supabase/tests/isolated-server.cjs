@@ -112,6 +112,11 @@ class IsolatedServer {
       send(400, { error: 'unsupported_grant_type' });
       return;
     }
+    // Supabase answers this without a body and without a session.
+    if (url.pathname === '/auth/v1/health' && request.method === 'GET') {
+      send(200, { name: 'GoTrue', version: 'isolated', description: 'local' });
+      return;
+    }
     if (url.pathname === '/auth/v1/logout' && request.method === 'POST') {
       const result = await this.environment.signOut(body && body.refresh_token);
       send(result.status, result.body);

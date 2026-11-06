@@ -76,28 +76,15 @@ jobs:
           esac
           echo "The project and the key shape are acceptable."
 
+      # Runs without any account, so it works on a project straight after the
+      # schema is applied and says precisely which part is missing.
       - name: Check the schema on the project (read only)
         env:
           URL: ${{ secrets.TEST_SUPABASE_URL }}
           KEY: ${{ secrets.TEST_SUPABASE_KEY }}
         run: |
-          set -euo pipefail
-          BASE="${URL%/}"
-          # The catalog and the settings exist and answer. A missing table is
-          # reported with its own message instead of a bare 404.
-          for path in \
-            '/rest/v1/products?select=id&limit=1' \
-            '/rest/v1/settings?select=key&is_public=eq.true&limit=1'; do
-            CODE="$(curl -sS -o /tmp/body -w '%{http_code}' -H "apikey: $KEY" "$BASE$path")"
-            if [ "$CODE" != "200" ]; then
-              echo "FAIL: $path returned $CODE"
-              cat /tmp/body
-              echo
-              echo "      The schema has not been applied to this project yet."
-              exit 1
-            fi
-            echo "PASS: $path returned 200"
-          done
+          set -uo pipefail
+          bash scripts/project-preflight.sh
 
       - name: Run the live acceptance checks
         env:
