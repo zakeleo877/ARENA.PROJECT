@@ -1,3 +1,4 @@
+import java.util.Base64
 import java.util.Properties
 
 plugins {
@@ -23,7 +24,7 @@ fun roleOfLegacyJwt(key: String): String? {
     val parts = key.split('.')
     if (parts.size != 3) return null
     return try {
-        val payload = String(java.util.Base64.getUrlDecoder().decode(parts[1]), Charsets.UTF_8)
+        val payload = String(Base64.getUrlDecoder().decode(parts[1]), Charsets.UTF_8)
         Regex("\"role\"\\s*:\\s*\"([^\"]+)\"").find(payload)?.groupValues?.get(1)
     } catch (_: Exception) {
         null
@@ -68,7 +69,11 @@ android {
         .orElse("android-37")
         .get())
     // The value must use the android-NN format, with an optional minor version.
-    compileSdkVersion(saeedCompileSdk)
+    // The `compileSdk` block replaces the deprecated `compileSdkVersion` call,
+    // which Kotlin treats as an error in a build script.
+    compileSdk {
+        version = release(saeedCompileSdk.removePrefix("android-").toIntOrNull() ?: 37)
+    }
     defaultConfig {
         applicationId = "com.zakeleo877.saeedstore"
         minSdk = 24

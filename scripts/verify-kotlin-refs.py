@@ -329,6 +329,50 @@ def check_hilt_view_models(paths: list[pathlib.Path]) -> None:
             )
 
 
+def check_gradle_scripts(root: Path) -> list[str]:
+    """Catches the mistakes that only appear when Gradle compiles a script.
+
+    A Kotlin build script is compiled before any task runs, so a script error
+    stops the whole pipeline: the unit tests, the lint and every acceptance
+    check are skipped. These patterns each cost a full CI cycle to discover.
+    """
+    problems: list[str] = []
+    for path in sorted(root.rglob("build.gradle.kts")):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        lines = text.splitlines()
+        uses_base64 = "Base64.getUrlDecoder" in text
+        imports_base64 = any(
+            line.strip() in (
+                "import java.util.Base64",
+                "import java.util.*",
+                "import java.util.Base64.*",
+            )
+            for line in lines
+        )
+        if uses_base64 and not imports_base64:
+            # `java` in a build script resolves to the Gradle extension, so the
+            # fully qualified name does not work either.
+            problems.append(
+                f"{path}: Base64 is used without `import java.util.Base64`; "
+                "the fully qualified name does not compile in a build script"
+            )
+        for number, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("//"):
+                continue
+            if stripped.startswith("compileSdkVersion("):
+                problems.append(
+                    f"{path}:{number}: compileSdkVersion is deprecated and Kotlin "
+                    "treats the warning as an error; use the compileSdk block"
+                )
+            if "java.util." in stripped and "import" not in stripped:
+                problems.append(
+                    f"{path}:{number}: a fully qualified java.util name does not "
+                    "compile in a build script; import the class instead"
+                )
+    return problems
+
+
 def main() -> int:
     files = kotlin_files()
     for path in files:
@@ -347,6 +391,7 @@ def main() -> int:
         check_required_imports(path, code, imports)
 
     check_hilt_view_models(files)
+    errors.extend(check_gradle_scripts(ROOT))
 
     if errors:
         print("Static reference check failed:\n")

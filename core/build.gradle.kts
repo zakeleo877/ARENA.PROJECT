@@ -20,7 +20,10 @@ android {
         .orElse("android-37")
         .get())
     // The value must use the android-NN format, with an optional minor version.
-    compileSdkVersion(saeedCompileSdk)
+    // The `compileSdk` block replaces the deprecated call.
+    compileSdk {
+        version = release(saeedCompileSdk.removePrefix("android-").toIntOrNull() ?: 37)
+    }
     defaultConfig {
         minSdk = 24
         consumerProguardFiles("consumer-rules.pro")
