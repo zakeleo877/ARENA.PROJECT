@@ -179,9 +179,18 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
           set -uo pipefail
-          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_KEY:-}" ]; then
-            echo "FAIL: SUPABASE_URL and SUPABASE_KEY are not configured."
-            echo "      Add both in Settings, Secrets and variables, Actions."
+          # The project address is public: it sits in every package, so there is
+          # no reason to make it a secret. It has a default, which leaves one
+          # value to configure instead of two. A secret still wins if it is set,
+          # so another project needs no change to this file.
+          if [ -z "${SUPABASE_URL:-}" ]; then
+            SUPABASE_URL="https://ydldttegofcczpaowuut.supabase.co"
+            echo "NOTE: SUPABASE_URL was not set; using the project address of this store."
+          fi
+          if [ -z "${SUPABASE_KEY:-}" ]; then
+            echo "FAIL: SUPABASE_KEY is not configured."
+            echo "      Add it in Settings, Secrets and variables, Actions, tab Secrets."
+            echo "      The address already has a default, so this is the only value needed."
             echo "      This build continues with the placeholder address so that"
             echo "      the packaging checks still run; it is not usable."
             {
@@ -444,8 +453,9 @@ jobs:
       - name: Require the project configuration
         if: env.PLACEHOLDER == '1'
         run: |
-          echo "FAIL: SUPABASE_URL and SUPABASE_KEY are not configured."
-          echo "      Settings, Secrets and variables, Actions, then add both."
+          echo "FAIL: SUPABASE_KEY is not configured."
+          echo "      Settings, Secrets and variables, Actions, tab Secrets."
+          echo "      The address has a default, so this is the only value to add."
           echo "      The publishable key goes in SUPABASE_KEY; a secret key is refused."
           echo "      Every packaging check above ran against the placeholder address,"
           echo "      so the packages are not usable until this step can pass."
