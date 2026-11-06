@@ -84,12 +84,17 @@ else
 fi
 
 # 16. Writing products and settings must be refused.
-for table in products settings; do
-  CODE="$(anon_curl -X POST -d '{"name":"probe"}' "$BASE/rest/v1/$table")"
+# The payload has to name real columns of each table. A payload with an unknown
+# column is rejected by PostgREST with 400 before the row is ever checked
+# against the policies, so the check would never reach row level security.
+for pair in "products {\"name\":\"probe\"}" "settings {\"key\":\"probe_x\",\"value\":\"probe\"}"; do
+  table="${pair%% *}"
+  payload="${pair#* }"
+  CODE="$(anon_curl -X POST -d "$payload" "$BASE/rest/v1/$table")"
   if [ "$CODE" = "401" ] || [ "$CODE" = "403" ] || [ "$CODE" = "42501" ]; then
     pass "16. write to $table refused ($CODE)"
   else
-    fail "16. write to $table returned $CODE"
+    fail "16. write to $table returned $CODE ($(head -c 120 /tmp/dbt-body-$$ 2>/dev/null))"
   fi
 done
 
