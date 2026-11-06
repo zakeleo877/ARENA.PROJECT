@@ -73,6 +73,7 @@ fun ProductImagePicker(
     uploading: Boolean,
     onUpload: (fileName: String, bytes: ByteArray) -> Unit,
     onLinkChange: (String) -> Unit,
+    uploadError: Boolean = false,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
