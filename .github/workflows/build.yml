@@ -164,15 +164,32 @@ jobs:
       # file. They are never echoed: GitHub masks registered secrets in the log,
       # and `::add-mask::` covers the values that the masking would miss if the
       # secret is reformatted.
+      # The two values reach the build only through a git-ignored properties
+      # file. They are never echoed: GitHub masks registered secrets in the log,
+      # and `::add-mask::` covers the values that the masking would miss if the
+      # secret is reformatted.
+      #
+      # When the secrets are absent the build still runs with the placeholder
+      # address, so the packaging checks 1-10 keep their value. That state is
+      # reported as a failure of its own step, because a package that points at
+      # a placeholder cannot reach the store.
       - name: Generate local.properties
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_KEY:-}" ]; then
-            echo "FAIL: SUPABASE_URL and SUPABASE_KEY must be set in the repository secrets."
-            echo "      The package cannot reach the project without them."
+            echo "FAIL: SUPABASE_URL and SUPABASE_KEY are not configured."
+            echo "      Add both in Settings, Secrets and variables, Actions."
+            echo "      This build continues with the placeholder address so that"
+            echo "      the packaging checks still run; it is not usable."
+            {
+              echo "SUPABASE_URL=https://placeholder.invalid"
+              echo "SUPABASE_KEY=sb_publishable_placeholder_for_the_build"
+              echo "sdk.dir=$ANDROID_HOME"
+            } > local.properties
+            echo "PLACEHOLDER=1" >> "$GITHUB_ENV"
             exit 1
           fi
           echo "::add-mask::$SUPABASE_URL"
@@ -208,6 +225,7 @@ jobs:
       # Proves the project is reachable and the key is accepted before five
       # minutes of Gradle run. A wrong address or a revoked key fails here.
       - name: Check the connection to the project
+        if: env.PLACEHOLDER != '1'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
