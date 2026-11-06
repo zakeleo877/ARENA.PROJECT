@@ -58,15 +58,24 @@ jobs:
       - name: Refuse to run against an unconfirmed project
         env:
           CONFIRMED: ${{ vars.TEST_PROJECT_CONFIRMED }}
+          MODE: ${{ inputs.mode }}
+          ALLOW: ${{ inputs.allow_order_write }}
           INPUT_URL: ${{ inputs.project_url }}
-          URL: ${{ secrets.TEST_SUPABASE_URL }}
-          KEY: ${{ secrets.TEST_SUPABASE_KEY }}
+          URL: ${{ secrets.TEST_SUPABASE_URL || secrets.SUPABASE_URL }}
+          KEY: ${{ secrets.TEST_SUPABASE_KEY || secrets.SUPABASE_KEY }}
         run: |
           set -euo pipefail
-          if [ "${CONFIRMED:-}" != "true" ]; then
-            echo "FAIL: the repository variable TEST_PROJECT_CONFIRMED is not true."
-            echo "      Set it only after you have confirmed that TEST_SUPABASE_URL"
-            echo "      is a project that is safe to write test orders into."
+          # A read-only run changes nothing, so it may run without the
+          # acknowledgement. A run that writes orders may not.
+          NEEDS_CONFIRMATION=0
+          if [ "${MODE:-test}" = "test" ] || [ "${ALLOW:-false}" = "true" ]; then
+            NEEDS_CONFIRMATION=1
+          fi
+          if [ "$NEEDS_CONFIRMATION" = "1" ] && [ "${CONFIRMED:-}" != "true" ]; then
+            echo "FAIL: this run would write orders, and TEST_PROJECT_CONFIRMED is not true."
+            echo "      Set the repository variable to true only for a project that is"
+            echo "      safe to write test orders into, or start a production run,"
+            echo "      which only reads."
             exit 1
           fi
           URL="${INPUT_URL:-${URL:-}}"
