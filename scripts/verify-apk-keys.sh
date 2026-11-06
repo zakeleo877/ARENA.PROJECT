@@ -6,62 +6,92 @@
 # key bypasses every row level security policy, and a package is readable by
 # anyone who downloads it.
 #
+# The scan reads every entry of the archive. A search over the raw file finds
+# nothing, because the classes are deflated inside the zip; the first version
+# of this script reported a missing key for that reason.
+#
 # Usage: verify-apk-keys.sh <apk>...
 set -uo pipefail
-
-PASSES=0
-FAILS=0
-pass() { PASSES=$((PASSES + 1)); printf 'PASS: %s\n' "$1"; }
-fail() { FAILS=$((FAILS + 1)); printf 'FAIL: %s\n' "$1"; }
 
 if [ "$#" -eq 0 ]; then
   printf 'FAIL: no package was given\n'
   exit 1
 fi
 
-for apk in "$@"; do
-  name="$(basename "$apk")"
-  if [ ! -f "$apk" ]; then
-    fail "$name does not exist"
-    continue
-  fi
+python3 - "$@" <<'PY'
+import re
+import sys
+import zipfile
 
-  # The whole package, including the compiled resources and the string pool.
-  text="$(strings -a "$apk" 2>/dev/null || cat "$apk" | tr -c '[:print:]' '\n')"
+SECRET = re.compile(rb'sb_secret_[A-Za-z0-9_-]{10,}')
+SECRET_CLAIM = re.compile(rb'"(?:role|aud)"\s*:\s*"?service')
+PUBLISHABLE = re.compile(rb'sb_publishable_[A-Za-z0-9_-]{10,}')
+PROJECT = re.compile(rb'https://[a-z0-9]+\.supabase\.co')
+PLACEHOLDER = re.compile(rb'placeholder\.invalid')
 
-  # 1. No high-privilege key. Both spellings are covered: the newer token and
-  #    the role claim of the legacy service JWT.
-  if printf '%s' "$text" | grep -qE 'sb_secret_[A-Za-z0-9_-]{10,}'; then
-    fail "$name contains a secret key"
-  else
-    pass "$name contains no secret key"
-  fi
-  if printf '%s' "$text" | grep -qE '"(role|aud)":"?service'; then
-    fail "$name contains a high-privilege JWT claim"
-  else
-    pass "$name contains no high-privilege JWT claim"
-  fi
+passed = 0
+failed = 0
 
-  # 2. A publishable key must be present, otherwise the build is unusable.
-  if printf '%s' "$text" | grep -qE 'sb_publishable_[A-Za-z0-9_-]{10,}'; then
-    pass "$name carries a publishable key"
-  else
-    fail "$name carries no publishable key, so it cannot reach the project"
-  fi
 
-  # 3. The project address must be a real https address, not a placeholder.
-  if printf '%s' "$text" | grep -qE 'https://[A-Za-z0-9]+\.supabase\.co'; then
-    pass "$name points at a Supabase project"
-  else
-    if printf '%s' "$text" | grep -q 'placeholder.invalid'; then
-      printf 'NOTE: %s was built with the placeholder address.\n' "$name"
-      printf '      That is expected for the emulator run; it is not distributable.\n'
-      pass "$name has an address, but it is the placeholder"
-    else
-      fail "$name carries no Supabase project address"
-    fi
-  fi
-done
+def pass_(message):
+    global passed
+    passed += 1
+    print(f'PASS: {message}')
 
-printf '\n%d passed, %d failed.\n' "$PASSES" "$FAILS"
-[ "$FAILS" -eq 0 ]
+
+def fail(message):
+    global failed
+    failed += 1
+    print(f'FAIL: {message}')
+
+
+for apk in sys.argv[1:]:
+    name = apk.rsplit('/', 1)[-1]
+    try:
+        archive = zipfile.ZipFile(apk)
+    except Exception as error:
+        fail(f'{name} could not be opened ({error})')
+        continue
+
+    found_secret = found_claim = found_publishable = found_project = 0
+    found_placeholder = 0
+    with archive:
+        for entry in archive.namelist():
+            try:
+                data = archive.read(entry)
+            except Exception:
+                continue
+            found_secret += len(SECRET.findall(data))
+            found_claim += len(SECRET_CLAIM.findall(data))
+            found_publishable += len(PUBLISHABLE.findall(data))
+            found_project += len(PROJECT.findall(data))
+            found_placeholder += len(PLACEHOLDER.findall(data))
+
+    if found_secret:
+        fail(f'{name} contains a secret key ({found_secret} occurrences)')
+    else:
+        pass_(f'{name} contains no secret key')
+
+    if found_claim:
+        fail(f'{name} contains a high-privilege JWT claim ({found_claim} occurrences)')
+    else:
+        pass_(f'{name} contains no high-privilege JWT claim')
+
+    if found_publishable:
+        pass_(f'{name} carries a publishable key')
+    else:
+        fail(f'{name} carries no publishable key, so it cannot reach the project')
+
+    if found_project:
+        pass_(f'{name} points at a Supabase project')
+    elif found_placeholder:
+        print(f'NOTE: {name} was built with the placeholder address.')
+        print('      That is expected for the emulator run; it is not distributable.')
+        pass_(f'{name} has an address, but it is the placeholder')
+    else:
+        fail(f'{name} carries no Supabase project address')
+
+print()
+print(f'{passed} passed, {failed} failed.')
+sys.exit(0 if failed == 0 else 1)
+PY
