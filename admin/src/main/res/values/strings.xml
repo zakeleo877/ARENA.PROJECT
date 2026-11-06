@@ -77,4 +77,16 @@
     <string name="admin_export_orders">تصدير الطلبات</string>
     <string name="admin_export_failed">تعذّر تجهيز ملف التصدير.</string>
     <string name="admin_export_done">تم تجهيز الملف، اختر مكان الحفظ.</string>
+
+    <string name="admin_image_add">اختيار صورة من الجهاز</string>
+    <string name="admin_image_replace">تغيير الصورة</string>
+    <string name="admin_image_uploading">جارٍ رفع الصورة…</string>
+    <string name="admin_image_upload_failed">تعذّر رفع الصورة. تحقّق من الاتصال ومن صلاحية المدير.</string>
+    <string name="admin_image_uploaded">تم رفع الصورة وربطها بالمنتج.</string>
+    <string name="admin_image_too_large">الصورة كبيرة. اختر صورة أصغر.</string>
+    <string name="admin_image_unreadable">تعذّر قراءة الصورة المختارة.</string>
+    <string name="admin_image_preview">صورة المنتج</string>
+    <string name="admin_image_optional">اختياري</string>
+    <string name="admin_image_from_picker">الاختيار من معرض الصور لا يحتاج أي صلاحية.</string>
+    <string name="admin_link_alternative_title">أو استخدم رابطاً جاهزاً</string>
 </resources>

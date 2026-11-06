@@ -107,10 +107,18 @@ class AdminApi(
     private val client: HttpClient,
     private val config: SupabasePublicConfig,
 ) {
-    /** Admins may read hidden products too; the customer app only sees available ones. */
-    suspend fun products(): List<Product> {
+    /**
+     * Admins may read hidden products too; the customer app only sees available ones.
+     *
+     * The token is required. The `products read` policy is
+     * `available or is_admin()`, so an anonymous request silently returns the
+     * available rows only: a product switched off would disappear from the
+     * management list instead of showing as hidden, and could never be edited
+     * back on.
+     */
+    suspend fun products(token: String): List<Product> {
         val response = client.get("${config.baseUrl}/rest/v1/products") {
-            headers()
+            headers(token)
             parameter("select", "id,name,price,description,image_url,category,available,sort_order,created_at")
             parameter("order", "sort_order.asc,created_at.desc")
         }
@@ -228,22 +236,32 @@ class AdminApi(
         return response.status.isSuccess()
     }
 
-    /** Uploads a compressed product image to the private bucket and returns its public URL. */
-    suspend fun uploadProductImage(fileName: String, bytes: ByteArray): String? {
+    /**
+     * Uploads a compressed product image to the bucket and returns its public URL.
+     *
+     * The bearer token is mandatory here: the bucket policies allow insert only
+     * to `authenticated` users for whom `is_admin()` is true, so a request that
+     * carries the publishable key alone is rejected with 403. The upload used to
+     * be sent without it, which made every call fail even though the rest of the
+     * chain was in place.
+     */
+    suspend fun uploadProductImage(token: String, fileName: String, bytes: ByteArray): String? {
         val response = client.post("${config.baseUrl}/storage/v1/object/product-images/$fileName") {
-            headers()
+            headers(token)
             // Ktor has no WebP constant, so the MIME type is parsed explicitly.
             contentType(ContentType.parse("image/webp"))
             setBody(bytes)
         }
         if (!response.status.isSuccess()) return null
-        val wire = runCatching { response.body<ProductImageWire>() }.getOrNull() ?: return null
-        return wire.publicUrl ?: wire.path?.let { "${config.baseUrl}/storage/v1/object/public/product-images/$it" }
+        val wire = runCatching { response.body<ProductImageWire>() }.getOrNull()
+        return wire?.publicUrl
+            ?: wire?.path?.let { "${config.baseUrl}/storage/v1/object/public/product-images/$it" }
+            ?: "${config.baseUrl}/storage/v1/object/public/product-images/$fileName"
     }
 
-    suspend fun deleteProductImage(path: String): Boolean {
+    suspend fun deleteProductImage(token: String, path: String): Boolean {
         val response = client.delete("${config.baseUrl}/storage/v1/object/product-images/$path") {
-            headers()
+            headers(token)
         }
         return response.status.isSuccess()
     }

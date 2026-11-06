@@ -169,6 +169,48 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
         }
     }
 
+    /**
+     * Uploads a picked photo and stores its URL on the product, in one action.
+     *
+     * The form used to need two separate steps (copy the URL, paste it into a
+     * field), and the upload it depends on was never called from the screen. A
+     * single call removes both failure points: either the link lands on the
+     * product row, or [onDone] receives null and the caller shows an error.
+     *
+     * An existing product is patched immediately and the list is refreshed. A
+     * product that is still being created has no id yet, so the URL is only
+     * returned to the form, which saves it together with the rest of the fields.
+     */
+    fun attachImage(
+        productId: String?,
+        fileName: String,
+        bytes: ByteArray,
+        onDone: (String?) -> Unit,
+    ) {
+        val session = repository.sessionHolder.session.value ?: return
+        viewModelScope.launch {
+            val url = repository.uploadImage(session, fileName, bytes)
+            if (url != null && productId != null) {
+                val product = _products.value.firstOrNull { it.id == productId }
+                val saved = product != null && repository.upsertProduct(
+                    session = session,
+                    id = product.id,
+                    name = product.name,
+                    price = product.price,
+                    description = product.description,
+                    imageUrl = url,
+                    category = product.category,
+                    available = product.available,
+                    sortOrder = product.sortOrder,
+                )
+                if (saved) refresh()
+                onDone(if (saved) url else null)
+                return@launch
+            }
+            onDone(url)
+        }
+    }
+
     fun saveSettings(values: Map<String, String>, onDone: (Boolean) -> Unit) {
         val session = repository.sessionHolder.session.value ?: return
         viewModelScope.launch {

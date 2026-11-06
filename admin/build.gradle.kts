@@ -132,6 +132,10 @@ dependencies {
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.hilt.work)
     implementation(libs.hilt.android)
+    // Product thumbnails in the list and the preview inside the form need to
+    // load the very images the admin just uploaded.
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.window)
     implementation(libs.androidx.work.runtime)

@@ -10,7 +10,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -29,12 +32,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.zakeleo877.saeedcore.designsystem.SaeedBottomSheet
 import com.zakeleo877.saeedcore.designsystem.SaeedButton
 import com.zakeleo877.saeedcore.designsystem.SaeedCard
@@ -61,7 +69,7 @@ fun ProductsScreen(
         sortOrder: Int,
     ) -> Unit,
     onDelete: (String) -> Unit,
-    onUploadImage: (String, ByteArray) -> Unit,
+    onUploadImage: (productId: String?, fileName: String, bytes: ByteArray, onDone: (String?) -> Unit) -> Unit,
 ) {
     var editing by remember { mutableStateOf<Product?>(null) }
     var creating by remember { mutableStateOf(false) }
@@ -125,6 +133,9 @@ fun ProductsScreen(
                     onSave(null, name, price, description, imageUrl, category, available, sortOrder)
                     creating = false
                 },
+                onUploadImage = { fileName, bytes, onDone ->
+                    onUploadImage(null, fileName, bytes, onDone)
+                },
                 onDismiss = { creating = false },
             )
         }
@@ -138,6 +149,9 @@ fun ProductsScreen(
                 onSave = { name, price, description, imageUrl, category, available, sortOrder ->
                     onSave(product.id, name, price, description, imageUrl, category, available, sortOrder)
                     editing = null
+                },
+                onUploadImage = { fileName, bytes, onDone ->
+                    onUploadImage(product.id, fileName, bytes, onDone)
                 },
                 onDismiss = { editing = null },
             )
@@ -184,6 +198,20 @@ private fun ProductRow(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (product.imageUrl.isNotBlank()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(product.imageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = stringResource(R.string.admin_image_preview),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                )
+                Spacer(Modifier.size(12.dp))
+            }
             Column(Modifier.weight(1f)) {
                 Text(
                     text = product.name,
@@ -233,6 +261,7 @@ private fun ProductFormSheet(
         available: Boolean,
         sortOrder: Int,
     ) -> Unit,
+    onUploadImage: (fileName: String, bytes: ByteArray, onDone: (String?) -> Unit) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var name by remember { mutableStateOf(product?.name.orEmpty()) }
@@ -243,10 +272,16 @@ private fun ProductFormSheet(
     var available by remember { mutableStateOf(product?.available ?: true) }
     var sortOrder by remember { mutableStateOf(product?.sortOrder ?: 0) }
     var priceError by remember { mutableStateOf(false) }
+    var uploading by remember { mutableStateOf(false) }
+    var uploadFailed by remember { mutableStateOf(false) }
 
+    // The form is taller than the sheet on a small phone once the image preview
+    // is in place, so it scrolls as a whole; otherwise the save button sits
+    // below the visible area and can never be pressed.
     Column(
         Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -280,10 +315,23 @@ private fun ProductFormSheet(
             onValueChange = { category = it },
             label = stringResource(R.string.admin_product_category),
         )
-        SaeedTextField(
-            value = imageUrl,
-            onValueChange = { imageUrl = it },
-            label = stringResource(R.string.admin_product_image),
+        ProductImagePicker(
+            imageUrl = imageUrl,
+            uploading = uploading,
+            uploadError = uploadFailed,
+            onLinkChange = { imageUrl = it },
+            onUpload = { fileName, bytes ->
+                uploading = true
+                uploadFailed = false
+                onUploadImage(fileName, bytes) { url ->
+                    uploading = false
+                    if (url != null) {
+                        imageUrl = url
+                    } else {
+                        uploadFailed = true
+                    }
+                }
+            },
         )
 
         Row(verticalAlignment = Alignment.CenterVertically) {

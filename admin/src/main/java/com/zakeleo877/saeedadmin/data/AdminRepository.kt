@@ -84,7 +84,7 @@ class AdminRepository(
         return if (claimed) AdminAuthorization.Authorized else AdminAuthorization.NotAuthorized
     }
 
-    suspend fun products(session: AdminSession): List<Product> = api.products()
+    suspend fun products(session: AdminSession): List<Product> = api.products(session.accessToken)
 
     suspend fun orders(session: AdminSession, status: OrderStatus? = null): List<Order> =
         api.orders(status)
@@ -107,7 +107,7 @@ class AdminRepository(
     ): Boolean = api.upsertProduct(id, name, price, description, imageUrl, category, available, sortOrder)
 
     suspend fun uploadImage(session: AdminSession, fileName: String, bytes: ByteArray): String? =
-        api.uploadProductImage(fileName, bytes)
+        api.uploadProductImage(session.accessToken, fileName, bytes)
 
     suspend fun updateSettings(session: AdminSession, values: Map<String, String>): Boolean =
         api.updateSettings(values)
