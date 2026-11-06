@@ -49,23 +49,47 @@ fi
 
 # 12. No secrets.
 # The pattern is assembled from parts so that this script does not match itself.
-# Both key families are covered: the legacy `service_role` JWT and the newer
-# `sb_secret_` token, plus any leaked publishable token.
+# Both key families are covered: the legacy high-privilege JWT and the newer
+# secret token, plus any leaked publishable token.
 SECRET_PATTERN="AIza[0-9A-Za-z_-]{35}|sk-[A-Za-z0-9]{20,}|service""_role"
 SECRET_PATTERN="$SECRET_PATTERN|eyJ[A-Za-z0-9_-]{20,}\\.[A-Za-z0-9_-]{20,}"
 SECRET_PATTERN="$SECRET_PATTERN|sb_secret_[A-Za-z0-9_-]{10,}|sb_publishable_[A-Za-z0-9_-]{16,}"
+
+# The scan judges what Git would publish. A file Git ignores and does not track
+# is not published, so a hit there is dropped: `local.properties` holds the real
+# values on a developer machine by design. A file that is tracked is scanned
+# whether it is ignored or not, which is what matters for a real leak.
+IGNORED_FILES="$(git ls-files --others --ignored --exclude-standard 2>/dev/null || true)"
+
 SECRET_HITS="$(grep -rnoE "$SECRET_PATTERN" \
   --exclude-dir={.git,build,.gradle,node_modules,.idea} \
   --exclude='package-lock.json' \
   --exclude='saeed-stores-prompt-v2_2.md' \
   --exclude='verify-repo.sh' \
   . 2>/dev/null || true)"
+
+PUBLISHED_HITS="$(
+  printf '%s\n' "$SECRET_HITS" | while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    file="${line%%:*}"
+    file="${file#./}"
+    case "$file" in
+      local.properties|keystore.properties) continue ;;
+    esac
+    if [ -n "$IGNORED_FILES" ] && printf '%s\n' "$IGNORED_FILES" | grep -qxF "$file"; then
+      continue
+    fi
+    printf '%s\n' "$line"
+  done
+)"
+
 # The tests carry deliberately fake values so that the key checks can run. They
 # are dropped by looking at the value itself, not at the surrounding line, so a
 # real key is still reported even when it sits next to the word `test`.
-REAL_HITS="$(printf '%s\n' "$SECRET_HITS" \
+REAL_HITS="$(printf '%s\n' "$PUBLISHED_HITS" \
   | grep -vE ':[A-Za-z0-9_-]*(placeholder|_fake|fake_|not_allowed|_test_|ForTest|for_the_)[A-Za-z0-9_-]*$' \
   | sed '/^$/d' || true)"
+
 if [ -z "$REAL_HITS" ]; then
   pass "12. no secrets committed"
 else

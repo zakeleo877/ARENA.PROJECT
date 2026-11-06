@@ -99,6 +99,10 @@ private data class ProductImageWire(
  * Admin-side PostgREST access. Every call carries the admin's own bearer token,
  * so RLS alone decides what is visible. The customer app never uses this class.
  */
+/** How many orders one screen asks for, and the ceiling for a caller. */
+private const val ORDERS_PAGE_SIZE = 100
+private const val MAX_ORDERS_PAGE_SIZE = 500
+
 class AdminApi(
     private val client: HttpClient,
     private val config: SupabasePublicConfig,
@@ -114,11 +118,22 @@ class AdminApi(
         return response.body<List<JsonObject>>().map { productFrom(it) }
     }
 
-    suspend fun orders(status: OrderStatus? = null): List<Order> {
+    /**
+     * The newest orders, at most [limit] of them.
+     *
+     * The screen never needs the whole table, and the table grows without a
+     * ceiling: a shop that takes 200 orders a day has 73000 rows after a year.
+     * Asking for all of them meant an ever larger response, an ever longer
+     * parse, and a list that the user had to scroll instead of search. The
+     * server stops at [limit] rows and the index provides the order, so the
+     * cost of one screen does not grow with the age of the shop.
+     */
+    suspend fun orders(status: OrderStatus? = null, limit: Int = ORDERS_PAGE_SIZE): List<Order> {
         val response = client.get("${config.baseUrl}/rest/v1/orders") {
             headers()
             parameter("select", "id,number,customer,phone,notes,location,channel,status,details,total,client_id,created_at")
             parameter("order", "created_at.desc")
+            parameter("limit", limit.coerceIn(1, MAX_ORDERS_PAGE_SIZE))
             if (status != null) parameter("status", "eq.${status.databaseValue}")
         }
         ensureSuccess(response)

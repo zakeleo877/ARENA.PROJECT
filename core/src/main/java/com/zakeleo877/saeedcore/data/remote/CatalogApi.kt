@@ -94,12 +94,25 @@ private data class OrderRequestWire(
 @Serializable
 private data class PostgrestError(val message: String? = null)
 
+/** A ceiling that sits far above a real shop, so no visible product is lost. */
+private const val CATALOG_PAGE_CEILING = 5000
+
 class CatalogApi(private val client: HttpClient, private val config: SupabasePublicConfig) {
+    /**
+     * The whole visible catalog, with a ceiling.
+     *
+     * The customer screen holds every product in memory and builds its category
+     * chips from them, so the response has to be bounded: an unbounded read
+     * would let one large table turn into a long parse and a janky first frame.
+     * The ceiling is far above a real shop, so it never cuts a catalog that the
+     * screen could have shown anyway, and the partial index provides the order.
+     */
     suspend fun products(): List<Product> {
         val response = client.get("${config.baseUrl}/rest/v1/products") {
             publicHeaders()
             parameter("select", "id,name,price,description,image_url,category,available,sort_order,created_at")
             parameter("order", "sort_order.asc,created_at.desc")
+            parameter("limit", CATALOG_PAGE_CEILING)
         }
         ensureSuccess(response)
         return response.body<List<ProductWire>>().map(ProductWire::model)

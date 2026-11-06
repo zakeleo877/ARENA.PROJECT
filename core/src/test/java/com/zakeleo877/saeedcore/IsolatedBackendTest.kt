@@ -5,6 +5,7 @@ import com.zakeleo877.saeedcore.data.SubmitOutcome
 import com.zakeleo877.saeedcore.data.local.PendingOrderDao
 import com.zakeleo877.saeedcore.data.local.PendingOrderEntity
 import com.zakeleo877.saeedcore.data.remote.AuthError
+import com.zakeleo877.saeedcore.data.remote.AdminApi
 import com.zakeleo877.saeedcore.data.remote.AuthManager
 import com.zakeleo877.saeedcore.data.remote.AuthResult
 import com.zakeleo877.saeedcore.data.remote.CatalogApi
@@ -286,6 +287,73 @@ class IsolatedBackendTest {
             val result = manager.signIn("", "Password123")
             assertTrue(result is AuthResult.Failure)
             assertEquals(AuthError.INVALID_CREDENTIALS, (result as AuthResult.Failure).reason)
+        } finally {
+            httpClient.close()
+        }
+    }
+
+    /**
+     * The order list is bounded, and the bound reaches the server.
+     *
+     * Without a bound the management screen asked for the whole table, so the
+     * response grew with the age of the shop: 73000 rows after a year at 200
+     * orders a day. This drives the real AdminApi and reads the query string
+     * that it produced, so a regression that drops the bound is caught.
+     */
+    @Test
+    fun theOrderListAsksTheServerForABoundedPage() = runTest {
+        var requested: String? = null
+        val engine = MockEngine { request ->
+            requested = request.url.toString()
+            respond(
+                content = "[]",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val httpClient = HttpClient(engine) {
+            install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) {
+                json(io.ktor.serialization.kotlinx.json.json(io.ktor.serialization.kotlinx.json.DefaultJson))
+            }
+        }
+        try {
+            val admin = AdminApi(httpClient, config())
+            val orders = admin.orders(limit = 25)
+            assertTrue("an empty answer is fine", orders.isEmpty())
+            assertTrue("a request must have been made", requested != null)
+            val url = requested!!
+            assertTrue("the request must carry a limit, was: $url", url.contains("limit=25"))
+            assertTrue("the request must not ask for the whole table", !url.contains("limit=1000000"))
+        } finally {
+            httpClient.close()
+        }
+    }
+
+    /**
+     * A caller cannot raise the bound past the ceiling, which keeps one client
+     * from pulling an unbounded page even if a future screen asks for it.
+     */
+    @Test
+    fun theOrderPageCeilingHolds() = runTest {
+        var requested: String? = null
+        val engine = MockEngine { request ->
+            requested = request.url.toString()
+            respond(
+                content = "[]",
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
+        }
+        val httpClient = HttpClient(engine) {
+            install(io.ktor.client.plugins.contentnegotiation.ContentNegotiation) {
+                json(io.ktor.serialization.kotlinx.json.json(io.ktor.serialization.kotlinx.json.DefaultJson))
+            }
+        }
+        try {
+            AdminApi(httpClient, config()).orders(limit = 1_000_000)
+            val url = requested!!
+            assertTrue("the limit must be capped, was: $url", !url.contains("1000000"))
+            assertTrue("the cap must still be a real page", Regex("limit=(\\d+)").find(url)?.groupValues?.get(1)?.toInt()?.let { it <= 500 } == true)
         } finally {
             httpClient.close()
         }
