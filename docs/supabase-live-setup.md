@@ -19,7 +19,7 @@ GitHub Actions الحقيقي في `docs/live-results.md`.
 | الموضع | ما يفعله |
 |---|---|
 | خطوة `Generate local.properties` | يُفشل البناء إذا بدأ المفتاح بـ `sb_secret_` |
-| `customer/build.gradle.kts` و`admin/build.gradle.kts` | يرفض المفتاح السري وأي JWT بدور `service_role` |
+| `customer/build.gradle.kts` و`admin/build.gradle.kts` | يرفض المفتاح السري وأي JWT بدور عالٍ (المفتاح القديم الذي يتجاوز RLS) |
 | `scripts/verify-repo.sh` (12) | يرفض أي مفتاح سري أو عام يُلصق في Git |
 | `scripts/verify-apk-keys.sh` (12b) | يقرأ داخل الـ APK ويؤكد عدم وجود مفتاح سري |
 
