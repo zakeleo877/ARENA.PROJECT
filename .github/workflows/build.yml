@@ -190,7 +190,8 @@ jobs:
               echo "sdk.dir=$ANDROID_HOME"
             } > local.properties
             echo "PLACEHOLDER=1" >> "$GITHUB_ENV"
-            exit 1
+            echo "::warning::SUPABASE_URL and SUPABASE_KEY are not configured; the packages point at a placeholder."
+            exit 0
           fi
           echo "::add-mask::$SUPABASE_URL"
           echo "::add-mask::$SUPABASE_KEY"
@@ -436,6 +437,20 @@ jobs:
 
       # The failure output is published with the GitHub API so it can be read
       # even when the log and artifact storage hosts are unreachable.
+      # The checks above still run without the credentials, because packaging
+      # regressions have to be caught either way. This step is what makes the
+      # job red, so a package that cannot reach the store is never mistaken
+      # for a finished one.
+      - name: Require the project configuration
+        if: env.PLACEHOLDER == '1'
+        run: |
+          echo "FAIL: SUPABASE_URL and SUPABASE_KEY are not configured."
+          echo "      Settings, Secrets and variables, Actions, then add both."
+          echo "      The publishable key goes in SUPABASE_KEY; a secret key is refused."
+          echo "      Every packaging check above ran against the placeholder address,"
+          echo "      so the packages are not usable until this step can pass."
+          exit 1
+
       - name: Collect the unit test reports
         if: always()
         run: |
