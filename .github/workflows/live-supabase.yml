@@ -19,6 +19,11 @@ name: Live Supabase checks
 on:
   workflow_dispatch:
     inputs:
+      project_url:
+        description: 'https://<project-ref>.supabase.co -- leave empty to use TEST_SUPABASE_URL'
+        required: false
+        default: ''
+        type: string
       mode:
         description: 'test writes and deletes orders; production only reads'
         required: true
@@ -53,6 +58,7 @@ jobs:
       - name: Refuse to run against an unconfirmed project
         env:
           CONFIRMED: ${{ vars.TEST_PROJECT_CONFIRMED }}
+          INPUT_URL: ${{ inputs.project_url }}
           URL: ${{ secrets.TEST_SUPABASE_URL }}
           KEY: ${{ secrets.TEST_SUPABASE_KEY }}
         run: |
@@ -63,10 +69,19 @@ jobs:
             echo "      is a project that is safe to write test orders into."
             exit 1
           fi
+          URL="${INPUT_URL:-${URL:-}}"
           if [ -z "${URL:-}" ] || [ -z "${KEY:-}" ]; then
-            echo "FAIL: TEST_SUPABASE_URL and TEST_SUPABASE_KEY must be set."
+            echo "FAIL: a project address and the publishable key are required."
+            echo "      Give the address in the project_url input of the run,"
+            echo "      and set TEST_SUPABASE_KEY (or SUPABASE_KEY) in the secrets."
             exit 1
           fi
+          case "$URL" in
+            https://*.supabase.co|https://*.supabase.co/) : ;;
+            http://127.0.0.1:*|http://localhost:*) : ;;
+            *) echo "FAIL: the address must be https://<project-ref>.supabase.co"
+               exit 1 ;;
+          esac
           case "$KEY" in
             sb_secret_*)
               echo "FAIL: TEST_SUPABASE_KEY is a secret key, so it bypasses RLS."
@@ -80,16 +95,19 @@ jobs:
       # schema is applied and says precisely which part is missing.
       - name: Check the schema on the project (read only)
         env:
-          URL: ${{ secrets.TEST_SUPABASE_URL }}
-          KEY: ${{ secrets.TEST_SUPABASE_KEY }}
+          INPUT_URL: ${{ inputs.project_url }}
+          URL: ${{ secrets.TEST_SUPABASE_URL || secrets.SUPABASE_URL }}
+          KEY: ${{ secrets.TEST_SUPABASE_KEY || secrets.SUPABASE_KEY }}
         run: |
           set -uo pipefail
-          bash scripts/project-preflight.sh
+          if [ -n "${INPUT_URL:-}" ]; then export TEST_SUPABASE_URL="$INPUT_URL"; fi
+          bash scripts/project-preflight.sh | tee preflight.txt
 
       - name: Run the live acceptance checks
         env:
-          TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
-          TEST_SUPABASE_KEY: ${{ secrets.TEST_SUPABASE_KEY }}
+          INPUT_URL: ${{ inputs.project_url }}
+          TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL || secrets.SUPABASE_URL }}
+          TEST_SUPABASE_KEY: ${{ secrets.TEST_SUPABASE_KEY || secrets.SUPABASE_KEY }}
           TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
           TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
           TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
@@ -98,17 +116,20 @@ jobs:
           ALLOW_ORDER_WRITE: ${{ inputs.allow_order_write && '1' || '0' }}
         run: |
           set -o pipefail
+          if [ -n "${INPUT_URL:-}" ]; then export TEST_SUPABASE_URL="$INPUT_URL"; fi
           bash scripts/live-acceptance.sh | tee live-acceptance.txt
 
       - name: Run the database security checks 14-25
         if: inputs.mode == 'test'
         env:
-          TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL }}
-          TEST_SUPABASE_KEY: ${{ secrets.TEST_SUPABASE_KEY }}
+          INPUT_URL: ${{ inputs.project_url }}
+          TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL || secrets.SUPABASE_URL }}
+          TEST_SUPABASE_KEY: ${{ secrets.TEST_SUPABASE_KEY || secrets.SUPABASE_KEY }}
           TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
           TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
         run: |
           set -o pipefail
+          if [ -n "${INPUT_URL:-}" ]; then export TEST_SUPABASE_URL="$INPUT_URL"; fi
           bash scripts/db-security-tests.sh | tee db-security.txt
 
       - name: Publish the result
@@ -120,6 +141,11 @@ jobs:
             echo
             echo "Project: the value of TEST_SUPABASE_URL (not printed)."
             echo "Mode: ${{ inputs.mode }}"
+            echo
+            echo '## The state of the project'
+            echo '```'
+            cat preflight.txt 2>/dev/null || echo '(not reached)'
+            echo '```'
             echo
             echo '## Acceptance'
             echo '```'
