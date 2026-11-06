@@ -107,7 +107,8 @@ for module in customer admin; do
   fi
 done
 # The workflows build the two packages from the publishable key only.
-if grep -A 30 'Generate local.properties' .github/workflows/build.yml | grep -q 'sb_secret_'; then
+# The window has to be wide enough to reach the guard after the address block.
+if grep -A 60 'Generate local.properties' .github/workflows/build.yml | grep -q 'sb_secret_'; then
   pass "12d. the build refuses a secret key before compiling"
 else
   fail "12d. the build does not refuse a secret key"
