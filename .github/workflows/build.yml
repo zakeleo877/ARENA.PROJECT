@@ -369,6 +369,13 @@ jobs:
             echo '```'
             grep -E 'error:|e: |FAILED|Execution failed|Caused by|\* What went wrong|^\s+>' -A 3 /tmp/gradle-test.log | head -n 150
             echo '```'
+            # The job log itself may be unreadable from outside, but check
+            # annotations are served by the API. Publish the first concrete
+            # compiler or test error as an annotation so the cause is visible
+            # without downloading the log.
+            DIAG="$(grep -E '^e: file |error:|FAILED|Execution failed|Caused by|\* What went wrong|> There were|Lint found' /tmp/gradle-test.log 2>/dev/null \
+              | head -n 12 | sed 's/%/%25/g' | tr '\n' '|')"
+            echo "::error title=Gradle test and lint diagnosis::${DIAG:-no matching line in the log}"
             exit 1
           }
 
@@ -380,6 +387,9 @@ jobs:
             echo '```'
             grep -E 'error:|e: |FAILED|Execution failed|Caused by|\* What went wrong|^\s+>' -A 3 /tmp/gradle-build.log | head -n 180
             echo '```'
+            DIAG="$(grep -E '^e: file |error:|FAILED|Execution failed|Caused by|\* What went wrong|> There were' /tmp/gradle-build.log 2>/dev/null \
+              | head -n 12 | sed 's/%/%25/g' | tr '\n' '|')"
+            echo "::error title=Gradle build diagnosis::${DIAG:-no matching line in the log}"
             exit 1
           }
           mkdir -p artifacts/apk
