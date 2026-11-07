@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -29,6 +30,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Search
@@ -144,9 +146,13 @@ fun CatalogScreen(
                 onCategorySelected = { selectedCategory = it },
                 offersOnly = offersOnly,
                 onOffersOnly = { offersOnly = !offersOnly },
-                modifier = Modifier.padding(horizontal = 16.dp),
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    // Lifted onto the header so the two read as one block
+                    // instead of a green band followed by a floating field.
+                    .offset(y = (-22).dp),
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(2.dp))
 
             if (state.offline) OfflineBanner()
 
@@ -234,7 +240,7 @@ private fun CatalogHeader(
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 32.dp),
+                .padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
@@ -586,7 +592,7 @@ private fun BottomBar(
             // clickable: tapping it can do nothing, and pretending otherwise
             // would be a lie to the user and to a screen reader.
             BarItem(
-                icon = Icons.Filled.Inventory2,
+                icon = Icons.Filled.Dashboard,
                 label = stringResource(R.string.catalog_all),
                 selected = true,
                 badgeCount = 0,
