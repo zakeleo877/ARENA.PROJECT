@@ -615,3 +615,30 @@ jobs:
           name: saeed-stores-apks
           path: artifacts/
           if-no-files-found: warn
+
+      # A public download that needs no GitHub account. The artifact above is
+      # only reachable by someone signed in, and its link expires; the release
+      # assets stay put and can be fetched with a plain browser.
+      - name: Publish the APKs as a release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          if [ ! -s artifacts/apk/saeed-store-1.0.apk ] || [ ! -s artifacts/apk/saeed-admin-1.0.apk ]; then
+            echo "No APK was produced, so there is nothing to publish."
+            exit 0
+          fi
+          TAG="build-${GITHUB_RUN_NUMBER}"
+          NOTES="النسخة المبنية من الالتزام ${GITHUB_SHA:0:7}.
+          الحزمتان موقّعتان بمفتاح التطوير، فالسبب نفسه لا يظهر كتحديث فوق نسخة سابقة موقّعة بمفتاح آخر: احذف النسخة القديمة قبل التثبيت."
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/apk/*.apk --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" artifacts/apk/*.apk \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "نسخة ${GITHUB_RUN_NUMBER}" \
+              --notes "$NOTES"
+          fi
+          echo "The download page is https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
