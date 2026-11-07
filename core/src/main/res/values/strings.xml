@@ -12,4 +12,6 @@
     <string name="preview_empty_message">لا توجد عناصر للعرض</string>
     <string name="preview_title">محلات السعيد</string>
     <string name="preview_dialog_message">هذه نافذة معاينة للتصميم.</string>
+
+    <string name="product_unavailable">غير متاح</string>
 </resources>

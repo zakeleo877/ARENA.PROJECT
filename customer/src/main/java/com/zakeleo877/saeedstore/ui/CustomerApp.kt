@@ -91,6 +91,7 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                     animatedScope = this,
                     state = state,
                     cartCount = cartCount,
+                    pendingCount = pendingOrders.size,
                     onProductClick = { product ->
                         selectedProduct = product
                         navController.navigate(Routes.DETAIL)

@@ -59,4 +59,16 @@
     <string name="pending_error_rate">تم تجاوز عدد الطلبات المسموح بها، حاول لاحقاً.</string>
 
     <string name="generic_error">حدث خطأ، حاول مجدداً.</string>
+
+    <!-- The green storefront -->
+    <string name="catalog_greeting">أهلاً بك في</string>
+    <string name="catalog_all">الكل</string>
+    <string name="catalog_filter">تصفية</string>
+    <string name="catalog_offers">العروض</string>
+    <string name="catalog_previous_price">%1$s قبل</string>
+    <string name="catalog_discount_badge">-%1$d%%</string>
+    <string name="catalog_rating">%1$s</string>
+    <string name="catalog_rating_description">التقييم %1$s من 5</string>
+    <string name="catalog_offers_only">العروض فقط</string>
+    <string name="catalog_clear_filters">إزالة التصفية</string>
 </resources>

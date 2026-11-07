@@ -83,7 +83,11 @@ def strip_noise(text: str) -> str:
 def check_modifier_extensions(path: pathlib.Path, code: str, imports: set[str]) -> None:
     for match in re.finditer(r"Modifier\s*\.\s*([A-Za-z_]\w*)", code):
         name = match.group(1)
-        if name in LAYOUT_EXTENSIONS and f"androidx.compose.foundation.layout.{name}" not in imports:
+        imported = any(
+            f"androidx.compose.{group}.{name}" in imports
+            for group in ("foundation.layout", "ui.draw")
+        )
+        if name in LAYOUT_EXTENSIONS and not imported:
             line = code[: match.start()].count("\n") + 1
             errors.append(
                 f"{path.relative_to(ROOT)}:{line}: Modifier.{name} is used but "

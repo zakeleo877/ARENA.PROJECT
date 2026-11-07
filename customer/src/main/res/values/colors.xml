@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="neon_void_background">#FF0A0A0F</color>
+    <color name="neon_void_background">#FFEDEEF2</color>
+    <!-- Kept under the old name so the theme files keep compiling. -->
 </resources>

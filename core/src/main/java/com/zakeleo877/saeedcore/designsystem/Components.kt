@@ -199,10 +199,10 @@ fun SaeedSearchField(
 @Composable
 fun SaeedStatusChip(status: OrderStatus, modifier: Modifier = Modifier) {
     val (label, icon, accent) = when (status) {
-        OrderStatus.NEW -> Triple(R.string.status_new, Icons.Filled.NewReleases, ElectricCyan)
+        OrderStatus.NEW -> Triple(R.string.status_new, Icons.Filled.NewReleases, MaterialTheme.colorScheme.primary)
         OrderStatus.PREPARING -> Triple(R.string.status_preparing, Icons.Filled.HourglassBottom, SemanticWarning)
         OrderStatus.READY -> Triple(R.string.status_ready, Icons.Filled.CheckCircle, SemanticSuccess)
-        OrderStatus.HANDED_OVER -> Triple(R.string.status_handed_over, Icons.Filled.DoneAll, ElectricCyan)
+        OrderStatus.HANDED_OVER -> Triple(R.string.status_handed_over, Icons.Filled.DoneAll, MaterialTheme.colorScheme.primary)
         OrderStatus.CANCELLED -> Triple(R.string.status_cancelled, Icons.Filled.Cancel, SemanticError)
     }
     Surface(
@@ -250,18 +250,18 @@ fun SaeedDialog(
         text = { Text(message) },
         confirmButton = {
             TextButton(onClick = { Haptics.confirm(haptics); onConfirm() }) {
-                Text(confirmLabel, color = SpectralWhite)
+                Text(confirmLabel, color = MaterialTheme.colorScheme.onSurface)
             }
         },
         dismissButton = {
             TextButton(onClick = { Haptics.tap(haptics); onDismiss() }) {
-                Text(stringResource(R.string.action_cancel), color = SpectralWhite)
+                Text(stringResource(R.string.action_cancel), color = MaterialTheme.colorScheme.onSurface)
             }
         },
         shape = MaterialTheme.shapes.large,
         containerColor = overlay,
-        titleContentColor = SpectralWhite,
-        textContentColor = SpectralWhite,
+        titleContentColor = MaterialTheme.colorScheme.onSurface,
+        textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 

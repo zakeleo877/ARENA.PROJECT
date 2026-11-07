@@ -4,7 +4,8 @@
         <item name="android:windowBackground">@color/neon_void_background</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowLightStatusBar">false</item>
+        <!-- A light page needs dark status-bar icons, or they vanish. -->
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 
     <style name="Theme.SaeedAdmin.Starting" parent="Theme.SplashScreen">

@@ -6,7 +6,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 
-/** Fixed dark palette; it intentionally does not follow dynamic device colors. */
+/** Fixed light palette; it intentionally does not follow dynamic device colors. */
 @Composable
 fun SaeedTheme(content: @Composable () -> Unit) {
     CompositionLocalProvider(
@@ -14,7 +14,7 @@ fun SaeedTheme(content: @Composable () -> Unit) {
         LocalSaeedSpacing provides SaeedSpacing(),
     ) {
         MaterialTheme(
-            colorScheme = NeonVoidColorScheme,
+            colorScheme = SaeedColorScheme,
             typography = SaeedTypography,
             shapes = SaeedShapes,
             content = content,
