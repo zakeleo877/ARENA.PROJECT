@@ -63,6 +63,25 @@ jobs:
             echo 'A customer runtime dependency could not be resolved.' >&2
             exit 1
           fi
+      # The report file itself is served from a storage host that is not
+      # reachable everywhere, so the counts are also published as an annotation:
+      # that is the only way to confirm from outside that a test actually ran.
+      - name: Summarise the shared unit tests
+        if: always()
+        run: |
+          TOTAL=0
+          FAILED=0
+          CLASSES=""
+          for report in $(find core/build/test-results -name 'TEST-*.xml' 2>/dev/null); do
+            LINE="$(grep -o 'tests="[0-9]*"' "$report" | head -n 1 | grep -o '[0-9]*')"
+            BAD="$(grep -o 'failures="[0-9]*"' "$report" | head -n 1 | grep -o '[0-9]*')"
+            TOTAL=$((TOTAL + ${LINE:-0}))
+            FAILED=$((FAILED + ${BAD:-0}))
+            CLASSES="$CLASSES $(basename "$report" .xml | sed 's/^TEST-//')"
+          done
+          echo "tests=$TOTAL failures=$FAILED"
+          echo "::notice title=core unit tests::$TOTAL tests, $FAILED failures in:$CLASSES"
+
       - name: Upload shared unit-test report
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
