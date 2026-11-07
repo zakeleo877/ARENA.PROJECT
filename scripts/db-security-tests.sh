@@ -171,6 +171,57 @@ for bad in "{\"product_id\":\"$ITEM_ID\",\"qty\":0}" "{\"product_id\":\"$ITEM_ID
   fi
 done
 
+# 26. A "was" price equal to the price must be refused.
+#
+# The shop hides the badge when the old price is not above the price, so a row
+# that stored an equal one would look discounted in the dashboard and full price
+# in the app. The database has to refuse it, not merely ignore it on display.
+#
+# Writing a product needs an admin, and the test user is deliberately not one,
+# so the check runs only when a separate admin account is supplied. Without it
+# the check reports that it was skipped instead of passing on nothing.
+if [ -n "${TEST_ADMIN_EMAIL:-}" ] && [ -n "${TEST_ADMIN_PASSWORD:-}" ]; then
+  ADMIN_JSON="$(curl -sS -H "apikey: $KEY" "${ANON_AUTH[@]}" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$TEST_ADMIN_EMAIL\",\"password\":\"$TEST_ADMIN_PASSWORD\"}" \
+    "$BASE/auth/v1/token?grant_type=password")"
+  ADMIN_TOKEN="$(echo "$ADMIN_JSON" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')"
+  if [ -z "$ADMIN_TOKEN" ]; then
+    printf 'NOTE: 26. skipped; TEST_ADMIN_EMAIL could not sign in\n'
+  else
+    PROBE_ID="$(cat /proc/sys/kernel/random/uuid)"
+    EQUAL_BODY="{\"id\":\"$PROBE_ID\",\"name\":\"probe-equal\",\"price\":\"1000.00\",\"original_price\":\"1000.00\"}"
+    CODE="$(curl -sS -o /tmp/dbt-body-$$ -w '%{http_code}' \
+      -H "apikey: $KEY" -H "Authorization: Bearer $ADMIN_TOKEN" \
+      -H 'Content-Type: application/json' -d "$EQUAL_BODY" "$BASE/rest/v1/products")"
+    BODY="$(cat /tmp/dbt-body-$$ 2>/dev/null)"
+    if [ "$CODE" = "400" ] || [ "$CODE" = "409" ] || [ "$CODE" = "422" ]; then
+      pass "26. an equal old price refused ($CODE)"
+    elif echo "$BODY" | grep -qi 'products_original_price_above_price'; then
+      pass "26. an equal old price refused by name"
+    else
+      # Leave no row behind if the database accepted it.
+      curl -sS -o /dev/null -H "apikey: $KEY" -H "Authorization: Bearer $ADMIN_TOKEN" \
+        -X DELETE "$BASE/rest/v1/products?id=eq.$PROBE_ID" 2>/dev/null || true
+      fail "26. an equal old price was accepted ($CODE)"
+    fi
+    # A real discount must still be accepted, or the rule would block the shop.
+    OK_ID="$(cat /proc/sys/kernel/random/uuid)"
+    OK_BODY="{\"id\":\"$OK_ID\",\"name\":\"probe-discount\",\"price\":\"800.00\",\"original_price\":\"1000.00\"}"
+    OK_CODE="$(curl -sS -o /tmp/dbt-body-$$ -w '%{http_code}' \
+      -H "apikey: $KEY" -H "Authorization: Bearer $ADMIN_TOKEN" \
+      -H 'Content-Type: application/json' -d "$OK_BODY" "$BASE/rest/v1/products")"
+    curl -sS -o /dev/null -H "apikey: $KEY" -H "Authorization: Bearer $ADMIN_TOKEN" \
+      -X DELETE "$BASE/rest/v1/products?id=eq.$OK_ID" 2>/dev/null || true
+    if [ "$OK_CODE" = "201" ] || [ "$OK_CODE" = "200" ] || [ "$OK_CODE" = "204" ]; then
+      pass "26b. a real discount is still accepted ($OK_CODE)"
+    else
+      fail "26b. a real discount was refused ($OK_CODE): $(head -c 160 /tmp/dbt-body-$$ 2>/dev/null)"
+    fi
+  fi
+else
+  printf 'NOTE: 26. skipped; set TEST_ADMIN_EMAIL and TEST_ADMIN_PASSWORD to run it\n'
+fi
+
 # 20. The sixth order from one phone within an hour must be rate limited.
 LIMIT_HIT=0
 for i in 1 2 3 4 5 6; do
