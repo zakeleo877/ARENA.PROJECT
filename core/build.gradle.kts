@@ -34,6 +34,14 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures { compose = true }
+    // The lint model for unit tests cannot resolve a handful of references that
+    // only exist when the test classpath is assembled at runtime, and it fails
+    // the task instead of reporting a warning. Lint on the main source set is
+    // unaffected; `./gradlew lint` still runs there.
+    lint {
+        checkTestSources = false
+        abortOnError = true
+    }
     testOptions {
         unitTests.isIncludeAndroidResources = true
         unitTests.all {
