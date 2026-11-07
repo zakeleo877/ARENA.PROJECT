@@ -126,12 +126,11 @@ fun SaeedCard(
         indication = LocalIndication.current,
         onClick = { Haptics.tap(haptics); onClick() },
     )
-    val glassAlpha = if (Build.VERSION.SDK_INT >= 31) 0.92f else 1f
     Card(
         modifier = modifier.graphicsLayer { scaleX = scale; scaleY = scale }.then(clickable),
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = glassAlpha),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             contentColor = MaterialTheme.colorScheme.onSurface,
         ),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -248,9 +247,10 @@ fun SaeedDialog(
     modifier: Modifier = Modifier,
 ) {
     val haptics = LocalHapticFeedback.current
-    val overlay = if (Build.VERSION.SDK_INT >= 31) {
-        MaterialTheme.colorScheme.secondary.copy(alpha = 0.90f)
-    } else MaterialTheme.colorScheme.secondary
+    // The dark palette tinted the dialog violet and relied on white labels. On a
+    // light page the text is dark, so the dialog uses the card surface; a 90%
+    // opaque violet would leave dark text on a dark panel.
+    val overlay = MaterialTheme.colorScheme.surfaceContainerHigh
     AlertDialog(
         modifier = modifier,
         onDismissRequest = onDismiss,
@@ -258,12 +258,12 @@ fun SaeedDialog(
         text = { Text(message) },
         confirmButton = {
             TextButton(onClick = { Haptics.confirm(haptics); onConfirm() }) {
-                Text(confirmLabel, color = MaterialTheme.colorScheme.onSurface)
+                Text(confirmLabel, color = MaterialTheme.colorScheme.primary)
             }
         },
         dismissButton = {
             TextButton(onClick = { Haptics.tap(haptics); onDismiss() }) {
-                Text(stringResource(R.string.action_cancel), color = MaterialTheme.colorScheme.onSurface)
+                Text(stringResource(R.string.action_cancel), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         shape = MaterialTheme.shapes.large,
@@ -280,12 +280,10 @@ fun SaeedBottomSheet(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    // Deep Void Violet surface layer; a translucent variant only on Android 12+.
-    val overlay = if (Build.VERSION.SDK_INT >= 31) {
-        MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f)
-    } else {
-        MaterialTheme.colorScheme.surfaceContainerHigh
-    }
+    // A light card on a light page. Transparency was for the dark palette,
+    // where it let a violet glow through; here it would only weaken the surface
+    // and let the content behind the sheet show through the text.
+    val overlay = MaterialTheme.colorScheme.surfaceContainerHigh
     // Material3's ModalBottomSheet drives the predictive back gesture itself
     // when android:enableOnBackInvokedCallback="true" is declared, so the
     // sheet shrinks with the gesture on Android 13+ without a custom handler.

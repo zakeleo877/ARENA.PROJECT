@@ -65,6 +65,27 @@ async function expectError(action, expected, message) {
     check(again.rows[0].claimed === false, 'admin claim cannot repeat');
     const visible = await db.query('select id from public.products');
     check(visible.rows.length === 2, 'admin can read all products');
+
+    // The discount and rating columns are optional, and a card shows a badge
+    // only when a real reduction exists, so the database has to refuse the
+    // combinations that would let a card lie about the price.
+    // 125.50 is the seeded price, so the old price has to be above it.
+    await db.query("update public.products set original_price = 199.00, rating = 4.5 where id = '10000000-0000-4000-8000-000000000001'")
+    const stored = await db.query("select original_price, rating from public.products where id = '10000000-0000-4000-8000-000000000001'");
+    check(Number(stored.rows[0].original_price) === 199 && Number(stored.rows[0].rating) === 4.5,
+      'a valid old price and rating are stored');
+    await db.query("update public.products set original_price = null, rating = null where id = '10000000-0000-4000-8000-000000000001'");
+    const cleared = await db.query("select original_price, rating from public.products where id = '10000000-0000-4000-8000-000000000001'");
+    check(cleared.rows[0].original_price === null && cleared.rows[0].rating === null,
+      'a missing discount and rating stay null rather than becoming zero');
+    await expectError(
+      () => db.query("update public.products set original_price = 1.00 where id = '10000000-0000-4000-8000-000000000001'"),
+      'products_original_price_above_price',
+      'an old price below the current price is rejected');
+    await expectError(
+      () => db.query("update public.products set rating = 7.5 where id = '10000000-0000-4000-8000-000000000001'"),
+      'products_rating_range',
+      'a rating above five is rejected');
   });
   await as('authenticated', otherId, async () => {
     const r = await db.query('select public.claim_first_admin() as claimed');

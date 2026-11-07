@@ -16,13 +16,18 @@ create table if not exists public.products (
     available   boolean not null default true,
     sort_order  integer not null default 0,
     created_at  timestamptz not null default now(),
-    -- Optional "was" price. Null means no discount is advertised. The check
-    -- keeps it above the current price, so a card can never show an old price
-    -- that is lower than what the customer actually pays.
-    original_price numeric(12,2) check (original_price is null or original_price >= price),
-    -- Average customer rating, one decimal place. Null means "not rated yet"
+    -- Optional "was" price. Null means no discount is advertised.
+    original_price numeric(12,2),
+    -- Average customer rating with one decimal. Null means "not rated yet"
     -- rather than zero, so a new product shows no stars instead of zero stars.
-    rating      numeric(2,1) check (rating is null or (rating >= 0 and rating <= 5))
+    --
+    -- Both columns are declared without an inline CHECK on purpose: an inline
+    -- check is auto-named products_check, while an existing database gains the
+    -- columns through ALTER and can only be guarded by a named constraint. The
+    -- named constraints below are therefore the single definition for both a
+    -- fresh and an upgraded database, and the error a client sees is always the
+    -- same name.
+    rating      numeric(2,1)
 );
 -- The columns are added separately so an existing database gains them too:
 -- CREATE TABLE IF NOT EXISTS above does nothing on a table that already exists.
@@ -36,8 +41,8 @@ comment on column public.products.original_price is
 comment on column public.products.rating is
     'Optional average rating 0..5 with one decimal; null means unrated.';
 
--- The same rules are added as named constraints so a database that gained the
--- columns through the ALTER above is guarded exactly like a fresh one.
+-- The rules for the two optional columns. Named, so PostgreSQL reports which
+-- rule was broken instead of a generic products_check.
 do $upgrade$
 begin
     if not exists (
