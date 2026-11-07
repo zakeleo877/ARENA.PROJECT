@@ -1,0 +1,26 @@
+name: Account probe
+on: workflow_dispatch
+permissions:
+  actions: read
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read the plan and the payer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          echo "repository: $GITHUB_REPOSITORY"
+          echo "--- repository flags ---"
+          gh api "repos/$GITHUB_REPOSITORY" \
+            --jq '{visibility, private, fork, owner_type: .owner.type, plan: .owner.plan}' || true
+          echo "--- owner account ---"
+          gh api "users/$(dirname "$GITHUB_REPOSITORY")" --jq '{login, type, plan}' || true
+          echo "--- billing (may be refused) ---"
+          gh api "users/$(dirname "$GITHUB_REPOSITORY")/settings/billing/actions" || true
+          echo "--- previous run conclusions ---"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs?per_page=3" \
+            --jq '.workflow_runs[] | "\(.id) \(.name) \(.conclusion)"' || true
