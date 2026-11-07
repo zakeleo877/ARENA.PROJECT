@@ -1,0 +1,15 @@
+{
+  "name": "saeed-schema-local-smoke-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline PostgreSQL smoke tests with mocked Supabase schemas; not a live security certification.",
+  "scripts": {
+    "test": "node local-smoke.cjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.15"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

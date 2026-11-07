@@ -1,0 +1,21 @@
+# Build output and local tool state
+.gradle/
+**/build/
+**/node_modules/
+.idea/
+*.iml
+.kotlin/
+.DS_Store
+
+# Device, signing, and local configuration
+local.properties
+keystore.properties
+*.jks
+*.keystore
+*.apk
+*.aab
+*.ap_
+*.log
+.env
+.env.*
+!.env.example

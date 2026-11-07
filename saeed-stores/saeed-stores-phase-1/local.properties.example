@@ -1,0 +1,4 @@
+# Copy to local.properties. Android Studio can add sdk.dir automatically.
+# Use only the project's low-privilege public key. Never put a privileged key in an APK.
+SUPABASE_URL=
+SUPABASE_KEY=

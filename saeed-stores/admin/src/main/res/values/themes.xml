@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Material3.Dark.NoActionBar" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/neon_void_background</item>
+        <item name="colorPrimary">@color/neon_void_primary</item>
+        <item name="colorSecondary">@color/neon_void_secondary</item>
+        <item name="android:statusBarColor">@color/neon_void_background</item>
+        <item name="android:navigationBarColor">@color/neon_void_background</item>
+    </style>
+</resources>
