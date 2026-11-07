@@ -34,6 +34,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * Screen level behaviour of the design system, driven through the Compose
@@ -42,7 +43,13 @@ import org.robolectric.annotation.Config
  * a mocked one.
  */
 @RunWith(AndroidJUnit4::class)
-@Config(sdk = [34])
+// The colours come from the theme, so the test has to resolve the resources of
+// this module. Without USE_APP_RESOURCES the asset loader falls back to a
+// download of an Android artifact, which fails on a runner with no egress and
+// reports only "classMethod FAILED". SDK 30 is the oldest release in the
+// Robolectric jar that ships with this build, so it needs no fetch either.
+@Config(sdk = [30], application = android.app.Application::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class DesignSystemUiTest {
 
     @get:Rule

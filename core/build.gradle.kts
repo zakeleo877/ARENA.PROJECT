@@ -39,6 +39,13 @@ android {
         unitTests.all {
             it.maxHeapSize = providers.gradleProperty("saeed.testHeap").getOrElse("768m")
             it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+            // The colours under test come from this module's own resources. Asking
+            // Robolectric to fetch the framework jar over the network made the
+            // class fail on a runner with restricted egress, reported only as
+            // "classMethod FAILED ... IOException".
+            it.systemProperty("robolectric.useFullClasspathForInstrumentation", "true")
+            it.systemProperty("robolectric.offline", "false")
+            it.systemProperty("robolectric.logging.enabled", "true")
         }
     }
 }
