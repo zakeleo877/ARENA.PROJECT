@@ -57,7 +57,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -327,7 +329,7 @@ private fun SearchAndFilters(
             item {
                 CategoryChip(
                     label = stringResource(R.string.catalog_all),
-                    selected = selectedCategory == null && !offersOnly,
+                    isSelected = selectedCategory == null && !offersOnly,
                     onClick = {
                         onCategorySelected(null)
                         if (offersOnly) onOffersOnly()
@@ -337,14 +339,14 @@ private fun SearchAndFilters(
             item {
                 CategoryChip(
                     label = stringResource(R.string.catalog_offers),
-                    selected = offersOnly,
+                    isSelected = offersOnly,
                     onClick = onOffersOnly,
                 )
             }
             items(categories) { category ->
                 CategoryChip(
                     label = category,
-                    selected = selectedCategory == category,
+                    isSelected = selectedCategory == category,
                     onClick = {
                         onCategorySelected(if (selectedCategory == category) null else category)
                     },
@@ -356,23 +358,25 @@ private fun SearchAndFilters(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val background = if (selected) SaeedGreen else SaeedChipSurface
-    val content = if (selected) Color.White else SaeedInk
+private fun CategoryChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
+    val background = if (isSelected) SaeedGreen else SaeedChipSurface
+    val content = if (isSelected) Color.White else SaeedInk
     Surface(
         onClick = onClick,
         shape = CircleShape,
         color = background,
         contentColor = content,
-        // The chip is a toggle for screen readers, not a plain button.
+        // The chip behaves as a toggle, so it is announced as one instead of
+        // repeating its own label as a separate description.
         modifier = Modifier.semantics {
-            contentDescription = label
+            role = Role.Button
+            selected = isSelected
         },
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelLarge,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
         )
     }
