@@ -104,7 +104,13 @@ class AdminRepository(
         category: String,
         available: Boolean,
         sortOrder: Int,
-    ): Boolean = api.upsertProduct(id, name, price, description, imageUrl, category, available, sortOrder)
+        originalPrice: BigDecimal? = null,
+        rating: Double? = null,
+    ): Boolean = api.upsertProduct(
+        id, name, price, description, imageUrl, category, available, sortOrder,
+        originalPrice = originalPrice,
+        rating = rating,
+    )
 
     suspend fun uploadImage(session: AdminSession, fileName: String, bytes: ByteArray): String? =
         api.uploadProductImage(session.accessToken, fileName, bytes)

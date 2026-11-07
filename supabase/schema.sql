@@ -15,8 +15,47 @@ create table if not exists public.products (
     category    text not null default 'عام' check (char_length(category) <= 60),
     available   boolean not null default true,
     sort_order  integer not null default 0,
-    created_at  timestamptz not null default now()
+    created_at  timestamptz not null default now(),
+    -- Optional "was" price. Null means no discount is advertised. The check
+    -- keeps it above the current price, so a card can never show an old price
+    -- that is lower than what the customer actually pays.
+    original_price numeric(12,2) check (original_price is null or original_price >= price),
+    -- Average customer rating, one decimal place. Null means "not rated yet"
+    -- rather than zero, so a new product shows no stars instead of zero stars.
+    rating      numeric(2,1) check (rating is null or (rating >= 0 and rating <= 5))
 );
+-- The columns are added separately so an existing database gains them too:
+-- CREATE TABLE IF NOT EXISTS above does nothing on a table that already exists.
+alter table public.products
+    add column if not exists original_price numeric(12,2);
+alter table public.products
+    add column if not exists rating numeric(2,1);
+
+comment on column public.products.original_price is
+    'Optional pre-discount price; must not be below price.';
+comment on column public.products.rating is
+    'Optional average rating 0..5 with one decimal; null means unrated.';
+
+-- The same rules are added as named constraints so a database that gained the
+-- columns through the ALTER above is guarded exactly like a fresh one.
+do $upgrade$
+begin
+    if not exists (
+        select 1 from pg_constraint where conname = 'products_original_price_above_price'
+    ) then
+        alter table public.products add constraint products_original_price_above_price
+            check (original_price is null or original_price >= price) not valid;
+        alter table public.products validate constraint products_original_price_above_price;
+    end if;
+    if not exists (
+        select 1 from pg_constraint where conname = 'products_rating_range'
+    ) then
+        alter table public.products add constraint products_rating_range
+            check (rating is null or (rating >= 0 and rating <= 5)) not valid;
+        alter table public.products validate constraint products_rating_range;
+    end if;
+end
+$upgrade$;
 
 create table if not exists public.orders (
     id         uuid primary key default gen_random_uuid(),

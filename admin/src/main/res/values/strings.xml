@@ -89,4 +89,11 @@
     <string name="admin_image_optional">اختياري</string>
     <string name="admin_image_from_picker">الاختيار من معرض الصور لا يحتاج أي صلاحية.</string>
     <string name="admin_link_alternative_title">أو استخدم رابطاً جاهزاً</string>
+
+    <string name="admin_product_original_price">السعر قبل الخصم</string>
+    <string name="admin_product_original_price_hint">اتركه فارغاً إن لم يكن هناك خصم. يجب أن يكون أعلى من السعر.</string>
+    <string name="admin_product_original_price_error">السعر قبل الخصم يجب أن يكون أعلى من السعر الحالي.</string>
+    <string name="admin_product_rating">التقييم (0 إلى 5)</string>
+    <string name="admin_product_rating_hint">اتركه فارغاً إن لم يُقيَّم المنتج بعد. لا تُدخل تقييماً من عندك.</string>
+    <string name="admin_product_rating_error">التقييم يجب أن يكون بين 0 و5.</string>
 </resources>

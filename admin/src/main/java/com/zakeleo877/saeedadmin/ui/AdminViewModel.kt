@@ -141,12 +141,16 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
         category: String,
         available: Boolean,
         sortOrder: Int,
+        originalPrice: BigDecimal? = null,
+        rating: Double? = null,
         onDone: (Boolean) -> Unit,
     ) {
         val session = repository.sessionHolder.session.value ?: return
         viewModelScope.launch {
             val ok = repository.upsertProduct(
                 session, id, name, price, description, imageUrl, category, available, sortOrder,
+                originalPrice = originalPrice,
+                rating = rating,
             )
             if (ok) refresh()
             onDone(ok)

@@ -67,6 +67,8 @@ fun ProductsScreen(
         category: String,
         available: Boolean,
         sortOrder: Int,
+        originalPrice: BigDecimal?,
+        rating: Double?,
     ) -> Unit,
     onDelete: (String) -> Unit,
     onUploadImage: (productId: String?, fileName: String, bytes: ByteArray, onDone: (String?) -> Unit) -> Unit,
@@ -129,8 +131,8 @@ fun ProductsScreen(
             ProductFormSheet(
                 product = null,
                 categories = products.map { it.category }.distinct().sorted(),
-                onSave = { name, price, description, imageUrl, category, available, sortOrder ->
-                    onSave(null, name, price, description, imageUrl, category, available, sortOrder)
+                onSave = { name, price, description, imageUrl, category, available, sortOrder, original, stars ->
+                    onSave(null, name, price, description, imageUrl, category, available, sortOrder, original, stars)
                     creating = false
                 },
                 onUploadImage = { fileName, bytes, onDone ->
@@ -146,8 +148,8 @@ fun ProductsScreen(
             ProductFormSheet(
                 product = product,
                 categories = products.map { it.category }.distinct().sorted(),
-                onSave = { name, price, description, imageUrl, category, available, sortOrder ->
-                    onSave(product.id, name, price, description, imageUrl, category, available, sortOrder)
+                onSave = { name, price, description, imageUrl, category, available, sortOrder, original, stars ->
+                    onSave(product.id, name, price, description, imageUrl, category, available, sortOrder, original, stars)
                     editing = null
                 },
                 onUploadImage = { fileName, bytes, onDone ->
@@ -169,6 +171,8 @@ private fun exportProducts(context: android.content.Context, products: List<Prod
         "رابط الصورة",
         "متاح",
         "الترتيب",
+        "السعر قبل الخصم",
+        "التقييم",
     )
     val rows = products.map { product ->
         listOf(
@@ -179,6 +183,8 @@ private fun exportProducts(context: android.content.Context, products: List<Prod
             product.imageUrl,
             if (product.available) "نعم" else "لا",
             product.sortOrder.toString(),
+            product.originalPrice?.toPlainString().orEmpty(),
+            product.rating?.toString().orEmpty(),
         )
     }
     val csv = CsvExporter.build(headers, rows)
@@ -260,6 +266,8 @@ private fun ProductFormSheet(
         category: String,
         available: Boolean,
         sortOrder: Int,
+        originalPrice: BigDecimal?,
+        rating: Double?,
     ) -> Unit,
     onUploadImage: (fileName: String, bytes: ByteArray, onDone: (String?) -> Unit) -> Unit,
     onDismiss: () -> Unit,
@@ -274,6 +282,10 @@ private fun ProductFormSheet(
     var priceError by remember { mutableStateOf(false) }
     var uploading by remember { mutableStateOf(false) }
     var uploadFailed by remember { mutableStateOf(false) }
+    var originalPrice by remember { mutableStateOf(product?.originalPrice?.toPlainString().orEmpty()) }
+    var rating by remember { mutableStateOf(product?.rating?.let { formatRating(it) }.orEmpty()) }
+    var originalError by remember { mutableStateOf(false) }
+    var ratingError by remember { mutableStateOf(false) }
 
     // The form is taller than the sheet on a small phone once the image preview
     // is in place, so it scrolls as a whole; otherwise the save button sits
@@ -302,6 +314,28 @@ private fun ProductFormSheet(
             label = stringResource(R.string.admin_product_price),
             isError = priceError,
             supportingText = if (priceError) stringResource(R.string.admin_price_error) else null,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        )
+        SaeedTextField(
+            value = originalPrice,
+            onValueChange = { originalPrice = it; originalError = false },
+            label = stringResource(R.string.admin_product_original_price),
+            isError = originalError,
+            supportingText = stringResource(
+                if (originalError) R.string.admin_product_original_price_error
+                else R.string.admin_product_original_price_hint,
+            ),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        )
+        SaeedTextField(
+            value = rating,
+            onValueChange = { rating = it; ratingError = false },
+            label = stringResource(R.string.admin_product_rating),
+            isError = ratingError,
+            supportingText = stringResource(
+                if (ratingError) R.string.admin_product_rating_error
+                else R.string.admin_product_rating_hint,
+            ),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         )
         SaeedTextField(
@@ -368,13 +402,29 @@ private fun ProductFormSheet(
             text = stringResource(R.string.admin_save),
             onClick = {
                 val parsed = price.toBigDecimalOrNull()
-                if (parsed == null || parsed.signum() < 0) {
-                    priceError = true
-                } else {
-                    onSave(name.trim(), parsed, description.trim(), imageUrl.trim(), category.trim(), available, sortOrder)
+                priceError = parsed == null || parsed.signum() < 0
+                // An old price only means something when it is above the new
+                // one; anything else is caught here instead of being silently
+                // dropped by the database check.
+                val parsedOriginal = originalPrice.trim().takeIf { it.isNotEmpty() }?.toBigDecimalOrNull()
+                originalError = originalPrice.isNotBlank() &&
+                    (parsedOriginal == null || (parsed != null && parsedOriginal <= parsed))
+                val parsedRating = rating.trim().takeIf { it.isNotEmpty() }?.toDoubleOrNull()
+                ratingError = rating.isNotBlank() && (parsedRating == null || parsedRating !in 0.0..5.0)
+                if (!priceError && !originalError && !ratingError && parsed != null) {
+                    onSave(
+                        name.trim(), parsed, description.trim(), imageUrl.trim(),
+                        category.trim(), available, sortOrder,
+                        parsedOriginal?.takeIf { it > parsed },
+                        parsedRating,
+                    )
                 }
             },
             modifier = Modifier.fillMaxWidth(),
         )
     }
 }
+
+/** One decimal at most, so "4.75" is not stored as a fake precise rating. */
+private fun formatRating(value: Double): String =
+    java.math.BigDecimal.valueOf(value).setScale(1, java.math.RoundingMode.HALF_UP).toPlainString()

@@ -20,16 +20,23 @@ data class ProductEntity(
     val available: Boolean,
     @ColumnInfo(name = "sort_order") val sortOrder: Int,
     @ColumnInfo(name = "created_at") val createdAtMillis: Long,
+    /** Stored as a decimal string for the same rounding reason as [price]. */
+    @ColumnInfo(name = "original_price") val originalPrice: String? = null,
+    val rating: Double? = null,
 ) {
     fun model() = Product(
         id, name, BigDecimal(price), description, imageUrl, category, available, sortOrder,
         Instant.ofEpochMilli(createdAtMillis),
+        originalPrice = originalPrice?.toBigDecimalOrNull(),
+        rating = rating,
     )
 
     companion object {
         fun from(model: Product) = ProductEntity(
             model.id, model.name, model.price.toPlainString(), model.description,
             model.imageUrl, model.category, model.available, model.sortOrder, model.createdAt.toEpochMilli(),
+            originalPrice = model.originalPrice?.toPlainString(),
+            rating = model.rating,
         )
     }
 }

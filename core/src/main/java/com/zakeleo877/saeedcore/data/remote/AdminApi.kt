@@ -42,6 +42,9 @@ private data class ProductUpsertWire(
     val category: String,
     val available: Boolean,
     @SerialName("sort_order") val sortOrder: Int,
+    /** Null clears the discount; the column allows null by design. */
+    @SerialName("original_price") val originalPrice: String? = null,
+    @SerialName("rating") val rating: String? = null,
 )
 
 @Serializable
@@ -119,7 +122,7 @@ class AdminApi(
     suspend fun products(token: String): List<Product> {
         val response = client.get("${config.baseUrl}/rest/v1/products") {
             headers(token)
-            parameter("select", "id,name,price,description,image_url,category,available,sort_order,created_at")
+            parameter("select", "id,name,price,description,image_url,category,available,sort_order,created_at,original_price,rating")
             parameter("order", "sort_order.asc,created_at.desc")
         }
         ensureSuccess(response)
@@ -191,6 +194,8 @@ class AdminApi(
         category: String,
         available: Boolean,
         sortOrder: Int,
+        originalPrice: BigDecimal? = null,
+        rating: Double? = null,
     ): Boolean {
         val payload = ProductUpsertWire(
             name = name,
@@ -200,6 +205,10 @@ class AdminApi(
             category = category,
             available = available,
             sortOrder = sortOrder,
+            // An old price that is not above the current one is not a discount;
+            // sending it would be rejected by the database check anyway.
+            originalPrice = originalPrice?.takeIf { it > price }?.toPlainString(),
+            rating = rating?.takeIf { it in 0.0..5.0 }?.let { String.format(java.util.Locale.US, "%.1f", it) },
         )
         val response = if (id == null) {
             client.post("${config.baseUrl}/rest/v1/products") {
@@ -289,6 +298,19 @@ class AdminApi(
         val available = json.getValue("available").jsonPrimitive.content.toBoolean()
         val sortOrder = json.getValue("sort_order").jsonPrimitive.content.toInt()
         val createdAt = OffsetDateTime.parse(json.getValue("created_at").jsonPrimitive.content).toInstant()
-        return Product(id, name, price, description, imageUrl, category, available, sortOrder, createdAt)
+        val originalPrice = json["original_price"].asDecimalOrNull()?.takeIf { it >= price }
+        val rating = json["rating"].asDecimalOrNull()?.toDouble()?.takeIf { it in 0.0..5.0 }
+        return Product(
+            id, name, price, description, imageUrl, category, available, sortOrder, createdAt,
+            originalPrice = originalPrice,
+            rating = rating,
+        )
+    }
+
+    /** Reads an optional numeric field returned as a string, a number, or null. */
+    private fun JsonElement?.asDecimalOrNull(): BigDecimal? {
+        val text = this?.jsonPrimitive?.contentOrNull ?: return null
+        if (text.isBlank() || text == "null") return null
+        return text.toBigDecimalOrNull()
     }
 }

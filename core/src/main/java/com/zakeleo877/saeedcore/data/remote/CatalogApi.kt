@@ -66,14 +66,37 @@ private data class ProductWire(
     val available: Boolean,
     @SerialName("sort_order") val sortOrder: Int,
     @SerialName("created_at") val createdAt: String,
+    @SerialName("original_price") val originalPrice: JsonElement? = null,
+    @SerialName("rating") val rating: JsonElement? = null,
 ) {
     fun model(): Product {
         val decimal = price.jsonPrimitive.contentOrNull?.toBigDecimalOrNull()
         require(decimal != null && decimal.signum() >= 0) { "Invalid catalog price." }
         val timestamp: Instant = OffsetDateTime.parse(createdAt).toInstant()
-        return Product(id, name, decimal, description, imageUrl, category, available, sortOrder, timestamp)
+        // A null or malformed optional value means "not advertised" rather than
+        // a failure: one bad rating must not hide the whole product.
+        val original = originalPrice.asDecimalOrNull()?.takeIf { it >= decimal }
+        val stars = rating.asDoubleOrNull()?.takeIf { it in 0.0..5.0 }
+        return Product(
+            id, name, decimal, description, imageUrl, category, available, sortOrder, timestamp,
+            originalPrice = original,
+            rating = stars,
+        )
     }
 }
+
+/**
+ * Reads an optional numeric field that PostgREST returns as a JSON string,
+ * a number, or null. Anything else counts as absent.
+ */
+private fun JsonElement?.asDecimalOrNull(): java.math.BigDecimal? {
+    val text = this?.jsonPrimitive?.contentOrNull ?: return null
+    if (text.isBlank() || text == "null") return null
+    return text.toBigDecimalOrNull()
+}
+
+private fun JsonElement?.asDoubleOrNull(): Double? =
+    asDecimalOrNull()?.toDouble()
 
 @Serializable
 private data class SettingWire(val key: String, val value: String)
@@ -110,7 +133,7 @@ class CatalogApi(private val client: HttpClient, private val config: SupabasePub
     suspend fun products(): List<Product> {
         val response = client.get("${config.baseUrl}/rest/v1/products") {
             publicHeaders()
-            parameter("select", "id,name,price,description,image_url,category,available,sort_order,created_at")
+            parameter("select", "id,name,price,description,image_url,category,available,sort_order,created_at,original_price,rating")
             parameter("order", "sort_order.asc,created_at.desc")
             parameter("limit", CATALOG_PAGE_CEILING)
         }

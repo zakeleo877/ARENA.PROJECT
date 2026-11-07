@@ -138,8 +138,13 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
                     )
                     AdminTab.PRODUCTS -> ProductsScreen(
                         products = state.products,
-                        onSave = { id, name, price, description, imageUrl, category, available, sortOrder ->
-                            viewModel.saveProduct(id, name, price, description, imageUrl, category, available, sortOrder) {}
+                        onSave = { id, name, price, description, imageUrl, category, available, sortOrder,
+                            originalPrice, rating ->
+                            viewModel.saveProduct(
+                                id, name, price, description, imageUrl, category, available, sortOrder,
+                                originalPrice = originalPrice,
+                                rating = rating,
+                            ) {}
                         },
                         onDelete = { id -> viewModel.deleteProduct(id) },
                         onUploadImage = { productId, fileName, bytes, onDone ->

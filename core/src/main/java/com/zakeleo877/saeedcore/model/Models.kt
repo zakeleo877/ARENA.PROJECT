@@ -14,7 +14,35 @@ data class Product(
     val available: Boolean,
     val sortOrder: Int,
     val createdAt: Instant,
-)
+    /**
+     * The price before a discount, or null when nothing is being discounted.
+     *
+     * Null is not the same as "equal to price": a card shows a struck-through
+     * price and a percentage only when there is a real difference, so an
+     * unset value must never be rendered as 0.
+     */
+    val originalPrice: BigDecimal? = null,
+    /** Average customer rating, or null when the product has no reviews yet. */
+    val rating: Double? = null,
+) {
+    /** True when a discount is advertised and worth showing. */
+    val hasDiscount: Boolean
+        get() = originalPrice != null && originalPrice > price
+
+    /**
+     * The discount as a whole percentage, or null when there is none.
+     *
+     * Rounded down, so a card never claims a larger reduction than the customer
+     * really gets: 1799 of 1999 is 10%, not 11%.
+     */
+    val discountPercent: Int?
+        get() {
+            val original = originalPrice ?: return null
+            if (!hasDiscount) return null
+            val saved = (original - price).toDouble()
+            return kotlin.math.floor(saved / original.toDouble() * 100).toInt()
+        }
+}
 
 data class StoreSettings(
     val storeName: String,
