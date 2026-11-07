@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -90,6 +91,13 @@ fun SaeedButton(
         modifier = modifier.defaultMinSize(minHeight = LocalSaeedSpacing.current.touchTarget),
         enabled = enabled,
         shape = MaterialTheme.shapes.medium,
+        // The default disabled colours come from a grey palette that leaves the
+        // label barely legible on a light page. These two values keep a
+        // disabled button obviously inactive but still readable.
+        colors = ButtonDefaults.buttonColors(
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
     ) {
         if (icon != null) {
             Icon(icon, contentDescription = null)

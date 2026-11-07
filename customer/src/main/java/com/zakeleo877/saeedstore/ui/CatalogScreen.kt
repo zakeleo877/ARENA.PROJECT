@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Star
@@ -252,7 +253,7 @@ private fun CatalogHeader(
                 )
             }
             DetailAction(
-                icon = Icons.Filled.Inventory2,
+                icon = Icons.Filled.ReceiptLong,
                 description = stringResource(R.string.pending_orders),
                 badgeCount = pendingCount,
                 onClick = onPendingClick,
@@ -599,7 +600,7 @@ private fun BottomBar(
                 onClick = onCartClick,
             )
             BarItem(
-                icon = Icons.Filled.Search,
+                icon = Icons.Filled.ReceiptLong,
                 label = stringResource(R.string.pending_orders),
                 selected = false,
                 badgeCount = pendingCount,
