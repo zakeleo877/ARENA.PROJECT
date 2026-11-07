@@ -10,7 +10,9 @@
 - تطبيق الإدارة: `com.zakeleo877.saeedadmin`.
 - وحدات Gradle: `core` مشتركة، و`customer`، و`admin` مستقلان.
 - العربية وRTL وAndroid 7.0+؛ قاعدة بيانات Supabase مشتركة. يبدأ جدول المنتجات فارغًا.
-- `core` يحتفظ بخط Tajawal بثلاثة أوزان وترخيصه في `docs/licenses/Tajawal-OFL.txt`، مع ثيم Neon Void ومكوّنات Compose قابلة لإعادة الاستخدام.
+- `core` يحتفظ بخط Tajawal بثلاثة أوزان وترخيصه في `docs/licenses/Tajawal-OFL.txt`، مع ثيم «محلات السعيد» الأخضر
+  الفاتح (`#017D20` على صفحة `#EDEEF2`) ومكوّنات Compose قابلة لإعادة الاستخدام. كل زوج نص/خلفية
+  يمرّ 4.5:1 على الأقل، و`ColorContrastTest` يعيد حساب الأزواج التي ترسمها الشاشات فعلاً.
 
 ## ما هو منفَّذ الآن
 
@@ -168,6 +170,8 @@ bash scripts/db-security-tests.sh
 
 - **لا يوجد اختبار على مشروع Supabase سحابي حقيقي.** فحوص PGlite محلية مع محاكاة Auth وREST وStorage.
 - **لا يوجد FCM.** الإشعار محلي فقط عبر WorkManager، وقد يتأخر 15 دقيقة أو أكثر.
+- **الخصم والتقييم حقول اختيارية جديدة تحتاج تطبيق `schema.sql` على المشروع الحقيقي.**
+  حتى ذلك الحين لا تظهر شارة خصم ولا نجوم، لأن الواجهة لا تعرض شيئاً بلا بيانات.
 - **اختيار صورة المنتج من المعرض غير مُتحقَّق منه على جهاز.** المسار مبني كاملاً
   (`ProductImagePicker` يختار عبر Photo Picker، يضغط WebP بحجم أقصى 1024px، يرفع إلى
   الدلو، ويربط الرابط بالمنتج)، لكنه لم يُشغَّل على هاتف ولا داخل Gradle هنا.
@@ -176,17 +180,19 @@ bash scripts/db-security-tests.sh
 
 | سير العمل | آخر تشغيل | النتيجة | الرابط |
 |---|---|---|---|
-| `Build and verify` | **42121136746** | **أخضر** — ٢٠ خطوة من ٢٠ | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42121136746> |
-| `Database security checks` | **42121136708** | **أخضر** | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42121136708> |
-| `Verify the interface on an emulator` | **42121136873** | **أخضر** — التطبيقان عملا ولُقطتا الشاشتين | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42121136873> |
-| `Release gate` | **42121136759** | **أحمر كما يجب** — أسرار الإنتاج غير مضبوطة | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42121136759> |
+| `Build and verify` | **42407481242** | **أخضر** — كل الخطوات | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42407481242> |
+| `Core and schema checks` | **42407486558** | **أخضر** | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42407486558> |
+| `Database security checks` | **42407481244** | **أخضر** | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42407481244> |
+| `Verify the interface on an emulator` | **42407481317** | **أخضر** — التطبيقان عملا على محاكي أندرويد ولُقطت شاشتاهما في الثيم الأخضر | <https://github.com/zakeleo877/ARENA.PROJECT/actions/runs/42407481317> |
+| `Release gate` | — | **أحمر كما يجب** — أسرار توقيع الإنتاج غير مضبوطة | — |
 
 - `./gradlew test lint` نجح.
 - `./gradlew :customer:assembleRelease :admin:assembleRelease` نجح (`BUILD SUCCESSFUL`).
 - فحوص الحزمة ١-١٠ نجحت للتطبيقين: `resources.arsc` غير مضغوط، المحاذاة، التوقيع v2،
   الهوية، عدم قابلية التصحيح، الصلاحيات، عزل الأكواد، والحجم (853 KiB و989 KiB).
 - فحوص المستودع ١١-١٣ نجحت.
-- `npm ci && npm test`: **32 فحص SQL** نجحت، منها أن الزائر يرى المتاح فقط.
+- `npm ci && npm test`: **36 فحص SQL** نجحت، منها أن الزائر يرى المتاح فقط، وأن الخصم
+  الأعلى من السعر والتقييم فوق ٥ مرفوضان في القاعدة.
 - `npm run test:acceptance`: **38 فحصاً** على قاعدة بيانات معزولة مبنية من
   `supabase/schema.sql`، تشمل سياسات RLS وتسجيل الدخول ولوحة الإدارة.
 - `./gradlew test`: **10 ملفات اختبار** تشمل اختبارات واجهة Compose على الـ JVM
