@@ -181,4 +181,21 @@ if distinct < 12:
 print(f'PASS: the screenshot shows a rendered screen ({width}x{height}, {distinct} distinct byte values)')
 PYEOF
 
+# A second capture after a small scroll, so the report shows the content and
+# not only the header. It is best effort: a device that ignores the swipe must
+# not fail the run, because the first screenshot already proved the rendering.
+SWIPE_X="$(python3 -c "import struct,sys
+data=open(sys.argv[1],'rb').read()
+w,h=struct.unpack('>II',data[16:24])
+print(w//2, int(h*0.75), int(h*0.35))" "$OUTPUT/$PACKAGE.png" 2>/dev/null || true)"
+if [ -n "$SWIPE_X" ]; then
+  set -- $SWIPE_X
+  timeout 60 "$ADB" -s "$SERIAL" shell input swipe "$1" "$2" "$1" "$3" 300 > /dev/null 2>&1 || true
+  sleep 3
+  timeout 120 "$ADB" -s "$SERIAL" exec-out screencap -p > "$OUTPUT/$PACKAGE-scrolled.png" 2>/dev/null || true
+  if [ -s "$OUTPUT/$PACKAGE-scrolled.png" ]; then
+    printf 'PASS: a second screenshot after scrolling was captured\n'
+  fi
+fi
+
 printf 'PASS: the user interface rendered on the emulator\n'
