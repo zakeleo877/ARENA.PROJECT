@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -28,6 +29,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navArgument
 import com.zakeleo877.saeedcore.data.SubmitOutcome
 import com.zakeleo877.saeedcore.designsystem.SaeedBottomSheet
@@ -82,7 +84,37 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
 
     val currency = state.settings?.currency ?: "د.ج"
 
-    Box(Modifier.fillMaxSize()) {
+    // The bar belongs to the shell, not to one screen. It used to be drawn by
+    // the catalogue alone, so the cart and the pending list had no bar and no
+    // way back to the shop.
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    val showBar = currentRoute != null && !currentRoute.startsWith(Routes.DETAIL)
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            if (showBar) {
+                SaeedBottomBar(
+                    cartCount = cartCount,
+                    pendingCount = pendingOrders.size,
+                    current = when {
+                        currentRoute.orEmpty().startsWith(Routes.CART) -> SaeedTab.CART
+                        currentRoute.orEmpty().startsWith(Routes.PENDING) -> SaeedTab.PENDING
+                        else -> SaeedTab.CATALOG
+                    },
+                    onCatalogClick = {
+                        navController.navigate(Routes.CATALOG) {
+                            popUpTo(Routes.CATALOG) { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    },
+                    onCartClick = { navController.navigate(Routes.CART) { launchSingleTop = true } },
+                    onPendingClick = { navController.navigate(Routes.PENDING) { launchSingleTop = true } },
+                )
+            }
+        },
+    ) { innerPadding ->
+    Box(Modifier.fillMaxSize().padding(innerPadding)) {
       SharedTransitionLayout {
         NavHost(navController = navController, startDestination = Routes.CATALOG) {
             composable(Routes.CATALOG) {
@@ -160,6 +192,7 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
             }
         }
       }
+    }
 
         SnackbarHost(
             hostState = snackbarHostState,

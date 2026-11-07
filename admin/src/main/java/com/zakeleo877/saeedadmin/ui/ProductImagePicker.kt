@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
 import android.net.Uri
+import androidx.core.content.FileProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -18,7 +19,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -45,6 +47,7 @@ import com.zakeleo877.saeedadmin.R
 import com.zakeleo877.saeedcore.designsystem.SaeedButton
 import com.zakeleo877.saeedcore.designsystem.SaeedTextField
 import java.io.ByteArrayOutputStream
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -80,14 +83,14 @@ fun ProductImagePicker(
     var message by remember { mutableStateOf<Int?>(null) }
     var previewUri by remember { mutableStateOf<Uri?>(null) }
 
-    val picker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
+    // The camera writes into a file this app owns; the system camera cannot
+    // hand back a readable Uri any other way on modern Android.
+    var pendingCapture by remember { mutableStateOf<File?>(null) }
+
+    fun accept(uri: Uri) {
         scope.launch {
             message = null
-            val prepared = withContext(Dispatchers.IO) { prepareImage(context, uri) }
-            when (prepared) {
+            when (val prepared = withContext(Dispatchers.IO) { prepareImage(context, uri) }) {
                 is PreparedImage.Ready -> {
                     previewUri = uri
                     onUpload(prepared.fileName, prepared.bytes)
@@ -96,6 +99,20 @@ fun ProductImagePicker(
                 PreparedImage.TooLarge -> message = R.string.admin_image_too_large
             }
         }
+    }
+
+    val picker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> if (uri != null) accept(uri) }
+
+    val camera = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture(),
+    ) { saved ->
+        val file = pendingCapture
+        if (saved && file != null) accept(Uri.fromFile(file))
+        // A cancelled shot leaves the temporary file behind; it is removed on
+        // the next attempt and by the system when the cache is trimmed.
+        if (!saved) file?.delete()
     }
 
     val shownModel: Any? = previewUri ?: imageUrl.ifBlank { null }
@@ -157,7 +174,20 @@ fun ProductImagePicker(
                     )
                 },
                 enabled = !uploading,
-                icon = Icons.Filled.AddAPhoto,
+                icon = Icons.Filled.PhotoLibrary,
+                modifier = Modifier.weight(1f),
+            )
+            SaeedButton(
+                text = stringResource(R.string.admin_image_camera),
+                onClick = {
+                    val file = newCaptureFile(context)
+                    pendingCapture = file
+                    val authority = "${context.packageName}.fileprovider"
+                    val target = FileProvider.getUriForFile(context, authority, file)
+                    camera.launch(target)
+                },
+                enabled = !uploading,
+                icon = Icons.Filled.PhotoCamera,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -288,4 +318,22 @@ private fun prepareImage(
     // the previous image, and two admins could collide.
     val fileName = "${java.util.UUID.randomUUID()}.webp"
     return PreparedImage.Ready(fileName, bytes)
+}
+
+/**
+ * A fresh file for one camera shot.
+ *
+ * The camera app writes the picture here, so the name must be unique and the
+ * directory must exist. It lives in the cache because the photo is uploaded
+ * immediately afterwards and never needs to outlive the form.
+ */
+private fun newCaptureFile(context: android.content.Context): File {
+    val directory = File(context.cacheDir, "product-captures").apply { mkdirs() }
+    // Sweep yesterday's abandoned shots so the cache does not grow forever.
+    directory.listFiles()?.forEach { stale ->
+        if (System.currentTimeMillis() - stale.lastModified() > 24 * 60 * 60 * 1000L) {
+            stale.delete()
+        }
+    }
+    return File(directory, "capture-${System.currentTimeMillis()}.jpg")
 }

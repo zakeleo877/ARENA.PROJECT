@@ -321,7 +321,7 @@ class IsolatedBackendTest {
         }
         try {
             val admin = AdminApi(httpClient, config())
-            val orders = admin.orders(limit = 25)
+            val orders = admin.orders("test-token", limit = 25)
             assertTrue("an empty answer is fine", orders.isEmpty())
             assertTrue("a request must have been made", requested != null)
             val url = requested!!
@@ -353,7 +353,7 @@ class IsolatedBackendTest {
             }
         }
         try {
-            AdminApi(httpClient, config()).orders(limit = 1_000_000)
+            AdminApi(httpClient, config()).orders("test-token", limit = 1_000_000)
             val url = requested!!
             assertTrue("the limit must be capped, was: $url", !url.contains("1000000"))
             assertTrue("the cap must still be a real page", Regex("limit=(\\d+)").find(url)?.groupValues?.get(1)?.toInt()?.let { it <= 500 } == true)

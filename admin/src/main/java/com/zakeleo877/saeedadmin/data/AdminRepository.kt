@@ -87,12 +87,12 @@ class AdminRepository(
     suspend fun products(session: AdminSession): List<Product> = api.products(session.accessToken)
 
     suspend fun orders(session: AdminSession, status: OrderStatus? = null): List<Order> =
-        api.orders(status)
+        api.orders(session.accessToken, status)
 
     suspend fun updateOrderStatus(session: AdminSession, orderId: String, status: OrderStatus): Boolean =
-        api.updateOrderStatus(orderId, status)
+        api.updateOrderStatus(session.accessToken, orderId, status)
 
-    suspend fun deleteProduct(session: AdminSession, id: String): Boolean = api.deleteProduct(id)
+    suspend fun deleteProduct(session: AdminSession, id: String): Boolean = api.deleteProduct(session.accessToken, id)
 
     suspend fun upsertProduct(
         session: AdminSession,
@@ -107,7 +107,7 @@ class AdminRepository(
         originalPrice: BigDecimal? = null,
         rating: Double? = null,
     ): Boolean = api.upsertProduct(
-        id, name, price, description, imageUrl, category, available, sortOrder,
+        session.accessToken, id, name, price, description, imageUrl, category, available, sortOrder,
         originalPrice = originalPrice,
         rating = rating,
     )
@@ -116,7 +116,7 @@ class AdminRepository(
         api.uploadProductImage(session.accessToken, fileName, bytes)
 
     suspend fun updateSettings(session: AdminSession, values: Map<String, String>): Boolean =
-        api.updateSettings(values)
+        api.updateSettings(session.accessToken, values)
 
     suspend fun insertManualOrder(
         session: AdminSession,
@@ -124,14 +124,14 @@ class AdminRepository(
         phone: String,
         notes: String,
         items: List<Pair<String, Int>>,
-    ): Boolean = api.insertManualOrder(customer, phone, notes, items)
+    ): Boolean = api.insertManualOrder(session.accessToken, customer, phone, notes, items)
 
     /** Reads the newest order number so the background worker only reports new work. */
     suspend fun latestOrder(session: AdminSession): Long? =
-        api.orders(status = OrderStatus.NEW).firstOrNull()?.number
+        api.orders(session.accessToken, status = OrderStatus.NEW).firstOrNull()?.number
 
     suspend fun newOrdersSince(session: AdminSession, lastSeenNumber: Long): List<Order> =
-        api.orders(status = OrderStatus.NEW).filter { it.number > lastSeenNumber }
+        api.orders(session.accessToken, status = OrderStatus.NEW).filter { it.number > lastSeenNumber }
 
     /** Calls a boolean RPC with the admin's bearer token. */
     private suspend fun rpcBoolean(session: AdminSession, function: String): Boolean = try {

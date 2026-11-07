@@ -123,12 +123,11 @@ fun CatalogScreen(
     }
     val currency = state.settings?.currency ?: "د.ج"
 
-    Box(
+    Column(
         Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
-        Column(Modifier.fillMaxSize()) {
             CatalogHeader(
                 storeName = state.settings?.storeName ?: stringResource(R.string.app_name),
                 cartCount = cartCount,
@@ -211,15 +210,6 @@ fun CatalogScreen(
                     }
                 }
             }
-        }
-
-        BottomBar(
-            cartCount = cartCount,
-            pendingCount = pendingCount,
-            onCartClick = onCartClick,
-            onPendingClick = onPendingClick,
-            modifier = Modifier.align(Alignment.BottomCenter),
-        )
     }
 }
 
@@ -563,113 +553,6 @@ private fun SharedTransitionScope.ProductCard(
                 }
             }
         }
-    }
-}
-
-/**
- * The floating bar: three destinations, because the app has three screens.
- *
- * The design showed five, including favourites and an account page that do not
- * exist here; a tab that leads nowhere is worse than no tab.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun BottomBar(
-    cartCount: Int,
-    pendingCount: Int,
-    onCartClick: () -> Unit,
-    onPendingClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        color = SaeedGreen,
-        contentColor = Color.White,
-        shape = RoundedCornerShape(24.dp),
-        shadowElevation = 12.dp,
-        modifier = modifier
-            .navigationBarsPadding()
-            .padding(horizontal = 32.dp, vertical = 12.dp)
-            .fillMaxWidth(),
-    ) {
-        Row(
-            Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // The catalogue is the screen being shown, so this tab is not
-            // clickable: tapping it can do nothing, and pretending otherwise
-            // would be a lie to the user and to a screen reader.
-            BarItem(
-                icon = Icons.Filled.Dashboard,
-                label = stringResource(R.string.catalog_all),
-                selected = true,
-                badgeCount = 0,
-                onClick = null,
-            )
-            BarItem(
-                icon = Icons.Filled.ShoppingCart,
-                label = stringResource(R.string.cart),
-                selected = false,
-                badgeCount = cartCount,
-                onClick = onCartClick,
-            )
-            BarItem(
-                icon = Icons.Filled.ReceiptLong,
-                label = stringResource(R.string.catalog_pending_tab),
-                selected = false,
-                badgeCount = pendingCount,
-                onClick = onPendingClick,
-            )
-        }
-    }
-}
-
-@Composable
-private fun BarItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    selected: Boolean,
-    badgeCount: Int,
-    onClick: (() -> Unit)?,
-) {
-    val alpha = if (selected) 1f else 0.72f
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(onClickLabel = label, onClick = onClick)
-                } else {
-                    Modifier
-                },
-            )
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-    ) {
-        BadgedBox(
-            badge = {
-                if (badgeCount > 0) {
-                    Badge(containerColor = Color.White, contentColor = SaeedGreenDark) {
-                        Text(badgeCount.toString())
-                    }
-                }
-            },
-        ) {
-            Icon(
-                icon,
-                contentDescription = label,
-                tint = Color.White.copy(alpha = alpha),
-                modifier = Modifier.size(22.dp),
-            )
-        }
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = alpha),
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-        )
     }
 }
 

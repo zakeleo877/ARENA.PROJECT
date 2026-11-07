@@ -139,9 +139,9 @@ class AdminApi(
      * server stops at [limit] rows and the index provides the order, so the
      * cost of one screen does not grow with the age of the shop.
      */
-    suspend fun orders(status: OrderStatus? = null, limit: Int = ORDERS_PAGE_SIZE): List<Order> {
+    suspend fun orders(token: String, status: OrderStatus? = null, limit: Int = ORDERS_PAGE_SIZE): List<Order> {
         val response = client.get("${config.baseUrl}/rest/v1/orders") {
-            headers()
+            headers(token)
             parameter("select", "id,number,customer,phone,notes,location,channel,status,details,total,client_id,created_at")
             parameter("order", "created_at.desc")
             parameter("limit", limit.coerceIn(1, MAX_ORDERS_PAGE_SIZE))
@@ -151,9 +151,9 @@ class AdminApi(
         return response.body<List<OrderWire>>().map(OrderWire::model)
     }
 
-    suspend fun updateOrderStatus(orderId: String, status: OrderStatus): Boolean {
+    suspend fun updateOrderStatus(token: String, orderId: String, status: OrderStatus): Boolean {
         val response = client.patch("${config.baseUrl}/rest/v1/orders") {
-            headers()
+            headers(token)
             parameter("id", "eq.$orderId")
             contentType(ContentType.Application.Json)
             setBody(mapOf("status" to status.databaseValue))
@@ -162,13 +162,14 @@ class AdminApi(
     }
 
     suspend fun insertManualOrder(
+        token: String,
         customer: String,
         phone: String,
         notes: String,
         items: List<Pair<String, Int>>,
     ): Boolean {
         val response = client.post("${config.baseUrl}/rest/v1/orders") {
-            headers()
+            headers(token)
             contentType(ContentType.Application.Json)
             setBody(
                 mapOf(
@@ -186,6 +187,7 @@ class AdminApi(
     }
 
     suspend fun upsertProduct(
+        token: String,
         id: String?,
         name: String,
         price: BigDecimal,
@@ -212,13 +214,13 @@ class AdminApi(
         )
         val response = if (id == null) {
             client.post("${config.baseUrl}/rest/v1/products") {
-                headers()
+                headers(token)
                 contentType(ContentType.Application.Json)
                 setBody(payload)
             }
         } else {
             client.patch("${config.baseUrl}/rest/v1/products") {
-                headers()
+                headers(token)
                 parameter("id", "eq.$id")
                 contentType(ContentType.Application.Json)
                 setBody(payload)
@@ -227,17 +229,17 @@ class AdminApi(
         return response.status.isSuccess()
     }
 
-    suspend fun deleteProduct(id: String): Boolean {
+    suspend fun deleteProduct(token: String, id: String): Boolean {
         val response = client.delete("${config.baseUrl}/rest/v1/products") {
-            headers()
+            headers(token)
             parameter("id", "eq.$id")
         }
         return response.status.isSuccess()
     }
 
-    suspend fun updateSettings(values: Map<String, String>): Boolean {
+    suspend fun updateSettings(token: String, values: Map<String, String>): Boolean {
         val response = client.post("${config.baseUrl}/rest/v1/settings") {
-            headers()
+            headers(token)
             contentType(ContentType.Application.Json)
             header("Prefer", "resolution=merge-duplicates,return=minimal")
             setBody(values.map { (key, value) -> SettingUpsertWire(key, value) })
