@@ -156,21 +156,27 @@ fun CatalogScreen(
                     icon = Icons.Filled.Inventory2,
                     retry = onRetry,
                 )
-                visible.isEmpty() -> SaeedEmptyState(
-                    message = stringResource(R.string.catalog_empty),
-                    icon = Icons.Filled.Search,
-                    retry = when {
-                        state.products.isEmpty() -> onRetry
-                        // Filters are the reason nothing matches, so offer to
-                        // drop them instead of a button that reloads the network.
-                        query.isNotBlank() || selectedCategory != null || offersOnly -> {
+                visible.isEmpty() -> {
+                    // An empty shelf has two very different causes, and the
+                    // button must fix the actual one: an empty catalogue needs a
+                    // reload, while a filter that matches nothing needs clearing.
+                    val hasFilters = query.isNotBlank() || selectedCategory != null || offersOnly
+                    val clearFilters: (() -> Unit)? = if (!state.products.isEmpty() || hasFilters) {
+                        {
                             query = ""
                             selectedCategory = null
                             offersOnly = false
                         }
-                        else -> null
-                    },
-                )
+                    } else {
+                        null
+                    }
+                    val action: (() -> Unit)? = if (state.products.isEmpty()) onRetry else clearFilters
+                    SaeedEmptyState(
+                        message = stringResource(R.string.catalog_empty),
+                        icon = Icons.Filled.Search,
+                        retry = action,
+                    )
+                }
                 else -> LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 160.dp),
                     contentPadding = PaddingValues(
