@@ -70,7 +70,7 @@ class ProductDiscountTest {
 
     @Test
     fun `a rating is carried through unchanged and may be absent`() {
-        assertEquals(4.5, product("100.00", rating = 4.5).rating, 0.0001)
+        assertEquals(4.5, product("100.00", rating = 4.5).rating!!, 0.0001)
         assertNull(product("100.00").rating)
     }
 }
