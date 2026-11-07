@@ -82,6 +82,22 @@ android {
         versionName = "1.0"
         buildConfigField("String", "SUPABASE_URL", javaString(supabaseUrl))
         buildConfigField("String", "SUPABASE_KEY", javaString(supabaseKey))
+        // Throwaway catalogue for the emulator run, which has no route to a
+        // project. Off by default, so a build for the shop contains an empty
+        // string and shows nothing. Ask for it with -Psaeed.demo=true.
+        val demoProducts = if (providers.gradleProperty("saeed.demo").getOrElse("false") == "true") {
+            javaString(
+                "[{\"id\":\"demo-1\",\"name\":\"خلاط زجاجي\",\"price\":\"8900\"," +
+                    "\"category\":\"المطبخ\",\"originalPrice\":\"11900\",\"rating\":4.8}," +
+                    "{\"id\":\"demo-2\",\"name\":\"مشط شعر هوائي\",\"price\":\"3600\"," +
+                    "\"category\":\"أدوات تجميلية\",\"rating\":4.5}," +
+                    "{\"id\":\"demo-3\",\"name\":\"طقم سكاكين\",\"price\":\"5800\"," +
+                    "\"category\":\"المطبخ\",\"originalPrice\":\"7200\"}]",
+            )
+        } else {
+            javaString("")
+        }
+        resValue("string", "demo_products", demoProducts)
     }
     signingConfigs {
         create("release") {

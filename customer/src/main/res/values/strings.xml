@@ -65,10 +65,12 @@
     <string name="catalog_all">الكل</string>
     <string name="catalog_filter">تصفية</string>
     <string name="catalog_offers">العروض</string>
+    <string name="catalog_pending_tab">الطلبات</string>
     <string name="catalog_previous_price">%1$s قبل</string>
     <string name="catalog_discount_badge">-%1$d%%</string>
     <string name="catalog_rating">%1$s</string>
     <string name="catalog_rating_description">التقييم %1$s من 5</string>
     <string name="catalog_offers_only">العروض فقط</string>
     <string name="catalog_clear_filters">إزالة التصفية</string>
+
 </resources>

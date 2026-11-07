@@ -308,7 +308,10 @@ jobs:
       - name: Build the release APKs
         run: |
           set -euo pipefail
-          ./gradlew --no-daemon :customer:assembleRelease :admin:assembleRelease
+          # saeed.demo injects a throwaway catalogue into the customer build, so
+          # the screenshot shows product cards and not only the offline state.
+          # It is off in every other build.
+          ./gradlew --no-daemon -Psaeed.demo=true :customer:assembleRelease :admin:assembleRelease
 
       - name: Run the customer app on the emulator
         run: |

@@ -525,9 +525,13 @@ private fun SharedTransitionScope.ProductCard(
                             fontWeight = FontWeight.Bold,
                             color = SaeedGreenDark,
                         )
-                        if (product.hasDiscount) {
+                        // Read once into a local: hasDiscount and originalPrice
+                        // are separate reads of the same value, and only the
+                        // local is certainly non-null here.
+                        val was = product.originalPrice
+                        if (product.hasDiscount && was != null) {
                             Text(
-                                text = Formatters.money(product.originalPrice!!, currency),
+                                text = Formatters.money(was, currency),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = SaeedInkMuted,
                                 textDecoration = TextDecoration.LineThrough,
@@ -607,7 +611,7 @@ private fun BottomBar(
             )
             BarItem(
                 icon = Icons.Filled.ReceiptLong,
-                label = stringResource(R.string.pending_orders),
+                label = stringResource(R.string.catalog_pending_tab),
                 selected = false,
                 badgeCount = pendingCount,
                 onClick = onPendingClick,

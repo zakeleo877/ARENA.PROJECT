@@ -1,7 +1,9 @@
 package com.zakeleo877.saeedstore.ui
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import androidx.lifecycle.viewModelScope
 import com.zakeleo877.saeedcore.data.Cached
@@ -18,9 +20,13 @@ import com.zakeleo877.saeedcore.model.PendingOrder
 import com.zakeleo877.saeedcore.model.PendingOrderItem
 import com.zakeleo877.saeedcore.model.Product
 import com.zakeleo877.saeedcore.model.StoreSettings
+import com.zakeleo877.saeedstore.R
 import com.zakeleo877.saeedcore.network.NetworkMonitor
 import java.util.UUID
 import kotlinx.coroutines.delay
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +35,46 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /** Everything the customer screens need, in one observable state. */
+/**
+ * The shape of one throwaway product. It mirrors the wire format so the demo
+ * value stays readable in the resource file, and it deliberately cannot carry
+ * an id that a real product could collide with.
+ */
+@Serializable
+private data class DemoProduct(
+    val id: String,
+    val name: String,
+    val price: String,
+    val category: String,
+    val imageUrl: String = "",
+    @SerialName("originalPrice") val originalPrice: String? = null,
+    val rating: Double? = null,
+    val available: Boolean = true,
+) {
+    fun toProduct(): Product = Product(
+        id = id,
+        name = name,
+        price = PriceReader.parse(price),
+        description = "",
+        imageUrl = imageUrl,
+        category = category,
+        available = available,
+        sortOrder = 0,
+        createdAt = java.time.Instant.EPOCH,
+        originalPrice = originalPrice?.let(PriceReader::parse),
+        rating = rating,
+    )
+}
+
+/** Reads the demo prices the way the rest of the app does, or fails loudly. */
+private object PriceReader {
+    fun parse(text: String): java.math.BigDecimal =
+        text.toBigDecimalOrNull() ?: throw IllegalArgumentException("bad demo price: $text")
+}
+
+/** Shared JSON reader for the optional throwaway catalogue. */
+private val demoJson = Json { ignoreUnknownKeys = true }
+
 data class CustomerUiState(
     val products: List<Product> = emptyList(),
     val settings: StoreSettings? = null,
@@ -45,6 +91,8 @@ class CustomerViewModel @Inject constructor(
     private val orderRepository: OrderRepository,
     val cart: CartStore,
     private val monitor: NetworkMonitor,
+    // Only used to read the optional throwaway catalogue from the resources.
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     /** The state of the network is read on demand, so a queued order is the answer when the device is offline. */
@@ -69,6 +117,21 @@ class CustomerViewModel @Inject constructor(
 
     private val _refresh = MutableStateFlow(RefreshState())
 
+    /**
+     * The throwaway catalogue, or null in a normal build.
+     *
+     * `demo_products` is an empty string unless the build explicitly asks for
+     * demo data, so parsing yields nothing and no shop ever sees these products.
+     * A malformed value is ignored rather than crashing the screen.
+     */
+    private val demoProducts: List<Product>? by lazy {
+        val raw = context.getString(R.string.demo_products)
+        if (raw.isBlank()) return@lazy null
+        runCatching { demoJson.decodeFromString<List<DemoProduct>>(raw).map { it.toProduct() } }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
     val uiState: StateFlow<CustomerUiState> = combine(
         dao.observeProducts(),
         dao.observeSettings(),
@@ -86,6 +149,7 @@ class CustomerViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CustomerUiState())
 
     init {
+        viewModelScope.launch { seedDemoCatalog() }
         refresh()
         viewModelScope.launch {
             // Keeps the offline banner and the send button state in sync.
@@ -121,8 +185,26 @@ class CustomerViewModel @Inject constructor(
                 }
             }
             // The cache stays usable when the network fails, so only a cold start fails.
-            _refresh.value = _refresh.value.copy(failed = productsResult.isFailure && !dao.hasProducts())
+            // The demo data also counts as content: an emulator run has no route
+            // to a project, and the screen must still be inspectable.
+            val hasContent = dao.hasProducts() || demoProducts != null
+            _refresh.value = _refresh.value.copy(failed = productsResult.isFailure && !hasContent)
             _refresh.value = _refresh.value.copy(refreshing = false)
+        }
+    }
+
+    /**
+     * Fills an empty cache with the throwaway catalogue, when one is compiled in.
+     *
+     * This exists so the emulator run, which deliberately has no route to a
+     * project, can show a real product card instead of only the offline state.
+     * It is empty in a normal build, so a real shop never sees these names.
+     */
+    private suspend fun seedDemoCatalog() {
+        val demo = demoProducts ?: return
+        if (dao.hasProducts()) return
+        runCatching {
+            dao.replaceProducts(demo.map(ProductEntity::from), System.currentTimeMillis())
         }
     }
 
