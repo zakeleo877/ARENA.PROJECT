@@ -79,6 +79,11 @@ fun ProductsScreen(
 ) {
     var editing by remember { mutableStateOf<Product?>(null) }
     var creating by remember { mutableStateOf(false) }
+    // One save state for both sheets: the button, the progress text and the
+    // failure reason must not disagree between the create and the edit form.
+    var saving by remember { mutableStateOf(false) }
+    var saveFailed by remember { mutableStateOf(false) }
+    var saveReason by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
 
     Column(
