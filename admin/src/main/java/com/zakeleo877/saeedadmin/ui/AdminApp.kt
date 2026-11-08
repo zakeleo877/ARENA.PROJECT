@@ -140,6 +140,10 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
                         products = state.products,
                         searchQuery = state.searchQuery,
                         onSearchChange = viewModel::setSearchQuery,
+                        // A failed read used to look exactly like an empty
+                        // catalogue: the owner sees nothing and blames the save.
+                        loadError = state.errorMessage,
+                        onRetry = { viewModel.refresh() },
                         onSave = { id, name, price, description, imageUrl, category, available,
                             sortOrder, originalPrice, rating, onDone ->
                             viewModel.saveProduct(
