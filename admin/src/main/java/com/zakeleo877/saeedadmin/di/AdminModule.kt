@@ -1,5 +1,6 @@
 package com.zakeleo877.saeedadmin.di
 
+import android.content.Context
 import com.zakeleo877.saeedcore.data.remote.AdminApi
 import com.zakeleo877.saeedcore.data.remote.AuthManager
 import com.zakeleo877.saeedcore.data.remote.SessionVault
@@ -8,6 +9,7 @@ import com.zakeleo877.saeedadmin.BuildConfig
 import com.zakeleo877.saeedadmin.data.AdminRepository
 import dagger.Module
 import dagger.Provides
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import io.ktor.client.HttpClient

@@ -87,6 +87,11 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AdminUiState())
 
     init {
+        viewModelScope.launch {
+            // A remembered session is restored before the login gate is drawn,
+            // so reopening the shop does not ask for a password again.
+            repository.restoreSession()
+        }
         // Load the catalog as soon as an admin session becomes available.
         viewModelScope.launch {
             repository.sessionHolder.session.collect { session ->
@@ -94,6 +99,8 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
             }
         }
     }
+
+
 
     fun signIn(email: String, password: String, onResult: (AuthResult) -> Unit) {
         viewModelScope.launch {
@@ -108,7 +115,10 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
     }
 
     fun signOut() {
-        repository.sessionHolder.clear()
+        // Clearing the remembered copy matters more than clearing the screen: a
+        // session left in the vault would sign the next person in automatically
+        // on a shop phone that is passed around.
+        repository.signOut()
         _orders.value = emptyList()
         _products.value = emptyList()
     }
