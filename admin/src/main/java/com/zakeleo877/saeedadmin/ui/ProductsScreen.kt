@@ -157,6 +157,8 @@ fun ProductsScreen(
                     // Keeping the sheet open until the write lands is the
                     // difference between "saved" and "silently lost".
                     saving = true
+                    saveFailed = false
+                    saveReason = null
                     onSave(
                         null, name, price, description, imageUrl, category, available, sortOrder,
                         original, stars,
@@ -187,6 +189,8 @@ fun ProductsScreen(
                 onSave = { name, price, description, imageUrl, category, available, sortOrder,
                     original, stars, done ->
                     saving = true
+                    saveFailed = false
+                    saveReason = null
                     onSave(
                         product.id, name, price, description, imageUrl, category, available,
                         sortOrder, original, stars,
@@ -474,7 +478,6 @@ private fun ProductFormSheet(
             // same product twice.
             enabled = !saving,
             onClick = {
-                saveFailed = false
                 // The keyboard may hand back Arabic-Indic digits, and a comma
                 // may be either a decimal mark or grouping. Formatters decides,
                 // and returns null when it cannot be sure.
@@ -495,7 +498,7 @@ private fun ProductFormSheet(
                         category.trim(), available, sortOrder,
                         parsedOriginal?.takeIf { it > parsed },
                         parsedRating,
-                        onDone,
+                        done,
                     )
                 }
             },
