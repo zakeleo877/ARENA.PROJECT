@@ -149,9 +149,9 @@ fun ProductsScreen(
             ProductFormSheet(
                 product = null,
                 categories = products.map { it.category }.distinct().sorted(),
-                saving = saving
-                saveFailed = saveFailed
-                saveReason = saveReason
+                saving = saving,
+                saveFailed = saveFailed,
+                saveReason = saveReason,
                 onSave = { name, price, description, imageUrl, category, available, sortOrder,
                     original, stars, done ->
                     // Keeping the sheet open until the write lands is the
@@ -181,9 +181,9 @@ fun ProductsScreen(
             ProductFormSheet(
                 product = product,
                 categories = products.map { it.category }.distinct().sorted(),
-                saving = saving
-                saveFailed = saveFailed
-                saveReason = saveReason
+                saving = saving,
+                saveFailed = saveFailed,
+                saveReason = saveReason,
                 onSave = { name, price, description, imageUrl, category, available, sortOrder,
                     original, stars, done ->
                     saving = true
