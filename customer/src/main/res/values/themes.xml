@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base theme: no action bar, transparent system bars, dark background. -->
+    <style name="Theme.SaeedStore" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/neon_void_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- A light page needs dark status-bar icons, or they vanish. -->
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <!-- Splash theme shown while the first frame is prepared. -->
+    <style name="Theme.SaeedStore.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/neon_void_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.SaeedStore</item>
+    </style>
+</resources>

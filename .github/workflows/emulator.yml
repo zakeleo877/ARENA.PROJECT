@@ -1,0 +1,449 @@
+name: Verify the interface on an emulator
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  emulator:
+    name: Run both apps on an Android emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Enable KVM for the emulator
+        run: |
+          set -euo pipefail
+          # The emulator needs hardware virtualisation. The GitHub runner
+          # exposes it through /dev/kvm, which has to be made accessible to
+          # the current user.
+          if [ ! -e /dev/kvm ]; then
+            echo 'FAIL: /dev/kvm is not available on this runner, so the emulator cannot start.'
+            exit 1
+          fi
+          sudo chmod 666 /dev/kvm
+          ls -l /dev/kvm
+
+      - name: Set up the Android SDK
+        run: |
+          set -euo pipefail
+          SDKMANAGER_PATH=""
+          for candidate in \
+            /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager \
+            /usr/local/lib/android/sdk/cmdline-tools/*/bin/sdkmanager \
+            /opt/android/sdk/cmdline-tools/latest/bin/sdkmanager \
+            "$HOME/Android/Sdk/cmdline-tools/latest/bin/sdkmanager"; do
+            if [ -x "$candidate" ]; then
+              SDKMANAGER_PATH="$candidate"
+              break
+            fi
+          done
+          if [ -z "$SDKMANAGER_PATH" ]; then
+            SDK_ROOT="$HOME/Android/Sdk"
+            mkdir -p "$SDK_ROOT/cmdline-tools"
+            curl -fsSL -o /tmp/cmdline-tools.zip \
+              "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+            unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools
+            mv /tmp/cmdline-tools/cmdline-tools "$SDK_ROOT/cmdline-tools/latest"
+            SDKMANAGER_PATH="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          SDK_ROOT="$(dirname "$(dirname "$(dirname "$(dirname "$SDKMANAGER_PATH")")")")"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "SDKMANAGER=$SDKMANAGER_PATH" >> "$GITHUB_ENV"
+          echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+
+      - name: Accept licenses and install the platform
+        run: |
+          set -euo pipefail
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses > /dev/null 2>&1 || true
+          AVAILABLE="$("$SDKMANAGER" --sdk_root="$ANDROID_HOME" --list 2>/dev/null || true)"
+          PLATFORM="$(echo "$AVAILABLE" | grep -oE 'platforms;android-3[0-9][0-9.]*(-[a-z0-9]+)?' | sort -u | tail -n 1)"
+          BUILD_TOOLS="$(echo "$AVAILABLE" | grep -oE 'build-tools;3[0-9][0-9.]*' | sort -V | tail -n 1)"
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platform-tools" \
+            "${PLATFORM:-platforms;android-35}" "${BUILD_TOOLS:-build-tools;35.0.0}" \
+            > /tmp/sdk-install.txt 2>&1 || true
+          INSTALLED="$(ls "$ANDROID_HOME/platforms" 2>/dev/null | grep -oE 'android-[0-9]+(\.[0-9]+)?' | sed 's/android-//' | sort -V | tail -n 1)"
+          if [ -n "$INSTALLED" ]; then
+            echo "SAEED_COMPILE_SDK=android-$INSTALLED" >> "$GITHUB_ENV"
+            echo "Compiling against the installed platform API $INSTALLED"
+          fi
+          cat /tmp/sdk-install.txt || true
+
+      # The action starts the emulator, waits for it to boot and hands a
+      # ready device to the following steps.
+      # The emulator and a system image are installed here. The image that
+      # installs is the one that the device is created from.
+      - name: Install the emulator and a system image
+        env:
+          ANDROID_AVD_HOME: /home/runner/.android/avd
+          ANDROID_SDK_HOME: /home/runner/.android
+        run: |
+          set -uo pipefail
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_HOME=$ANDROID_SDK_HOME" >> "$GITHUB_ENV"
+          INSTALLED=""
+          for candidate in \
+            "system-images;android-34;default;x86_64" \
+            "system-images;android-34;google_apis;x86_64" \
+            "system-images;android-33;default;x86_64" \
+            "system-images;android-35;default;x86_64"; do
+            echo "Trying $candidate"
+            if "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "emulator" "$candidate" \
+              > /tmp/emulator-install.txt 2>&1; then
+              INSTALLED="$candidate"
+              break
+            fi
+            tail -n 4 /tmp/emulator-install.txt
+          done
+          cat /tmp/emulator-install.txt
+          if [ -z "$INSTALLED" ]; then
+            echo "FAIL: neither the emulator nor a system image could be installed."
+            ls -la "$ANDROID_HOME/system-images" 2>&1 || true
+            ls -la "$ANDROID_HOME/emulator" 2>&1 || true
+            exit 1
+          fi
+          echo "The installed image is $INSTALLED"
+          echo "INSTALLED_IMAGE=$INSTALLED" >> "$GITHUB_ENV"
+
+      # The device is started by hand and the boot is waited for. The action
+      # that starts it reported a success while no emulator process was
+      # running, so the boot is verified here instead of being assumed.
+      - name: Start the emulator
+        id: emulator
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          export ANDROID_SDK_HOME="$HOME/.android"
+          mkdir -p "$ANDROID_AVD_HOME"
+
+          # The image that the previous step installed is used, and the device
+          # is written directly when the AVD manager does not create it.
+          INSTALLED_IMAGE="${INSTALLED_IMAGE:-}"
+          for candidate in \
+            "system-images;android-34;default;x86_64" \
+            "system-images;android-34;google_apis;x86_64" \
+            "system-images;android-33;default;x86_64"; do
+            IMAGE_DIR="$ANDROID_HOME/${candidate//;//}"
+            if [ -d "$IMAGE_DIR" ]; then
+              INSTALLED_IMAGE="$candidate"
+              break
+            fi
+          done
+          if [ -z "$INSTALLED_IMAGE" ]; then
+            echo "FAIL: no system image is installed."
+            ls -la "$ANDROID_HOME/system-images" 2>&1 || true
+            exit 1
+          fi
+          IMAGE_FLAVOUR="$(echo "$INSTALLED_IMAGE" | cut -d';' -f3)"
+          IMAGE_LEVEL="$(echo "$INSTALLED_IMAGE" | cut -d';' -f2)"
+          echo "The image is $INSTALLED_IMAGE"
+
+          rm -rf "$ANDROID_AVD_HOME/test.avd" "$ANDROID_AVD_HOME/test.ini"
+          echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" \
+            create avd -n test -k "$INSTALLED_IMAGE" --force > /tmp/avd-create.txt 2>&1 || true
+          cat /tmp/avd-create.txt
+          if [ ! -f "$ANDROID_AVD_HOME/test.ini" ]; then
+            echo "The AVD manager did not create the device, so it is written directly."
+            mkdir -p "$ANDROID_AVD_HOME/test.avd"
+            {
+              echo 'avd.ini.encoding=UTF-8'
+              echo 'path.rel=avd/test.avd'
+              echo "path=$ANDROID_AVD_HOME/test.avd"
+              echo "target=$IMAGE_LEVEL"
+            } > "$ANDROID_AVD_HOME/test.ini"
+            {
+              echo 'AvdId=test'
+              echo 'PlayStore.enabled=false'
+              echo 'abi.type=x86_64'
+              echo 'fastboot.forceColdBoot=yes'
+              echo 'hw.accelerometer=yes'
+              echo 'hw.audioInput=no'
+              echo 'hw.battery=yes'
+              echo 'hw.camera.back=none'
+              echo 'hw.camera.front=none'
+              echo 'hw.cpu.arch=x86_64'
+              echo 'hw.cpu.ncore=2'
+              echo 'hw.dPad=no'
+              echo 'hw.device.manufacturer=Google'
+              echo 'hw.device.name=pixel_2'
+              echo 'hw.gps=yes'
+              echo 'hw.gpu.enabled=yes'
+              echo 'hw.gpu.mode=auto'
+              echo 'hw.keyboard=yes'
+              echo 'hw.lcd.density=420'
+              echo 'hw.lcd.height=1920'
+              echo 'hw.lcd.width=1080'
+              echo 'hw.mainKeys=no'
+              echo 'hw.ramSize=1536'
+              echo 'hw.sdCard=no'
+              echo 'hw.sensors.orientation=yes'
+              echo 'hw.sensors.proximity=yes'
+              echo 'hw.trackBall=no'
+              echo "image.sysdir.1=system-images/android-$IMAGE_LEVEL/$IMAGE_FLAVOUR/x86_64/"
+              echo 'runtime.network.latency=none'
+              echo 'runtime.network.speed=full'
+              echo 'showDeviceFrame=no'
+              echo 'skin.dynamic=yes'
+              echo 'skin.name=1080x1920'
+              echo 'skin.path=_no_skin'
+              echo 'tag.display=Default'
+              echo 'tag.id=default'
+              echo 'vm.heapSize=256'
+            } > "$ANDROID_AVD_HOME/test.avd/config.ini"
+          fi
+          ls -la "$ANDROID_AVD_HOME" 2>&1 || true
+          "$ANDROID_HOME/emulator/emulator" -list-avds 2>&1 | head -n 5 || true
+
+          # The emulator is started in the background and the boot is waited
+          # for, so the next step finds a device that is ready.
+          nohup "$ANDROID_HOME/emulator/emulator" \
+            -avd test \
+            -no-window \
+            -no-audio \
+            -no-boot-anim \
+            -no-snapshot \
+            -gpu swiftshader_indirect \
+            -accel auto \
+            -wipe-data \
+            -memory 1536 \
+            -cores 2 \
+            -no-metrics \
+            -netdelay none \
+            -netspeed full \
+            > /tmp/emulator.log 2>&1 &
+          echo $! > /tmp/emulator.pid
+          echo "The emulator was started with pid $(cat /tmp/emulator.pid)"
+
+          # The boot is waited for here, because the process has to be alive
+          # when the following step runs.
+          BOOTED=""
+          for _ in $(seq 1 90); do
+            if ! kill -0 "$(cat /tmp/emulator.pid)" 2>/dev/null; then
+              echo "FAIL: the emulator process stopped."
+              tail -n 40 /tmp/emulator.log 2>/dev/null || true
+              exit 1
+            fi
+            BOOTED="$(adb -s emulator-5554 shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+            [ "$BOOTED" = "1" ] && break
+            sleep 4
+          done
+          echo "sys.boot_completed is '$BOOTED'"
+          head -n 40 /tmp/emulator.log 2>/dev/null || true
+          adb devices 2>&1 || true
+
+      # The emulator action may use its own SDK. The environment is aligned
+      # with it so that the adb binary and the device server are the same.
+      - name: Align the SDK environment with the emulator
+        run: |
+          set -uo pipefail
+          echo "The emulator step outcome: ${{ steps.emulator.outcome }}"
+          {
+            echo "ANDROID_HOME=$ANDROID_HOME"
+            echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+            echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME"
+            echo "--- the adb binaries ---"
+            find / -name adb -type f -path '*platform-tools*' 2>/dev/null | head -n 10 || true
+            echo "--- the devices ---"
+            adb devices 2>&1 || true
+            echo "--- the running processes ---"
+            ps aux 2>/dev/null | grep -i 'qemu\|emulator' | head -n 10 || true
+          } > /tmp/sdk-environment.txt 2>&1 || true
+          cat /tmp/sdk-environment.txt
+
+      - name: Prepare a throwaway signing key
+        run: |
+          set -euo pipefail
+          # The emulator run only needs an installable package. The permanent
+          # key is checked by the Release gate workflow.
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/release.jks" \
+            -storepass android -keypass android \
+            -alias saeed -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Saeed Stores, OU=Dev, O=Saeed, L=Algiers, C=DZ"
+          cat > keystore.properties <<EOF
+          storeFile=$RUNNER_TEMP/release.jks
+          storePassword=android
+          keyAlias=saeed
+          keyPassword=android
+          EOF
+
+      - name: Generate local.properties
+        run: |
+          set -euo pipefail
+          {
+            # The emulator has no route to a hosted project. The application
+            # must still start and show its own screens, so a placeholder
+            # address is used and the offline behaviour is what gets checked.
+            echo "SUPABASE_URL=https://placeholder.invalid"
+            echo "SUPABASE_KEY=sb_publishable_placeholder_for_the_emulator_run"
+            echo "sdk.dir=$ANDROID_HOME"
+          } > local.properties
+
+      - name: Build the release APKs
+        run: |
+          set -euo pipefail
+          # saeed.demo injects a throwaway catalogue into the customer build, so
+          # the screenshot shows product cards and not only the offline state.
+          # It is off in every other build.
+          ./gradlew --no-daemon -Psaeed.demo=true :customer:assembleRelease :admin:assembleRelease
+
+      - name: Run the customer app on the emulator
+        run: |
+          set -uo pipefail
+          mkdir -p artifacts/screenshots
+          CUSTOMER_APK="$(find customer/build/outputs/apk/release -name '*.apk' | head -n 1)"
+          if [ -z "$CUSTOMER_APK" ]; then
+            echo "FAIL: the customer APK was not built."
+            exit 1
+          fi
+          {
+            bash scripts/verify-emulator.sh \
+              "$CUSTOMER_APK" \
+              com.zakeleo877.saeedstore \
+              artifacts/screenshots
+          } > /tmp/emulator-customer.txt 2>&1 || true
+          cat /tmp/emulator-customer.txt
+          if grep -q '^FAIL:' /tmp/emulator-customer.txt; then
+            exit 1
+          fi
+
+      - name: Run the admin app on the emulator
+        run: |
+          set -uo pipefail
+          mkdir -p artifacts/screenshots
+          ADMIN_APK="$(find admin/build/outputs/apk/release -name '*.apk' | head -n 1)"
+          if [ -z "$ADMIN_APK" ]; then
+            echo "FAIL: the admin APK was not built."
+            exit 1
+          fi
+          {
+            bash scripts/verify-emulator.sh \
+              "$ADMIN_APK" \
+              com.zakeleo877.saeedadmin \
+              artifacts/screenshots
+          } > /tmp/emulator-admin.txt 2>&1 || true
+          cat /tmp/emulator-admin.txt
+          if grep -q '^FAIL:' /tmp/emulator-admin.txt; then
+            exit 1
+          fi
+
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-screenshots
+          path: artifacts/screenshots
+          if-no-files-found: ignore
+
+      - name: Publish the emulator log
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -uo pipefail
+          {
+            echo "# Emulator diagnostics"
+            echo
+            echo "Run: $RUN_ID"
+            echo
+            echo "## Emulator log"
+            echo '```'
+            tail -n 120 /tmp/emulator.log 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
+            echo "## SDK environment"
+            echo '```'
+            cat /tmp/sdk-environment.txt 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
+            echo "## Customer run"
+            echo '```'
+            cat /tmp/emulator-customer.txt 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
+            echo "## Admin run"
+            echo '```'
+            cat /tmp/emulator-admin.txt 2>/dev/null || echo "(not reached)"
+            echo '```'
+          } > emulator-diagnostics.md
+
+          python3 -c "import base64,json,os; d=open('emulator-diagnostics.md','rb').read(); open('/tmp/emu-payload.json','w').write(json.dumps({'message':'Emulator diagnostics for run '+os.environ['RUN_ID'],'content':base64.b64encode(d).decode('ascii'),'branch':'ci-emulator'}))"
+
+          # The branch is created on the first run and then updated.
+          if ! curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/$REPO/git/refs/heads/ci-emulator" | grep -q '200'; then
+            curl -sS -X POST \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/git/refs" \
+              -d "{\"ref\":\"refs/heads/ci-emulator\",\"sha\":\"$SHA\"}" > /dev/null
+          else
+            curl -sS -X PATCH \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/git/refs/heads/ci-emulator" \
+              -d "{\"sha\":\"$SHA\",\"force\":true}" > /dev/null
+          fi
+
+          curl -sS -X PUT \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/contents/emulator-diagnostics.md?branch=ci-emulator" \
+            --data-binary @/tmp/emu-payload.json \
+            -o /tmp/emu-response.json -w 'HTTP %{http_code}\n'
+          head -c 300 /tmp/emu-response.json
+          echo
+
+      - name: Publish the screenshots on the branch
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          # The screenshots are also written to the branch, because the report
+          # of the acceptance has to show the screens that were rendered.
+          for shot in artifacts/screenshots/*.png; do
+            [ -e "$shot" ] || continue
+            NAME="$(basename "$shot")"
+            python3 -c "import base64,json,sys; d=open(sys.argv[1],'rb').read(); open('/tmp/shot-payload.json','w').write(json.dumps({'message':'Screenshot of run '+sys.argv[3],'content':base64.b64encode(d).decode('ascii'),'branch':'ci-emulator','path':'artifacts/screenshots/'+sys.argv[2]}))" "$shot" "$NAME" "$RUN_ID"
+            curl -sS -X PUT \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/contents/artifacts/screenshots/$NAME?branch=ci-emulator" \
+              --data-binary @/tmp/shot-payload.json \
+              -o /tmp/shot-response.json -w "$NAME HTTP %{http_code}\n"
+            head -c 200 /tmp/shot-response.json
+            echo
+          done

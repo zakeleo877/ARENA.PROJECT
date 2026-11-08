@@ -1,0 +1,177 @@
+name: Live Supabase checks
+
+# Runs the store against a real Supabase project: the real publishable key, the
+# real row level security policies, the real Auth service, the real Storage
+# bucket. Nothing is simulated here.
+#
+# It is manual on purpose. It writes rows, so it must be pointed at a project
+# that is meant for testing, and it is never triggered by a push.
+#
+# Required secrets:
+#   TEST_SUPABASE_URL, TEST_SUPABASE_KEY   the test project (publishable key)
+#   TEST_USER_EMAIL, TEST_USER_PASSWORD    an existing customer account
+#   TEST_ADMIN_EMAIL, TEST_ADMIN_PASSWORD  an account listed in public.admins
+#
+# Required variables (not secrets):
+#   TEST_PROJECT_CONFIRMED=true            an explicit acknowledgement that the
+#                                          URL above is a test project
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_url:
+        description: 'https://<project-ref>.supabase.co -- leave empty to use TEST_SUPABASE_URL'
+        required: false
+        default: ''
+        type: string
+      mode:
+        description: 'test writes and deletes orders; production only reads'
+        required: true
+        default: test
+        type: choice
+        options:
+          - test
+          - production
+      allow_order_write:
+        description: 'production mode only: also place one order and delete it'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    name: Run the store against the real project
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Refuse to run against an unconfirmed project
+        env:
+          CONFIRMED: ${{ vars.TEST_PROJECT_CONFIRMED }}
+          MODE: ${{ inputs.mode }}
+          ALLOW: ${{ inputs.allow_order_write }}
+          INPUT_URL: ${{ inputs.project_url }}
+          URL: ${{ secrets.TEST_SUPABASE_URL || secrets.SUPABASE_URL }}
+          KEY: ${{ secrets.TEST_SUPABASE_KEY || secrets.SUPABASE_KEY }}
+        run: |
+          set -euo pipefail
+          # A read-only run changes nothing, so it may run without the
+          # acknowledgement. A run that writes orders may not.
+          NEEDS_CONFIRMATION=0
+          if [ "${MODE:-test}" = "test" ] || [ "${ALLOW:-false}" = "true" ]; then
+            NEEDS_CONFIRMATION=1
+          fi
+          if [ "$NEEDS_CONFIRMATION" = "1" ] && [ "${CONFIRMED:-}" != "true" ]; then
+            echo "FAIL: this run would write orders, and TEST_PROJECT_CONFIRMED is not true."
+            echo "      Set the repository variable to true only for a project that is"
+            echo "      safe to write test orders into, or start a production run,"
+            echo "      which only reads."
+            exit 1
+          fi
+          URL="${INPUT_URL:-${URL:-}}"
+          if [ -z "${URL:-}" ] || [ -z "${KEY:-}" ]; then
+            echo "FAIL: a project address and the publishable key are required."
+            echo "      Give the address in the project_url input of the run,"
+            echo "      and set TEST_SUPABASE_KEY (or SUPABASE_KEY) in the secrets."
+            exit 1
+          fi
+          case "$URL" in
+            https://*.supabase.co|https://*.supabase.co/) : ;;
+            http://127.0.0.1:*|http://localhost:*) : ;;
+            *) echo "FAIL: the address must be https://<project-ref>.supabase.co"
+               exit 1 ;;
+          esac
+          case "$KEY" in
+            sb_secret_*)
+              echo "FAIL: TEST_SUPABASE_KEY is a secret key, so it bypasses RLS."
+              echo "      Use the publishable key: the policies must be exercised."
+              exit 1
+              ;;
+          esac
+          echo "The project and the key shape are acceptable."
+
+      # Runs without any account, so it works on a project straight after the
+      # schema is applied and says precisely which part is missing.
+      - name: Check the schema on the project (read only)
+        env:
+          INPUT_URL: ${{ inputs.project_url }}
+          URL: ${{ secrets.TEST_SUPABASE_URL || secrets.SUPABASE_URL }}
+          KEY: ${{ secrets.TEST_SUPABASE_KEY || secrets.SUPABASE_KEY }}
+        run: |
+          set -uo pipefail
+          if [ -n "${INPUT_URL:-}" ]; then export TEST_SUPABASE_URL="$INPUT_URL"; fi
+          bash scripts/project-preflight.sh | tee preflight.txt
+
+      - name: Run the live acceptance checks
+        env:
+          INPUT_URL: ${{ inputs.project_url }}
+          TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL || secrets.SUPABASE_URL }}
+          TEST_SUPABASE_KEY: ${{ secrets.TEST_SUPABASE_KEY || secrets.SUPABASE_KEY }}
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+          TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
+          TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
+          MODE: ${{ inputs.mode }}
+          ALLOW_ORDER_WRITE: ${{ inputs.allow_order_write && '1' || '0' }}
+        run: |
+          set -o pipefail
+          if [ -n "${INPUT_URL:-}" ]; then export TEST_SUPABASE_URL="$INPUT_URL"; fi
+          bash scripts/live-acceptance.sh | tee live-acceptance.txt
+
+      - name: Run the database security checks 14-25
+        if: inputs.mode == 'test'
+        env:
+          INPUT_URL: ${{ inputs.project_url }}
+          TEST_SUPABASE_URL: ${{ secrets.TEST_SUPABASE_URL || secrets.SUPABASE_URL }}
+          TEST_SUPABASE_KEY: ${{ secrets.TEST_SUPABASE_KEY || secrets.SUPABASE_KEY }}
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+        run: |
+          set -o pipefail
+          if [ -n "${INPUT_URL:-}" ]; then export TEST_SUPABASE_URL="$INPUT_URL"; fi
+          bash scripts/db-security-tests.sh | tee db-security.txt
+
+      - name: Publish the result
+        if: always()
+        run: |
+          set -euo pipefail
+          {
+            echo "# Live result"
+            echo
+            echo "Project: the value of TEST_SUPABASE_URL (not printed)."
+            echo "Mode: ${{ inputs.mode }}"
+            echo
+            echo '## The state of the project'
+            echo '```'
+            cat preflight.txt 2>/dev/null || echo '(not reached)'
+            echo '```'
+            echo
+            echo '## Acceptance'
+            echo '```'
+            cat live-acceptance.txt 2>/dev/null || echo '(the run did not start)'
+            echo '```'
+            echo
+            echo '## Database security 14-25'
+            echo '```'
+            cat db-security.txt 2>/dev/null || echo '(not run in this mode)'
+            echo '```'
+          } > live-result.md
+          cat live-result.md
+
+      - name: Upload the result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-supabase-result
+          path: live-result.md
+          if-no-files-found: warn

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Only the generated invoice cache is shared. -->
+    <cache-path name="invoices" path="invoices/" />
+    <!-- The one directory the system camera writes a product photo into. A
+         path that is not declared here makes FileProvider throw when the
+         shutter button is pressed, so it must stay in step with
+         ProductImagePicker.newCaptureFile. -->
+    <cache-path name="product-captures" path="product-captures/" />
+</paths>

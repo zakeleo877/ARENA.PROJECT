@@ -1,0 +1,520 @@
+package com.zakeleo877.saeedcore.data.remote
+
+import com.zakeleo877.saeedcore.model.Order
+import com.zakeleo877.saeedcore.model.OrderChannel
+import com.zakeleo877.saeedcore.model.OrderItem
+import com.zakeleo877.saeedcore.model.OrderStatus
+import com.zakeleo877.saeedcore.model.Product
+import com.zakeleo877.saeedcore.model.StoreSettings
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.request.delete
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.patch
+import io.ktor.client.request.parameter
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.contentType
+import io.ktor.http.isSuccess
+import io.ktor.serialization.kotlinx.json.json
+import java.math.BigDecimal
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.util.UUID
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+
+@Serializable
+private data class ProductUpsertWire(
+    val name: String,
+    val price: String,
+    val description: String,
+    @SerialName("image_url") val imageUrl: String,
+    val category: String,
+    val available: Boolean,
+    @SerialName("sort_order") val sortOrder: Int,
+    /** Null clears the discount; the column allows null by design. */
+    @SerialName("original_price") val originalPrice: String? = null,
+    @SerialName("rating") val rating: String? = null,
+)
+
+@Serializable
+private data class OrderItemDetailWire(
+    @SerialName("product_id") val productId: String? = null,
+    val name: String,
+    val price: String,
+    val qty: Int,
+)
+
+@Serializable
+private data class OrderWire(
+    val id: String,
+    val number: Long,
+    val customer: String,
+    val phone: String,
+    val notes: String,
+    /** Contact-only map link for shop-to-customer contact. */
+    @SerialName("location") val customerLocationUrl: String,
+    val channel: String,
+    val status: String,
+    val details: List<OrderItemDetailWire>,
+    val total: String,
+    @SerialName("client_id") val clientId: String? = null,
+    @SerialName("created_at") val createdAt: String,
+) {
+    fun model(): Order = Order(
+        id = id,
+        number = number,
+        customer = customer,
+        phone = phone,
+        notes = notes,
+        customerLocationUrl = customerLocationUrl,
+        channel = if (channel == OrderChannel.MANUAL.databaseValue) OrderChannel.MANUAL else OrderChannel.APP,
+        status = runCatching { OrderStatus.fromDatabase(status) }.getOrDefault(OrderStatus.NEW),
+        items = details.map {
+            OrderItem(it.productId.orEmpty(), it.name, it.price.toBigDecimal(), it.qty)
+        },
+        total = total.toBigDecimal(),
+        clientId = clientId,
+        createdAt = OffsetDateTime.parse(createdAt).toInstant(),
+    )
+}
+
+@Serializable
+private data class SettingUpsertWire(val key: String, val value: String)
+
+@Serializable
+private data class ProductImageWire(
+    @SerialName("path") val path: String? = null,
+    @SerialName("publicUrl") val publicUrl: String? = null,
+)
+
+/**
+ * Admin-side PostgREST access. Every call carries the admin's own bearer token,
+ * so RLS alone decides what is visible. The customer app never uses this class.
+ */
+/** How many orders one screen asks for, and the ceiling for a caller. */
+private const val ORDERS_PAGE_SIZE = 100
+private const val MAX_ORDERS_PAGE_SIZE = 500
+
+class AdminApi(
+    private val client: HttpClient,
+    private val config: SupabasePublicConfig,
+) {
+    /**
+     * Admins may read hidden products too; the customer app only sees available ones.
+     *
+     * The token is required. The `products read` policy is
+     * `available or is_admin()`, so an anonymous request silently returns the
+     * available rows only: a product switched off would disappear from the
+     * management list instead of showing as hidden, and could never be edited
+     * back on.
+     */
+    suspend fun products(token: String): List<Product> {
+        val response = client.get("${config.baseUrl}/rest/v1/products") {
+            headers(token)
+            parameter("select", "id,name,price,description,image_url,category,available,sort_order,created_at,original_price,rating")
+            parameter("order", "sort_order.asc,created_at.desc")
+        }
+        ensureSuccess(response)
+        return response.body<List<JsonObject>>().map { productFrom(it) }
+    }
+
+    /**
+     * The newest orders, at most [limit] of them.
+     *
+     * The screen never needs the whole table, and the table grows without a
+     * ceiling: a shop that takes 200 orders a day has 73000 rows after a year.
+     * Asking for all of them meant an ever larger response, an ever longer
+     * parse, and a list that the user had to scroll instead of search. The
+     * server stops at [limit] rows and the index provides the order, so the
+     * cost of one screen does not grow with the age of the shop.
+     */
+    suspend fun orders(token: String, status: OrderStatus? = null, limit: Int = ORDERS_PAGE_SIZE): List<Order> {
+        val response = client.get("${config.baseUrl}/rest/v1/orders") {
+            headers(token)
+            parameter("select", "id,number,customer,phone,notes,location,channel,status,details,total,client_id,created_at")
+            parameter("order", "created_at.desc")
+            parameter("limit", limit.coerceIn(1, MAX_ORDERS_PAGE_SIZE))
+            if (status != null) parameter("status", "eq.${status.databaseValue}")
+        }
+        ensureSuccess(response)
+        return response.body<List<OrderWire>>().map(OrderWire::model)
+    }
+
+    suspend fun updateOrderStatus(token: String, orderId: String, status: OrderStatus): Boolean {
+        val response = client.patch("${config.baseUrl}/rest/v1/orders") {
+            headers(token)
+            parameter("id", "eq.$orderId")
+            contentType(ContentType.Application.Json)
+            setBody(mapOf("status" to status.databaseValue))
+        }
+        return response.status.isSuccess()
+    }
+
+    suspend fun insertManualOrder(
+        token: String,
+        customer: String,
+        phone: String,
+        notes: String,
+        items: List<Pair<String, Int>>,
+    ): Boolean {
+        val response = client.post("${config.baseUrl}/rest/v1/orders") {
+            headers(token)
+            contentType(ContentType.Application.Json)
+            setBody(
+                mapOf(
+                    "customer" to customer,
+                    "phone" to phone,
+                    "notes" to notes,
+                    "channel" to OrderChannel.MANUAL.databaseValue,
+                    "details" to items.map { (id, qty) ->
+                        mapOf("product_id" to id, "qty" to qty)
+                    },
+                ),
+            )
+        }
+        return response.status.isSuccess()
+    }
+
+    suspend fun upsertProduct(
+        token: String,
+        id: String?,
+        name: String,
+        price: BigDecimal,
+        description: String,
+        imageUrl: String,
+        category: String,
+        available: Boolean,
+        sortOrder: Int,
+        originalPrice: BigDecimal? = null,
+        rating: Double? = null,
+    ): Boolean {
+        val payload = ProductUpsertWire(
+            name = name,
+            price = price.toPlainString(),
+            description = description,
+            imageUrl = imageUrl,
+            category = category,
+            available = available,
+            sortOrder = sortOrder,
+            // An old price that is not above the current one is not a discount;
+            // sending it would be rejected by the database check anyway.
+            originalPrice = originalPrice?.takeIf { it > price }?.toPlainString(),
+            rating = rating?.takeIf { it in 0.0..5.0 }?.let { String.format(java.util.Locale.US, "%.1f", it) },
+        )
+        val response = if (id == null) {
+            client.post("${config.baseUrl}/rest/v1/products") {
+                headers(token)
+                contentType(ContentType.Application.Json)
+                setBody(payload)
+            }
+        } else {
+            client.patch("${config.baseUrl}/rest/v1/products") {
+                headers(token)
+                parameter("id", "eq.$id")
+                contentType(ContentType.Application.Json)
+                setBody(payload)
+            }
+        }
+        if (!response.status.isSuccess()) return refuse("product", response)
+        // An empty answer is ambiguous: PostgREST replies 201 with no body when
+        // it writes, and 200 with no body when the filter matched nothing. The
+        // difference matters, because "the row is not there" used to look like a
+        // successful save while the product never appeared in the catalogue.
+        // The write is confirmed by counting what the filter now matches.
+        if (response.bodyAsText().isBlank()) {
+            when (writeLanded(token, id, name, price)) {
+                true -> Unit
+                false -> {
+                    lastFailure = "لم يصل التغيير إلى الخادم — تحقّق من الصلاحيات"
+                    return false
+                }
+                // The read-back itself failed. Saying "saved" would be a guess,
+                // and saying "not saved" would be one too; the owner is told to
+                // look, which is the only honest answer.
+                null -> {
+                    lastFailure = "لم نتأكّد من الحفظ — حدّث القائمة للتحقّق"
+                    return false
+                }
+            }
+        }
+        lastFailure = null
+        return true
+    }
+
+    /**
+     * Reads the project back, one question at a time, so a shop with an empty
+     * catalogue can be told *which* link in the chain is broken.
+     *
+     * "The address is right and nothing appears" has four causes that all look
+     * identical from the outside: the schema was never applied, the key is not
+     * the project's key, the signed-in account is not an admin, or the insert
+     * is refused. Each one answers a different status, so each is asked
+     * separately. The API key goes in the `apikey` header; the user token goes
+     * in `Authorization`.
+     */
+    suspend fun diagnose(token: String): List<DiagnosticCheck> {
+        val checks = mutableListOf<DiagnosticCheck>()
+
+        // 1. Does the project answer at all?
+        val root = probe("https://${hostOf()}/auth/v1/health", token = null)
+        checks += if (root in 200..299) {
+            DiagnosticCheck("المشروع يستجيب", true, "HTTP $root")
+        } else {
+            DiagnosticCheck("المشروع يستجيب", false, "HTTP $root — العنوان غير صحيح أو المشروع موقوف")
+        }
+
+        // 2. Is the key this package carries accepted by the project?
+        val keyed = probe("${config.baseUrl}/rest/v1/products?select=id&limit=1", token = null)
+        checks += when (keyed) {
+            200 -> DiagnosticCheck("المفتاح مقبول", true, "HTTP 200")
+            401, 403 -> DiagnosticCheck(
+                "المفتاح مقبول",
+                false,
+                "HTTP $keyed — المفتاح ليس مفتاح هذا المشروع (مفتاح مشروع آخر)",
+            )
+            // A missing table is not a key problem: the request was understood
+            // and the table is simply not there, which means schema.sql has not
+            // been run on this project yet.
+            404 -> DiagnosticCheck(
+                "المفتاح مقبول",
+                false,
+                "HTTP 404 — المفتاح صحيح لكن لم يُطبَّق supabase/schema.sql على هذا المشروع",
+            )
+            else -> DiagnosticCheck("المفتاح مقبول", false, "HTTP $keyed")
+        }
+
+        // 3. Was the schema applied? A missing table answers 404 or 42P01.
+        val table = probe("${config.baseUrl}/rest/v1/products?select=id&limit=1", token)
+        checks += when {
+            table == 200 -> DiagnosticCheck("جدول المنتجات موجود", true, "HTTP 200")
+            table == 404 -> DiagnosticCheck(
+                "جدول المنتجات موجود",
+                false,
+                "غير موجود — لم يُطبَّق supabase/schema.sql على هذا المشروع",
+            )
+            else -> DiagnosticCheck("جدول المنتجات موجود", false, "HTTP $table")
+        }
+
+        // 4. Is the signed-in account an admin? Without this the catalogue is
+        //    readable but every write is silently refused.
+        val admin = runCatching { callBoolean("is_admin", token) }.getOrDefault(false)
+        checks += if (admin) {
+            DiagnosticCheck("الحساب مدير", true, "is_admin() = true")
+        } else {
+            DiagnosticCheck(
+                "الحساب مدير",
+                false,
+                "الحساب المسجّل ليس مديراً — المنتجات التي يضيفها لا تظهر للعميل",
+            )
+        }
+
+        return checks
+    }
+
+    /**
+     * Calls a boolean database function with the user's token.
+     *
+     * `is_admin()` reads `auth.uid()` from that token, so the answer is about
+     * the signed-in account rather than about the key.
+     */
+    suspend fun callBoolean(function: String, token: String): Boolean = try {
+        val response = client.post("${config.baseUrl}/rest/v1/rpc/$function") {
+            header("apikey", config.apiKey)
+            header(HttpHeaders.Authorization, "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody("{}")
+        }
+        response.status.isSuccess() && response.bodyAsText().trim().equals("true", ignoreCase = true)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        false
+    }
+
+    /** The bare status code, or 0 when the request never reached the server. */
+    private suspend fun probe(url: String, token: String?): Int = try {
+        val response = client.get(url) {
+            header("apikey", config.apiKey)
+            if (token != null) header(HttpHeaders.Authorization, "Bearer $token")
+        }
+        response.status.value
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        0
+    }
+
+    private fun hostOf(): String = config.baseUrl.substringAfter("://").substringBefore("/")
+
+    /**
+     * Confirms a product write by reading the row back.
+     *
+     * Only called when the write answered without a body. A create is confirmed
+     * by a product with the same name and price existing; an edit by the row
+     * carrying the new values.
+     *
+     * `null` means the read itself failed, so the write is neither proven nor
+     * disproven.
+     */
+    private suspend fun writeLanded(
+        token: String,
+        id: String?,
+        name: String,
+        price: BigDecimal,
+    ): Boolean? = try {
+        val filter = if (id != null) "id" to "eq.$id" else "name" to "eq.$name"
+        val response = client.get("${config.baseUrl}/rest/v1/products") {
+            headers(token)
+            parameter("select", "id,name,price")
+            parameter("limit", "1")
+            parameter(filter.first, filter.second)
+        }
+        // A read that was refused or failed proves nothing about the write.
+        if (!response.status.isSuccess()) return null
+        val rows = response.body<List<JsonObject>>()
+        rows.any { row ->
+            row["name"]?.jsonPrimitive?.contentOrNull == name &&
+                row["price"]?.jsonPrimitive?.contentOrNull?.toBigDecimalOrNull()
+                    ?.compareTo(price) == 0
+        }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        // Same reasoning: a dropped connection during the read-back is unknown,
+        // not a failed write.
+        null
+    }
+
+    suspend fun deleteProduct(token: String, id: String): Boolean {
+        val response = client.delete("${config.baseUrl}/rest/v1/products") {
+            headers(token)
+            parameter("id", "eq.$id")
+        }
+        return response.status.isSuccess()
+    }
+
+    suspend fun updateSettings(token: String, values: Map<String, String>): Boolean {
+        val response = client.post("${config.baseUrl}/rest/v1/settings") {
+            headers(token)
+            contentType(ContentType.Application.Json)
+            header("Prefer", "resolution=merge-duplicates,return=minimal")
+            setBody(values.map { (key, value) -> SettingUpsertWire(key, value) })
+        }
+        return response.status.isSuccess()
+    }
+
+    /**
+     * Uploads a compressed product image to the bucket and returns its public URL.
+     *
+     * The bearer token is mandatory here: the bucket policies allow insert only
+     * to `authenticated` users for whom `is_admin()` is true, so a request that
+     * carries the publishable key alone is rejected with 403. The upload used to
+     * be sent without it, which made every call fail even though the rest of the
+     * chain was in place.
+     */
+    /**
+     * The last refusal, in the words the server used.
+     *
+     * A function that answers true or false leaves the owner with nothing to
+     * report and leaves me guessing between an expired session, a bucket policy
+     * and a rejected column. The status and the server's own message are kept so
+     * the screen can show them.
+     */
+    var lastFailure: String? = null
+        private set
+
+    private suspend fun refuse(prefix: String, response: io.ktor.client.statement.HttpResponse): Boolean {
+        val body = runCatching { response.bodyAsText() }.getOrDefault("")
+        lastFailure = "$prefix ${response.status.value}: ${body.take(300)}"
+        return false
+    }
+
+    suspend fun uploadProductImage(token: String, fileName: String, bytes: ByteArray): String? {
+        val response = client.post("${config.baseUrl}/storage/v1/object/product-images/$fileName") {
+            headers(token)
+            // Ktor has no WebP constant, so the MIME type is parsed explicitly.
+            contentType(ContentType.parse("image/webp"))
+            setBody(bytes)
+        }
+        if (!response.status.isSuccess()) {
+            refuse("upload", response)
+            return null
+        }
+        lastFailure = null
+        val wire = runCatching { response.body<ProductImageWire>() }.getOrNull()
+        return wire?.publicUrl
+            ?: wire?.path?.let { "${config.baseUrl}/storage/v1/object/public/product-images/$it" }
+            ?: "${config.baseUrl}/storage/v1/object/public/product-images/$fileName"
+    }
+
+    suspend fun deleteProductImage(token: String, path: String): Boolean {
+        val response = client.delete("${config.baseUrl}/storage/v1/object/product-images/$path") {
+            headers(token)
+        }
+        return response.status.isSuccess()
+    }
+
+    private fun io.ktor.client.request.HttpRequestBuilder.headers(token: String? = null) {
+        header("apikey", config.publicKey)
+        header(HttpHeaders.Accept, ContentType.Application.Json)
+        if (token != null) header(HttpHeaders.Authorization, "Bearer $token")
+    }
+
+    private suspend fun ensureSuccess(response: io.ktor.client.statement.HttpResponse) {
+        if (response.status.isSuccess()) return
+        val status = response.status.value
+        throw ApiFailure(status, if (status == 401 || status == 403) ApiFailureKind.UNAUTHORIZED else ApiFailureKind.SERVER)
+    }
+
+    private fun productFrom(json: JsonObject): Product {
+        val id = json.getValue("id").jsonPrimitive.content
+        val name = json.getValue("name").jsonPrimitive.content
+        val price = json.getValue("price").jsonPrimitive.contentOrNull?.toBigDecimalOrNull()
+            ?: throw IllegalArgumentException("Invalid product price.")
+        val description = json.getValue("description").jsonPrimitive.content
+        val imageUrl = json.getValue("image_url").jsonPrimitive.content
+        val category = json.getValue("category").jsonPrimitive.content
+        val available = json.getValue("available").jsonPrimitive.content.toBoolean()
+        val sortOrder = json.getValue("sort_order").jsonPrimitive.content.toInt()
+        val createdAt = OffsetDateTime.parse(json.getValue("created_at").jsonPrimitive.content).toInstant()
+        val originalPrice = json["original_price"].asDecimalOrNull()?.takeIf { it >= price }
+        val rating = json["rating"].asDecimalOrNull()?.toDouble()?.takeIf { it in 0.0..5.0 }
+        return Product(
+            id, name, price, description, imageUrl, category, available, sortOrder, createdAt,
+            originalPrice = originalPrice,
+            rating = rating,
+        )
+    }
+
+    /** Reads an optional numeric field returned as a string, a number, or null. */
+    private fun JsonElement?.asDecimalOrNull(): BigDecimal? {
+        val text = this?.jsonPrimitive?.contentOrNull ?: return null
+        if (text.isBlank() || text == "null") return null
+        return text.toBigDecimalOrNull()
+    }
+}
+
+/**
+ * One link in the chain from "the app has a product" to "the shop shows it".
+ *
+ * @param passed true when this link is intact.
+ * @param detail the server's own words, so the owner can act on it.
+ */
+data class DiagnosticCheck(
+    val label: String,
+    val passed: Boolean,
+    val detail: String,
+)

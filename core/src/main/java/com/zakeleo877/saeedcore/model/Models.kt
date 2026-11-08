@@ -1,0 +1,111 @@
+package com.zakeleo877.saeedcore.model
+
+import java.math.BigDecimal
+import java.time.Instant
+
+/** Prices shown by the client are indicative; place_order is authoritative. */
+data class Product(
+    val id: String,
+    val name: String,
+    val price: BigDecimal,
+    val description: String,
+    val imageUrl: String,
+    val category: String,
+    val available: Boolean,
+    val sortOrder: Int,
+    val createdAt: Instant,
+    /**
+     * The price before a discount, or null when nothing is being discounted.
+     *
+     * Null is not the same as "equal to price": a card shows a struck-through
+     * price and a percentage only when there is a real difference, so an
+     * unset value must never be rendered as 0.
+     */
+    val originalPrice: BigDecimal? = null,
+    /** Average customer rating, or null when the product has no reviews yet. */
+    val rating: Double? = null,
+) {
+    /** True when a discount is advertised and worth showing. */
+    val hasDiscount: Boolean
+        get() = originalPrice != null && originalPrice > price
+
+    /**
+     * The discount as a whole percentage, or null when there is none.
+     *
+     * Rounded down, so a card never claims a larger reduction than the customer
+     * really gets: 1799 of 1999 is 10%, not 11%.
+     */
+    val discountPercent: Int?
+        get() {
+            val original = originalPrice ?: return null
+            if (!hasDiscount) return null
+            val saved = (original - price).toDouble()
+            return kotlin.math.floor(saved / original.toDouble() * 100).toInt()
+        }
+}
+
+data class StoreSettings(
+    val storeName: String,
+    val whatsapp: String,
+    val currency: String,
+    val footerNote: String,
+)
+
+data class CartItem(val product: Product, val quantity: Int) {
+    init { require(quantity in 1..99) }
+    val estimatedTotal: BigDecimal get() = product.price.multiply(quantity.toBigDecimal())
+}
+
+data class OrderItem(
+    val productId: String,
+    val name: String,
+    val price: BigDecimal,
+    val quantity: Int,
+)
+
+enum class OrderStatus(val databaseValue: String) {
+    NEW("جديد"),
+    PREPARING("قيد التحضير"),
+    READY("جاهز"),
+    HANDED_OVER("مُسلَّم"),
+    CANCELLED("ملغي");
+
+    companion object {
+        fun fromDatabase(value: String): OrderStatus =
+            entries.firstOrNull { it.databaseValue == value }
+                ?: throw IllegalArgumentException("Unknown order status")
+    }
+}
+
+enum class OrderChannel(val databaseValue: String) {
+    APP("التطبيق"), MANUAL("يدوي")
+}
+
+data class Order(
+    val id: String,
+    val number: Long,
+    val customer: String,
+    val phone: String,
+    val notes: String,
+    /** Contact-only map link for shop-to-customer contact. */
+    val customerLocationUrl: String,
+    val channel: OrderChannel,
+    val status: OrderStatus,
+    val items: List<OrderItem>,
+    val total: BigDecimal,
+    val clientId: String?,
+    val createdAt: Instant,
+)
+
+/** Immutable snapshot. A retry must use the SAME clientId and item snapshot. */
+data class PendingOrder(
+    val clientId: String,
+    val customer: String,
+    val phone: String,
+    val notes: String,
+    /** Contact-only map link for shop-to-customer contact. */
+    val customerLocationUrl: String,
+    val items: List<PendingOrderItem>,
+)
+
+data class PendingOrderItem(val productId: String, val quantity: Int)

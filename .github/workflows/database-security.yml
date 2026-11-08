@@ -1,0 +1,66 @@
+name: Database security checks
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  security:
+    name: Acceptance checks 14-25 on an isolated database
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install the dependencies
+        working-directory: supabase/tests
+        run: npm ci --no-audit --no-fund
+
+      # The environment is created from supabase/schema.sql on a private
+      # PostgreSQL instance that lives only for the duration of the job. No
+      # production project and no production key is contacted.
+      - name: Run the isolated acceptance checks (14-25)
+        working-directory: supabase/tests
+        run: npm run test:acceptance
+
+      - name: Run the schema smoke tests
+        working-directory: supabase/tests
+        run: npm test
+
+      - name: Report that no production database was contacted
+        run: |
+          set -euo pipefail
+          {
+            echo "## Database security report"
+            echo
+            echo "- The checks ran against an isolated throwaway PostgreSQL instance."
+            echo "- The instance was created from supabase/schema.sql for this run only."
+            echo "- It listened on the loopback interface and used dummy data."
+            echo "- No production project URL, key or credential was used."
+            echo "- Every order created by the checks was deleted before the run ended."
+          } > database-security-report.md
+          cat database-security-report.md
+
+      - name: Upload the report
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-security-report
+          path: database-security-report.md
+          if-no-files-found: ignore

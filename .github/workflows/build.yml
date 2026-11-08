@@ -1,0 +1,644 @@
+name: Build and verify
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build:
+    name: Build, test and package both apps
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Use the runner Android SDK
+        run: |
+          set -uo pipefail
+          {
+            echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+            echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
+            echo "--- /usr/local/lib/android/sdk ---"
+            ls -la /usr/local/lib/android/sdk 2>&1 || true
+            echo "--- /opt/android ---"
+            ls -la /opt/android 2>&1 || true
+            echo "--- $HOME/Android ---"
+            ls -la "$HOME/Android" 2>&1 || true
+            echo "--- sdkmanager binaries ---"
+            find /usr /opt "$HOME" -name 'sdkmanager' -type f 2>/dev/null | head -n 20
+            echo "--- java ---"
+            java -version 2>&1 || true
+          } > /tmp/runner-probe.txt 2>&1
+          cat /tmp/runner-probe.txt
+
+          SDKMANAGER_PATH=""
+          for candidate in \
+            /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager \
+            /usr/local/lib/android/sdk/cmdline-tools/*/bin/sdkmanager \
+            /opt/android/sdk/cmdline-tools/latest/bin/sdkmanager \
+            "$HOME/Android/Sdk/cmdline-tools/latest/bin/sdkmanager"; do
+            if [ -x "$candidate" ]; then
+              SDKMANAGER_PATH="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$SDKMANAGER_PATH" ]; then
+            echo "--- downloading the command line tools ---"
+            SDKMANAGER_PATH=""
+          else
+            # .../sdk/cmdline-tools/latest/bin/sdkmanager -> .../sdk
+            SDK_ROOT="$(dirname "$(dirname "$(dirname "$(dirname "$SDKMANAGER_PATH")")")")"
+            echo "Using SDK root $SDK_ROOT"
+            echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+            echo "SDKMANAGER=$SDKMANAGER_PATH" >> "$GITHUB_ENV"
+          fi
+
+          if [ -z "$SDKMANAGER_PATH" ]; then
+            SDK_ROOT="$HOME/Android/Sdk"
+            mkdir -p "$SDK_ROOT/cmdline-tools"
+            curl -fsSL -o /tmp/cmdline-tools.zip \
+              "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+            unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-tools
+            mv /tmp/cmdline-tools/cmdline-tools "$SDK_ROOT/cmdline-tools/latest"
+            echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+            echo "SDKMANAGER=$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" >> "$GITHUB_ENV"
+          fi
+
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+
+      - name: Accept licenses and install the platform
+        run: |
+          set -euo pipefail
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses > /dev/null 2>&1 || true
+
+          # The runner image ships a set of platforms. Prefer the one the
+          # project targets, and fall back to the newest available so the
+          # build still runs on images that lag behind.
+          AVAILABLE="$("$SDKMANAGER" --sdk_root="$ANDROID_HOME" --list 2>/dev/null || true)"
+          {
+            echo "--- installed platforms directory ---"
+            ls "$ANDROID_HOME/platforms" 2>&1 || true
+            echo "--- installed build-tools directory ---"
+            ls "$ANDROID_HOME/build-tools" 2>&1 || true
+            echo "--- sdkmanager --list (filtered) ---"
+            echo "$AVAILABLE" | grep -E 'platforms;android-|build-tools;' | head -n 40 || true
+          } >> /tmp/runner-probe.txt 2>&1
+
+          PLATFORM="$(echo "$AVAILABLE" | grep -oE 'platforms;android-3[0-9][0-9.]*(-[a-z0-9]+)?' | sort -u | tail -n 1)"
+          BUILD_TOOLS="$(echo "$AVAILABLE" | grep -oE 'build-tools;3[0-9][0-9.]*' | sort -V | tail -n 1)"
+          echo "Selected platform: ${PLATFORM:-none}"
+          echo "Selected build tools: ${BUILD_TOOLS:-none}"
+
+          set +e
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platform-tools" \
+            "${PLATFORM:-platforms;android-35}" "${BUILD_TOOLS:-build-tools;35.0.0}" \
+            > /tmp/sdk-install.txt 2>&1
+          INSTALL_STATUS=$?
+          set -e
+          {
+            echo "--- sdkmanager install output ---"
+            cat /tmp/sdk-install.txt
+            echo "install status: $INSTALL_STATUS"
+          } >> /tmp/runner-probe.txt 2>&1
+
+          # Tell Gradle which platform to compile against. The runner image
+          # already ships platforms, so an install failure is not fatal as long
+          # as a platform is present.
+          INSTALLED_PLATFORM_ID="$(ls "$ANDROID_HOME/platforms" 2>/dev/null | grep -oE 'android-[0-9]+(\.[0-9]+)?' | sed 's/android-//' | sort -V | tail -n 1)"
+          echo "The installed platform is $INSTALLED_PLATFORM_ID"
+          if [ -n "$INSTALLED_PLATFORM_ID" ]; then
+            echo "SAEED_COMPILE_SDK=android-$INSTALLED_PLATFORM_ID" >> "$GITHUB_ENV"
+            echo "Compiling against the installed platform API $INSTALLED_PLATFORM_ID"
+          elif [ "$INSTALL_STATUS" != "0" ]; then
+            cat /tmp/runner-probe.txt
+            exit 1
+          fi
+
+      # The publishable key and the project URL are public values, but they are
+      # kept in secrets so nothing sensitive is ever committed.
+      # Check that every pinned plugin and library version exists before the
+      # build starts, so a bad version is reported clearly.
+      - name: Verify the pinned versions
+        run: |
+          set -uo pipefail
+          {
+            echo "## Plugin and library versions"
+            for url in \
+              "https://plugins.gradle.org/m2/org/jetbrains/kotlin/plugin/compose/org.jetbrains.kotlin.plugin.compose.gradle.plugin/2.4.21/org.jetbrains.kotlin.plugin.compose.gradle.plugin-2.4.21.pom" \
+              "https://plugins.gradle.org/m2/org/jetbrains/kotlin/plugin/compose/org.jetbrains.kotlin.plugin.compose.gradle.plugin/2.4.20/org.jetbrains.kotlin.plugin.compose.gradle.plugin-2.4.20.pom" \
+              "https://plugins.gradle.org/m2/com/google/devtools/ksp/com.google.devtools.ksp.gradle.plugin/2.3.12/com.google.devtools.ksp.gradle.plugin-2.3.12.pom" \
+              "https://repo1.maven.org/maven2/androidx/room3/room3-runtime/3.0.3/room3-runtime-3.0.3.pom" \
+              "https://repo1.maven.org/maven2/com/google/dagger/hilt-android/2.60.1/hilt-android-2.60.1.pom" \
+              "https://repo1.maven.org/maven2/androidx/compose/compose-bom/2026.09.00/compose-bom-2026.09.00.pom" \
+              "https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/9.5.0/gradle-9.5.0.pom"; do
+              CODE="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$url" 2>/dev/null || echo ERR)"
+              echo "$CODE  $url"
+            done
+          } > /tmp/versions.txt 2>&1
+          cat /tmp/versions.txt
+
+      # The two values reach the build only through a git-ignored properties
+      # file. They are never echoed: GitHub masks registered secrets in the log,
+      # and `::add-mask::` covers the values that the masking would miss if the
+      # secret is reformatted.
+      # The two values reach the build only through a git-ignored properties
+      # file. They are never echoed: GitHub masks registered secrets in the log,
+      # and `::add-mask::` covers the values that the masking would miss if the
+      # secret is reformatted.
+      #
+      # When the secrets are absent the build still runs with the placeholder
+      # address, so the packaging checks 1-10 keep their value. That state is
+      # reported as a failure of its own step, because a package that points at
+      # a placeholder cannot reach the store.
+      - name: Generate local.properties
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          BAT_KEY: ${{ secrets.SUPABASE_KEY }}
+          PUB_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          ALT_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
+        run: |
+          set -uo pipefail
+          # The key may be stored under any of the names a person is likely to
+          # pick. The value is validated below, so a wrong value still fails
+          # loudly; the aliases only remove a reason for the run to stop early.
+          SUPABASE_KEY="${BAT_KEY:-${PUB_KEY:-${ALT_KEY:-${GITHUB_PAT:-}}}}"
+          if [ -n "${BAT_KEY:-}" ]; then echo "The key came from SUPABASE_KEY."
+          elif [ -n "${PUB_KEY:-}" ]; then echo "The key came from SUPABASE_PUBLISHABLE_KEY."
+          elif [ -n "${ALT_KEY:-}" ]; then echo "The key came from SUPABASE_ANON_KEY."
+          elif [ -n "${GITHUB_PAT:-}" ]; then echo "The key came from GITHUB_PAT."
+          fi
+          # The project address is public: it sits in every package, so there is
+          # no reason to make it a secret. It has a default, which leaves one
+          # value to configure instead of two. A secret still wins if it is set,
+          # so another project needs no change to this file.
+          if [ -z "${SUPABASE_URL:-}" ]; then
+            SUPABASE_URL="https://bycdertfhfmjsdshagmy.supabase.co"
+            echo "NOTE: SUPABASE_URL was not set; using the project address of this store."
+          fi
+          # The address is public property of the project, so printing the host
+          # is safe and shows which project the package will talk to.
+          echo "The project host is ${SUPABASE_URL#https://}"
+          if [ -z "${SUPABASE_KEY:-}" ]; then
+            echo "FAIL: SUPABASE_KEY is not configured."
+            echo "      Add it in Settings, Secrets and variables, Actions, tab Secrets."
+            echo "      The address already has a default, so this is the only value needed."
+            echo "      This build continues with the placeholder address so that"
+            echo "      the packaging checks still run; it is not usable."
+            {
+              echo "SUPABASE_URL=https://placeholder.invalid"
+              echo "SUPABASE_KEY=sb_publishable_placeholder_for_the_build"
+              echo "sdk.dir=$ANDROID_HOME"
+            } > local.properties
+            echo "PLACEHOLDER=1" >> "$GITHUB_ENV"
+            echo "::warning::SUPABASE_URL and SUPABASE_KEY are not configured; the packages point at a placeholder."
+            exit 0
+          fi
+          echo "::add-mask::$SUPABASE_URL"
+          echo "::add-mask::$SUPABASE_KEY"
+          # A secret key bypasses every row level security policy. It must never
+          # be compiled into a package that anyone can download and read.
+          case "$SUPABASE_KEY" in
+            sb_secret_*)
+              echo "FAIL: SUPABASE_KEY is a secret key. The applications use the publishable key only."
+              exit 1
+              ;;
+          esac
+          case "$SUPABASE_KEY" in
+            sb_publishable_*) : ;;
+            *) echo "FAIL: SUPABASE_KEY must be a publishable key (sb_publishable_...)."
+               exit 1 ;;
+          esac
+          case "$SUPABASE_URL" in
+            https://*.*) : ;;
+            *) echo "FAIL: SUPABASE_URL must be the https address of the project."
+               exit 1 ;;
+          esac
+          {
+            echo "SUPABASE_URL=$SUPABASE_URL"
+            echo "SUPABASE_KEY=$SUPABASE_KEY"
+            echo "sdk.dir=$ANDROID_HOME"
+          } > local.properties
+          chmod 600 local.properties
+          echo "PASS: local.properties was written with the project address and a publishable key."
+          # Report the shape only, never the value.
+          echo "      address length: ${#SUPABASE_URL}, key length: ${#SUPABASE_KEY}, key prefix: ${SUPABASE_KEY%%_*}"
+
+      # Proves the project is reachable and the key is accepted before five
+      # minutes of Gradle run. A wrong address or a revoked key fails here.
+      - name: Check the connection to the project
+        if: env.PLACEHOLDER != '1'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          set -uo pipefail
+          BASE="${SUPABASE_URL%/}"
+          CODE="$(curl -sS -o /tmp/auth-health.json -w '%{http_code}' \
+            -H "apikey: $SUPABASE_KEY" "$BASE/auth/v1/health" || echo 000)"
+          echo "auth health returned $CODE"
+          case "$CODE" in
+            200) echo "PASS: the project address answers and the key is accepted." ;;
+            000) echo "FAIL: the project address could not be reached."
+                 exit 1 ;;
+            401|403) echo "FAIL: the project refused the publishable key."
+                     exit 1 ;;
+            *) echo "NOTE: auth health returned $CODE; continuing, the catalog check decides." ;;
+          esac
+          CATALOG="$(curl -sS -o /tmp/catalog.json -w '%{http_code}' \
+            -H "apikey: $SUPABASE_KEY" "$BASE/rest/v1/products?select=id&limit=1" || echo 000)"
+          echo "the catalog returned $CATALOG"
+          case "$CATALOG" in
+            200) echo "PASS: the catalog is readable, so the schema is applied." ;;
+            404) echo "NOTE: the products table is missing."
+                 echo "      Apply supabase/schema.sql to the project before relying on this build."
+                 echo "      The package is still built so that checks 1-10 can run." ;;
+            401|403) echo "FAIL: reading the catalog was refused ($CATALOG)."
+                     echo "      Check the key and the row level security policies."
+                     exit 1 ;;
+            *) echo "NOTE: the catalog returned $CATALOG; the package is still built." ;;
+          esac
+
+      # Production signing uses the GitHub Secrets when they are configured.
+      # Otherwise a throwaway key is generated inside the runner so that the
+      # packaging checks can still run. The throwaway key never leaves the
+      # runner and is never usable for a real distribution.
+      - name: Prepare the signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${KEYSTORE_BASE64:-}" ] && [ -n "${KEYSTORE_PASSWORD:-}" ] \
+             && [ -n "${KEY_ALIAS:-}" ] && [ -n "${KEY_PASSWORD:-}" ]; then
+            echo 'Using the production signing key from the repository secrets.'
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+            # Verify the keystore opens with the given alias before the build.
+            keytool -list -keystore "$RUNNER_TEMP/release.jks" \
+              -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" > /dev/null
+            cat > keystore.properties <<EOF
+          storeFile=$RUNNER_TEMP/release.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+            echo 'SIGNING_MODE=production' > /tmp/signing-mode.txt
+          else
+            echo 'Production secrets are not configured; generating a throwaway key.'
+            echo 'The resulting APKs are signed with a temporary key and are NOT distributable.'
+            keytool -genkeypair -v \
+              -keystore "$RUNNER_TEMP/release.jks" \
+              -storepass android -keypass android \
+              -alias saeed -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Saeed Stores, OU=Dev, O=Saeed, L=Algiers, C=DZ"
+            cat > keystore.properties <<EOF
+          storeFile=$RUNNER_TEMP/release.jks
+          storePassword=android
+          keyAlias=saeed
+          keyPassword=android
+          EOF
+            echo 'SIGNING_MODE=throwaway' > /tmp/signing-mode.txt
+          fi
+          # The keystore stays in RUNNER_TEMP for the build and is removed later;
+          # it is never copied into the artifacts directory.
+          printf 'signing keystore prepared in %s\n' "$RUNNER_TEMP/release.jks"
+
+      # A cheap guard that runs before the Gradle build. It catches a missing
+      # import or a wrong library constant in seconds instead of after the
+      # five minute compile.
+      - name: Check the Kotlin references
+        run: python3 scripts/verify-kotlin-refs.py
+
+      - name: Run unit tests and lint
+        env:
+          SAEED_COMPILE_SDK: ${{ vars.SAEED_COMPILE_SDK }}
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace test lint 2>&1 | tee /tmp/gradle-test.log || {
+            {
+              echo '## lint report'
+              for report in $(find . -name 'lint-results*.txt' 2>/dev/null); do
+                echo "### $report"
+                cat "$report"
+              done
+              echo '## lint xml issues'
+              for report in $(find . -name 'lint-results*.xml' 2>/dev/null); do
+                python3 - "$report" <<'PYEOF'
+          import sys, xml.etree.ElementTree as ET
+          try:
+              root = ET.parse(sys.argv[1]).getroot()
+          except Exception as error:
+              print('could not parse:', error)
+              raise SystemExit(0)
+          for issue in root.iter('issue'):
+              location = issue.find('location')
+              where = ''
+              if location is not None:
+                  where = f"{location.get('file', '')}:{location.get('line', '')}"
+              print(f"[{issue.get('severity')}] {issue.get('id')} {where} {issue.get('message')}")
+          PYEOF
+              done
+            } > /tmp/lint-issues.txt 2>&1
+            cat /tmp/lint-issues.txt | head -n 150
+            echo "### Gradle test and lint failure"
+            echo '```'
+            grep -E 'error:|e: |FAILED|Execution failed|Caused by|\* What went wrong|^\s+>' -A 3 /tmp/gradle-test.log | head -n 150
+            echo '```'
+            # The job log itself may be unreadable from outside, but check
+            # annotations are served by the API. Publish the first concrete
+            # compiler or test error as an annotation so the cause is visible
+            # without downloading the log.
+            DIAG="$(grep -E '^e: file |error:|FAILED|Execution failed|Caused by|\* What went wrong|> There were|Lint found' /tmp/gradle-test.log 2>/dev/null \
+              | head -n 12 | sed 's/%/%25/g' | tr '\n' '|')"
+            echo "::error title=Gradle test and lint diagnosis::${DIAG:-no matching line in the log}"
+            exit 1
+          }
+
+      - name: Build both release APKs
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon --stacktrace :customer:assembleRelease :admin:assembleRelease 2>&1 | tee /tmp/gradle-build.log || {
+            echo "### Gradle build failure"
+            echo '```'
+            grep -E 'error:|e: |FAILED|Execution failed|Caused by|\* What went wrong|^\s+>' -A 3 /tmp/gradle-build.log | head -n 180
+            echo '```'
+            DIAG="$(grep -E '^e: file |error:|FAILED|Execution failed|Caused by|\* What went wrong|> There were' /tmp/gradle-build.log 2>/dev/null \
+              | head -n 12 | sed 's/%/%25/g' | tr '\n' '|')"
+            echo "::error title=Gradle build diagnosis::${DIAG:-no matching line in the log}"
+            exit 1
+          }
+          mkdir -p artifacts/apk
+          cp customer/build/outputs/apk/release/*.apk artifacts/apk/saeed-store-1.0.apk
+          cp admin/build/outputs/apk/release/*.apk artifacts/apk/saeed-admin-1.0.apk
+          # The signing material must not survive the job.
+          rm -f "$RUNNER_TEMP/release.jks" keystore.properties
+          echo "Signing mode: $(cat /tmp/signing-mode.txt 2>/dev/null || echo unknown)"
+
+      # Acceptance check 10: report the signing key that was used. The strict
+      # gate lives in the "Release gate" workflow, so a missing production
+      # secret does not hide the result of the build itself.
+      - name: Report the release signing key (acceptance check 10)
+        run: |
+          set -uo pipefail
+          MODE="$(cat /tmp/signing-mode.txt 2>/dev/null || echo unknown)"
+          FINGERPRINT="unknown"
+          if command -v apksigner > /dev/null 2>&1; then
+            FINGERPRINT="$(apksigner verify --print-certs artifacts/apk/saeed-store-1.0.apk 2>/dev/null \
+              | grep -i 'SHA-256 digest' | head -n 1 | sed 's/.*: //')" || true
+          fi
+          {
+            echo "Signing mode: $MODE"
+            echo "Certificate SHA-256: ${FINGERPRINT:-unknown}"
+            if [ "$MODE" = "production" ]; then
+              bash scripts/verify-signing.sh "$MODE" "${FINGERPRINT:-unknown}"
+            else
+              echo "NOTE: 10. the build fell back to a throwaway key."
+              echo "      The APK is not distributable. The Release gate workflow"
+              echo "      reports this as a failure until the production secrets are set."
+            fi
+          } | tee /tmp/verify-signing.txt
+
+      - name: Verify the packages (acceptance checks 1-10)
+        run: |
+          set -uo pipefail
+          {
+            bash scripts/verify-apk.sh artifacts/apk/saeed-store-1.0.apk saeed-store
+            bash scripts/verify-apk.sh artifacts/apk/saeed-admin-1.0.apk saeed-admin
+          } > /tmp/verify-apk.txt 2>&1 || true
+          cat /tmp/verify-apk.txt
+          if grep -q '^FAIL:' /tmp/verify-apk.txt; then
+            exit 1
+          fi
+
+      - name: Check the keys inside the packages (acceptance check 12b)
+        run: |
+          set -uo pipefail
+          {
+            bash scripts/verify-apk-keys.sh \
+              artifacts/apk/saeed-store-1.0.apk \
+              artifacts/apk/saeed-admin-1.0.apk
+          } > /tmp/verify-apk-keys.txt 2>&1 || true
+          cat /tmp/verify-apk-keys.txt
+          if grep -q '^FAIL:' /tmp/verify-apk-keys.txt; then
+            echo "The packages must never carry a high-privilege key."
+            exit 1
+          fi
+
+      - name: Verify the repository (acceptance checks 11-13)
+        run: bash scripts/verify-repo.sh
+
+      - name: Run the local database smoke tests
+        working-directory: supabase/tests
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+
+      # Acceptance checks 14-25 and the application flows, executed against an
+      # isolated throwaway Supabase-compatible environment. The environment is
+      # created from supabase/schema.sql on a private PostgreSQL instance, so
+      # the row level security policies under test are the real ones. No
+      # production project and no production key is ever contacted.
+      - name: Run the isolated database security checks (acceptance checks 14-25)
+        working-directory: supabase/tests
+        run: |
+          npm run test:acceptance
+
+
+      # The failure output is published with the GitHub API so it can be read
+      # even when the log and artifact storage hosts are unreachable.
+      # The checks above still run without the credentials, because packaging
+      # regressions have to be caught either way. This step is what makes the
+      # job red, so a package that cannot reach the store is never mistaken
+      # for a finished one.
+      - name: Require the project configuration
+        if: env.PLACEHOLDER == '1'
+        run: |
+          echo "FAIL: SUPABASE_KEY is not configured."
+          echo "      Settings, Secrets and variables, Actions, tab Secrets."
+          echo "      The address has a default, so this is the only value to add."
+          echo "      The publishable key goes in SUPABASE_KEY; a secret key is refused."
+          echo "      Every packaging check above ran against the placeholder address,"
+          echo "      so the packages are not usable until this step can pass."
+          exit 1
+
+      - name: Collect the unit test reports
+        if: always()
+        run: |
+          set -uo pipefail
+          mkdir -p /tmp/test-reports
+          find . -path '*/build/test-results/*' -name '*.xml' -exec cp --parents {} /tmp/test-reports/ \; 2>/dev/null || true
+          {
+            echo '## Package verification'
+            echo '```'
+            cat /tmp/verify-apk.txt 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
+            echo '## Lint issues'
+            echo '```'
+            cat /tmp/lint-issues.txt 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
+            echo '## Unit test failures'
+            for report in $(find . -path '*/build/test-results/*' -name 'TEST-*.xml' 2>/dev/null); do
+              echo "### $report"
+              python3 - "$report" <<'PYEOF'
+          import sys, xml.etree.ElementTree as ET
+          try:
+              root = ET.parse(sys.argv[1]).getroot()
+          except Exception as error:
+              print('could not parse:', error)
+              raise SystemExit(0)
+          for case in root.iter('testcase'):
+              for child in case:
+                  if child.tag in ('failure', 'error'):
+                      print('FAILED:', case.get('name'))
+                      print((child.text or child.get('message') or '')[:1500])
+                      print('-' * 60)
+          PYEOF
+            done
+          } > /tmp/test-failures.txt 2>&1
+          cat /tmp/test-failures.txt | head -n 120
+
+      - name: Publish diagnostics
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -uo pipefail
+          mkdir -p diagnostics
+          {
+            echo "# CI diagnostics"
+            echo
+            echo "Run: $RUN_ID"
+            echo "Commit: $SHA"
+            echo
+            echo "## runner probe"
+            echo '```'
+            cat /tmp/runner-probe.txt 2>/dev/null || echo "(no probe output)"
+            echo '```'
+            echo
+            echo '## version probe'
+            echo '```'
+            cat /tmp/versions.txt 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
+            echo '## Package verification'
+            echo '```'
+            cat /tmp/verify-apk.txt 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
+            echo '## Lint issues'
+            echo '```'
+            cat /tmp/lint-issues.txt 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
+            echo '## Unit test failures'
+            echo '```'
+            cat /tmp/test-failures.txt 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
+            echo '## Gradle test and lint'
+            echo '```'
+            head -n 60 /tmp/gradle-test.log 2>/dev/null || echo "(not reached)"
+            echo
+            echo '--- failure lines ---'
+            grep -E 'FAILED|FAILURE|error:|^e: |Execution failed|> Task .* FAILED|tests? completed' /tmp/gradle-test.log 2>/dev/null | head -n 60 || echo "(none)"
+            echo
+            echo '--- tail ---'
+            tail -n 60 /tmp/gradle-test.log 2>/dev/null || true
+            echo '```'
+            echo
+            echo '## Gradle build'
+            echo '```'
+            head -n 60 /tmp/gradle-build.log 2>/dev/null || echo "(not reached)"
+            echo
+            echo '--- failure lines ---'
+            grep -E 'FAILED|FAILURE|error:|^e: |Execution failed|> Task .* FAILED' /tmp/gradle-build.log 2>/dev/null | head -n 60 || echo "(none)"
+            echo
+            echo '--- tail ---'
+            tail -n 60 /tmp/gradle-build.log 2>/dev/null || true
+            echo '```'
+          } > diagnostics/latest.md
+
+          # The payload is built with a JSON encoder so newlines and quotes in
+          # the captured output are escaped correctly.
+          python3 -c "import base64,json,os; d=open('diagnostics/latest.md','rb').read(); open('/tmp/diag-payload.json','w').write(json.dumps({'message':'CI diagnostics for run '+os.environ['RUN_ID'],'content':base64.b64encode(d).decode('ascii'),'branch':'ci-diagnostics'}))"
+
+          # Point the diagnostics branch at the commit that was just built.
+          curl -sS -X PATCH \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/git/refs/heads/ci-diagnostics" \
+            -d "{\"sha\":\"$SHA\",\"force\":true}" > /dev/null
+
+          curl -sS -X PUT \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/contents/diagnostics/latest.md?branch=ci-diagnostics" \
+            --data-binary @/tmp/diag-payload.json \
+            -o /tmp/diag-response.json -w 'HTTP %{http_code}\n'
+          head -c 300 /tmp/diag-response.json
+          echo
+
+      - name: Upload APKs and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: saeed-stores-apks
+          path: artifacts/
+          if-no-files-found: warn
+
+      # A public download that needs no GitHub account. The artifact above is
+      # only reachable by someone signed in, and its link expires; the release
+      # assets stay put and can be fetched with a plain browser.
+      - name: Publish the APKs as a release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          if [ ! -s artifacts/apk/saeed-store-1.0.apk ] || [ ! -s artifacts/apk/saeed-admin-1.0.apk ]; then
+            echo "No APK was produced, so there is nothing to publish."
+            exit 0
+          fi
+          TAG="build-${GITHUB_RUN_NUMBER}"
+          NOTES="النسخة المبنية من الالتزام ${GITHUB_SHA:0:7}.
+          الحزمتان موقّعتان بمفتاح التطوير، فالسبب نفسه لا يظهر كتحديث فوق نسخة سابقة موقّعة بمفتاح آخر: احذف النسخة القديمة قبل التثبيت."
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$TAG" artifacts/apk/*.apk --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" artifacts/apk/*.apk \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "نسخة ${GITHUB_RUN_NUMBER}" \
+              --notes "$NOTES"
+          fi
+          echo "The download page is https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"

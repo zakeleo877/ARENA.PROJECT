@@ -1,0 +1,108 @@
+name: Core and schema checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up JDK 17
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+      - name: Install required SDK packages
+        run: sdkmanager 'platforms;android-37.2' 'build-tools;36.0.0'
+      - name: Cache the Robolectric Android runtime
+        uses: actions/cache@v4
+        with:
+          # Robolectric downloads an Android runtime jar on first use. Caching it
+          # means a runner whose egress to the Maven host is slow or blocked does
+          # not fail the test class with a bare IOException.
+          path: |
+            ~/.m2/repository/org/robolectric
+            ~/.cache/robolectric
+          key: robolectric-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml') }}
+      - name: Validate wrapper and configure Gradle cache
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - name: Compile app shells and test shared module
+        # The job log lives on a storage host that is not reachable from every
+        # environment, so the first real error is also published as a check
+        # annotation, which the API serves.
+        run: |
+          set -o pipefail
+          ./gradlew :core:testDebugUnitTest :core:lintDebug \
+            :customer:compileDebugKotlin :admin:compileDebugKotlin --no-daemon 2>&1 | tee /tmp/core-check.log || {
+            DIAG="$(grep -E '^e: file |error:|FAILED|Execution failed|Caused by|\* What went wrong|> There were' /tmp/core-check.log \
+              | head -n 12 | sed 's/%/%25/g' | tr '\n' '|')"
+            echo "::error title=Core check diagnosis::${DIAG:-no matching line in the log}"
+            exit 1
+          }
+      - name: Check customer runtime does not contain Supabase Auth
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew :customer:dependencies --configuration debugRuntimeClasspath --no-daemon > customer-dependencies.txt
+          if grep -Eq 'io\.github\.jan-tennert\.supabase:(auth-kt|postgrest-kt)' customer-dependencies.txt; then
+            echo 'Unexpected Supabase Auth/PostgREST dependency in customer runtime.' >&2
+            exit 1
+          fi
+          if grep -q ' FAILED' customer-dependencies.txt; then
+            echo 'A customer runtime dependency could not be resolved.' >&2
+            exit 1
+          fi
+      # The report file itself is served from a storage host that is not
+      # reachable everywhere, so the counts are also published as an annotation:
+      # that is the only way to confirm from outside that a test actually ran.
+      - name: Summarise the shared unit tests
+        if: always()
+        run: |
+          TOTAL=0
+          FAILED=0
+          CLASSES=""
+          for report in $(find core/build/test-results -name 'TEST-*.xml' 2>/dev/null); do
+            LINE="$(grep -o 'tests="[0-9]*"' "$report" | head -n 1 | grep -o '[0-9]*')"
+            BAD="$(grep -o 'failures="[0-9]*"' "$report" | head -n 1 | grep -o '[0-9]*')"
+            TOTAL=$((TOTAL + ${LINE:-0}))
+            FAILED=$((FAILED + ${BAD:-0}))
+            CLASSES="$CLASSES $(basename "$report" .xml | sed 's/^TEST-//')"
+          done
+          echo "tests=$TOTAL failures=$FAILED"
+          echo "::notice title=core unit tests::$TOTAL tests, $FAILED failures in:$CLASSES"
+
+      - name: Upload shared unit-test report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: core-unit-test-report
+          path: core/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  sql-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: supabase/tests
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Run PostgreSQL smoke tests
+        run: npm ci --no-audit --no-fund && npm test

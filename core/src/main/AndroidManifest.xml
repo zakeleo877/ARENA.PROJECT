@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        The shared module monitors the connection state so the customer app can
+        browse the cache offline and queue orders. Both apps declare the
+        permission themselves; declaring it here satisfies the lint check.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+</manifest>
