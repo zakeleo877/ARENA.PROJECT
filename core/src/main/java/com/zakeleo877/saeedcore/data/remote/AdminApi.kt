@@ -285,7 +285,14 @@ class AdminApi(
                 false,
                 "HTTP $keyed — المفتاح ليس مفتاح هذا المشروع (مفتاح مشروع آخر)",
             )
-            404 -> DiagnosticCheck("المفتاح مقبول", false, "HTTP 404 — جدول products غير موجود")
+            // A missing table is not a key problem: the request was understood
+            // and the table is simply not there, which means schema.sql has not
+            // been run on this project yet.
+            404 -> DiagnosticCheck(
+                "المفتاح مقبول",
+                false,
+                "HTTP 404 — المفتاح صحيح لكن لم يُطبَّق supabase/schema.sql على هذا المشروع",
+            )
             else -> DiagnosticCheck("المفتاح مقبول", false, "HTTP $keyed")
         }
 

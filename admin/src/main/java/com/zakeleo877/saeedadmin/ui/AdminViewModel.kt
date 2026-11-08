@@ -142,15 +142,17 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
         }
     }
 
-    /** The latest connection check, newest first. Null before the first run. */
-    val diagnostics: StateFlow<List<com.zakeleo877.saeedcore.data.remote.DiagnosticCheck>?> =
-        _diagnostics
     private val _diagnostics =
         MutableStateFlow<List<com.zakeleo877.saeedcore.data.remote.DiagnosticCheck>?>(null)
 
-    /** Null while running, so the button can say so. */
-    val diagnosticsRunning: StateFlow<Boolean> = _diagnosticsRunning
+    /** The latest connection check. Null before the first run. */
+    val diagnostics: StateFlow<List<com.zakeleo877.saeedcore.data.remote.DiagnosticCheck>?> =
+        _diagnostics
+
     private val _diagnosticsRunning = MutableStateFlow(false)
+
+    /** True while the check is in flight, so the button can say so. */
+    val diagnosticsRunning: StateFlow<Boolean> = _diagnosticsRunning
 
     fun runDiagnostics() {
         val session = repository.sessionHolder.session.value ?: return
