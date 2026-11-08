@@ -28,6 +28,7 @@ import java.util.UUID
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -228,8 +229,53 @@ class AdminApi(
             }
         }
         if (!response.status.isSuccess()) return refuse("product", response)
+        // An empty answer is ambiguous: PostgREST replies 201 with no body when
+        // it writes, and 200 with no body when the filter matched nothing. The
+        // difference matters, because "the row is not there" used to look like a
+        // successful save while the product never appeared in the catalogue.
+        // The write is confirmed by counting what the filter now matches.
+        if (response.bodyAsText().isBlank() && !writeLanded(token, id, name, price)) {
+            lastFailure = "لم يصل التغيير إلى الخادم — تحقّق من الصلاحيات"
+            return false
+        }
         lastFailure = null
         return true
+    }
+
+    /**
+     * Confirms a product write by reading the row back.
+     *
+     * Only called when the write answered without a body. A create is confirmed
+     * by a product with the same name and price existing; an edit by the row
+     * carrying the new values.
+     */
+    private suspend fun writeLanded(
+        token: String,
+        id: String?,
+        name: String,
+        price: BigDecimal,
+    ): Boolean = try {
+        val filter = if (id != null) "id" to "eq.$id" else "name" to "eq.$name"
+        val response = client.get("${config.baseUrl}/rest/v1/products") {
+            headers(token)
+            parameter("select", "id,name,price")
+            parameter("limit", "1")
+            parameter(filter.first, filter.second)
+        }
+        if (!response.status.isSuccess()) return false
+        val rows = response.body<List<JsonObject>>()
+        rows.any { row ->
+            row["name"]?.jsonPrimitive?.contentOrNull == name &&
+                row["price"]?.jsonPrimitive?.contentOrNull?.toBigDecimalOrNull()
+                    ?.compareTo(price) == 0
+        }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        // The write may well have landed; a read that failed is not proof that
+        // it did not, so the save is not reported as lost.
+        true
+    }
     }
 
     suspend fun deleteProduct(token: String, id: String): Boolean {
