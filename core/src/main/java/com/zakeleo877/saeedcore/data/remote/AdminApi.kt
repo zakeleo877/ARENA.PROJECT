@@ -234,9 +234,21 @@ class AdminApi(
         // difference matters, because "the row is not there" used to look like a
         // successful save while the product never appeared in the catalogue.
         // The write is confirmed by counting what the filter now matches.
-        if (response.bodyAsText().isBlank() && !writeLanded(token, id, name, price)) {
-            lastFailure = "لم يصل التغيير إلى الخادم — تحقّق من الصلاحيات"
-            return false
+        if (response.bodyAsText().isBlank()) {
+            when (writeLanded(token, id, name, price)) {
+                true -> Unit
+                false -> {
+                    lastFailure = "لم يصل التغيير إلى الخادم — تحقّق من الصلاحيات"
+                    return false
+                }
+                // The read-back itself failed. Saying "saved" would be a guess,
+                // and saying "not saved" would be one too; the owner is told to
+                // look, which is the only honest answer.
+                null -> {
+                    lastFailure = "لم نتأكّد من الحفظ — حدّث القائمة للتحقّق"
+                    return false
+                }
+            }
         }
         lastFailure = null
         return true
@@ -248,13 +260,16 @@ class AdminApi(
      * Only called when the write answered without a body. A create is confirmed
      * by a product with the same name and price existing; an edit by the row
      * carrying the new values.
+     *
+     * `null` means the read itself failed, so the write is neither proven nor
+     * disproven.
      */
     private suspend fun writeLanded(
         token: String,
         id: String?,
         name: String,
         price: BigDecimal,
-    ): Boolean = try {
+    ): Boolean? = try {
         val filter = if (id != null) "id" to "eq.$id" else "name" to "eq.$name"
         val response = client.get("${config.baseUrl}/rest/v1/products") {
             headers(token)
@@ -262,7 +277,8 @@ class AdminApi(
             parameter("limit", "1")
             parameter(filter.first, filter.second)
         }
-        if (!response.status.isSuccess()) return false
+        // A read that was refused or failed proves nothing about the write.
+        if (!response.status.isSuccess()) return null
         val rows = response.body<List<JsonObject>>()
         rows.any { row ->
             row["name"]?.jsonPrimitive?.contentOrNull == name &&
@@ -272,9 +288,9 @@ class AdminApi(
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (failure: Exception) {
-        // The write may well have landed; a read that failed is not proof that
-        // it did not, so the save is not reported as lost.
-        true
+        // Same reasoning: a dropped connection during the read-back is unknown,
+        // not a failed write.
+        null
     }
 
     suspend fun deleteProduct(token: String, id: String): Boolean {

@@ -82,8 +82,10 @@ class ProductWriteVerificationTest {
     }
 
     @Test
-    fun `a read that fails does not turn a save into a loss`() = runTest {
-        // The write may have landed; a read that failed is not proof it did not.
+    fun `an unreadable read-back is reported as unknown, not as saved`() = runTest {
+        // The write may have landed, but the read-back failed. Claiming success
+        // would be a guess and so would claiming failure: the owner is told to
+        // refresh and look, which is the only honest answer.
         val engine = MockEngine { request ->
             if (request.method == HttpMethod.Get) {
                 respond("{}", HttpStatusCode.ServiceUnavailable, headersOf(HttpHeaders.ContentType, "application/json"))
@@ -92,6 +94,12 @@ class ProductWriteVerificationTest {
             }
         }
         val client = HttpClient(engine) { install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) } }
-        assertTrue(create(AdminApi(client, config)))
+        val api = AdminApi(client, config)
+        assertTrue("a save is never claimed without proof", !create(api))
+        assertNotNull("the reason is shown", api.lastFailure)
+        assertTrue(
+            "the message says it is unconfirmed, not that it was lost",
+            api.lastFailure!!.contains("نتأكّد"),
+        )
     }
 }
