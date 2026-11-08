@@ -67,8 +67,10 @@ class RoomIntegrationTest {
         connection.prepare("SELECT id, original_price, rating FROM products").use { statement ->
             assertTrue("the old row must survive the upgrade", statement.step())
             assertEquals("p1", statement.getText(0))
-            assertNull("an old row has no discount", statement.getText(1))
-            assertNull("an old row has no rating", statement.getText(2))
+            // `getText` throws on a null column instead of returning null, so
+            // the absence has to be asserted through isNull.
+            assertTrue("an old row has no discount", statement.isNull(1))
+            assertTrue("an old row has no rating", statement.isNull(2))
         }
         // The columns must accept values once they exist.
         connection.execSQL("UPDATE products SET original_price = '20.00', rating = 4.5 WHERE id = 'p1'")

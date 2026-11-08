@@ -38,7 +38,13 @@ class AdminAuthHeaderTest {
     private fun apiWith(record: MutableList<Pair<HttpMethod, String?>>): AdminApi {
         val engine = MockEngine { request ->
             record += request.method to request.headers[HttpHeaders.Authorization]
-            respondOk("[]")
+            // A bare respondOk carries no Content-Type, and Ktor then refuses to
+            // turn the body into a List: NoTransformationFoundException. The
+            // header is part of a realistic answer, not decoration.
+            respond(
+                content = "[]",
+                headers = headersOf(HttpHeaders.ContentType, "application/json"),
+            )
         }
         val client = HttpClient(engine) {
             install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
