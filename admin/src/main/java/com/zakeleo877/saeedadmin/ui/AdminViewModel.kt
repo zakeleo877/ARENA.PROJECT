@@ -131,7 +131,13 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
             val productsResult = runCatching { repository.products(session) }
             _orders.value = ordersResult.getOrDefault(_orders.value)
             _products.value = productsResult.getOrDefault(_products.value)
-            _load.value = _load.value.copy(error = if (ordersResult.isFailure && productsResult.isFailure) "load_failed" else null)
+            _load.value = _load.value.copy(
+                error = when {
+                    productsResult.isFailure -> repository.lastFailure ?: "products_failed"
+                    ordersResult.isFailure -> "load_failed"
+                    else -> null
+                },
+            )
             _load.value = _load.value.copy(loading = false)
         }
     }
