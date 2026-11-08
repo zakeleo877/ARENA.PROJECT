@@ -389,17 +389,28 @@ begin
 end;
 $storage$;
 
--- One visible placeholder product, so both apps can be tested end to end
--- before the real catalogue exists. It carries a fixed id, so re-running this
--- file never creates a second copy, and nothing in the app removes it: it is
--- deleted by hand from the admin app when the shop goes live.
-insert into public.products
-    (id, name, price, description, category, image_url, available, sort_order, original_price, rating)
-values
-    ('00000000-0000-4000-8000-000000000001', 'منتج تجريبي', 2500.00,
-     'هذا منتج للتجربة فقط. احذفه من لوحة الإدارة قبل نشر المتجر.',
-     'تجربة', '', true, 0, 3000.00, 4.5)
-on conflict (id) do nothing;
+-- The demo product is optional. The app is normally opened on a real shop
+-- whose catalogue is entered from the admin app, and an extra row would show
+-- up as a stranger's product there. Set saeed.seed_demo_product to 'on' when
+-- you want a catalogue to look at (local testing), and leave it off for a real
+-- project. The seed carries a fixed id, so re-running this file never creates
+-- a second copy; the admin app deletes it by hand when the shop goes live.
+do $seed$
+begin
+    if coalesce(current_setting('saeed.seed_demo_product', true), 'off') <> 'on' then
+        return;
+    end if;
+
+    insert into public.products
+        (id, name, price, description, category, image_url, available, sort_order,
+         original_price, rating)
+    values
+        ('00000000-0000-4000-8000-000000000001', 'منتج تجريبي', 2500.00,
+         'هذا منتج للتجربة فقط. احذفه من لوحة الإدارة قبل نشر المتجر.',
+         'تجربة', '', true, 0, 3000.00, 4.5)
+    on conflict (id) do nothing;
+end
+$seed$;
 
 insert into public.settings (key, value, is_public) values
     ('storeName',  'محلات السعيد',                 true),

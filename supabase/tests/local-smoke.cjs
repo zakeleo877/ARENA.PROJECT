@@ -39,15 +39,16 @@ async function expectError(action, expected, message) {
   await db.exec(schema); console.log('PASS: schema applied twice (idempotent)'); passed++;
   const rogue = await db.query("select count(*)::int as n from pg_policies where schemaname='public' and tablename='orders' and policyname='legacy_insecure'");
   check(rogue.rows[0].n === 0, 'unsafe legacy policy was removed on re-run');
-  // The schema seeds exactly one placeholder product (fixed id, insert-if-absent)
-  // so both apps can be tried before the catalogue exists. The check is that the
-  // seed is a single, stable row - not that the table is empty.
+  // The demo product is opt-in: a real project must start with an empty
+  // catalogue, otherwise a stranger's product appears in the shop.
   let before = await db.query('select count(*)::int as n from public.products');
-  check(before.rows[0].n === 1, 'the schema seeds exactly one placeholder product');
-  const seeded = await db.query(
-    "select id from public.products where id = '00000000-0000-4000-8000-000000000001'",
-  );
-  check(seeded.rows.length === 1, 'the placeholder product keeps its fixed id');
+  check(before.rows[0].n === 0, 'no sample products seeded by default');
+  // ...and it is still there when the operator asks for it.
+  await db.query("select set_config('saeed.seed_demo_product', 'on', false)");
+  await db.exec(schema);
+  const demo = await db.query('select count(*)::int as n from public.products');
+  check(demo.rows[0].n === 1, 'the demo product is seeded when asked for');
+  await db.query("select set_config('saeed.seed_demo_product', 'off', false)");
   await db.query("delete from public.products where id = '00000000-0000-4000-8000-000000000001'");
   await db.exec(`insert into public.products(id,name,price,available) values
     ('${productId}','منتج اختبار',125.50,true), ('${hiddenId}','منتج مخفي',70,false)`);
