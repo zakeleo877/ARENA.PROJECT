@@ -144,7 +144,11 @@ fun ProductsScreen(
             ProductFormSheet(
                 product = null,
                 categories = products.map { it.category }.distinct().sorted(),
-                onSave = { name, price, description, imageUrl, category, available, sortOrder, original, stars ->
+                saving = saving
+                saveFailed = saveFailed
+                saveReason = saveReason
+                onSave = { name, price, description, imageUrl, category, available, sortOrder,
+                    original, stars, done ->
                     // Keeping the sheet open until the write lands is the
                     // difference between "saved" and "silently lost".
                     saving = true
@@ -155,6 +159,7 @@ fun ProductsScreen(
                         saving = false
                         saveFailed = !saved
                         saveReason = reason
+                        done(saved, reason)
                         if (saved) creating = false
                     }
                 },
@@ -171,7 +176,11 @@ fun ProductsScreen(
             ProductFormSheet(
                 product = product,
                 categories = products.map { it.category }.distinct().sorted(),
-                onSave = { name, price, description, imageUrl, category, available, sortOrder, original, stars ->
+                saving = saving
+                saveFailed = saveFailed
+                saveReason = saveReason
+                onSave = { name, price, description, imageUrl, category, available, sortOrder,
+                    original, stars, done ->
                     saving = true
                     onSave(
                         product.id, name, price, description, imageUrl, category, available,
@@ -180,6 +189,7 @@ fun ProductsScreen(
                         saving = false
                         saveFailed = !saved
                         saveReason = reason
+                        done(saved, reason)
                         if (saved) editing = null
                     }
                 },
@@ -289,6 +299,9 @@ private fun ProductRow(
 private fun ProductFormSheet(
     product: Product?,
     categories: List<String>,
+    saving: Boolean,
+    saveFailed: Boolean,
+    saveReason: String?,
     onSave: (
         name: String,
         price: BigDecimal,
@@ -318,9 +331,7 @@ private fun ProductFormSheet(
     var rating by remember { mutableStateOf(product?.rating?.let { formatRating(it) }.orEmpty()) }
     var originalError by remember { mutableStateOf(false) }
     var ratingError by remember { mutableStateOf(false) }
-    var saving by remember { mutableStateOf(false) }
-    var saveFailed by remember { mutableStateOf(false) }
-    var saveReason by remember { mutableStateOf<String?>(null) }
+
 
     // The form is taller than the sheet on a small phone once the image preview
     // is in place, so it scrolls as a whole; otherwise the save button sits
