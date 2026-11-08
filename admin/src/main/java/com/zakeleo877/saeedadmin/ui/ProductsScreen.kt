@@ -401,12 +401,16 @@ private fun ProductFormSheet(
         SaeedButton(
             text = stringResource(R.string.admin_save),
             onClick = {
-                val parsed = price.toBigDecimalOrNull()
+                // The keyboard may hand back Arabic-Indic digits, and a comma
+                // may be either a decimal mark or grouping. Formatters decides,
+                // and returns null when it cannot be sure.
+                val parsed = Formatters.parsePrice(price)
                 priceError = parsed == null || parsed.signum() < 0
                 // An old price only means something when it is above the new
                 // one; anything else is caught here instead of being silently
                 // dropped by the database check.
-                val parsedOriginal = originalPrice.trim().takeIf { it.isNotEmpty() }?.toBigDecimalOrNull()
+                val parsedOriginal = originalPrice.trim().takeIf { it.isNotEmpty() }
+                    ?.let(Formatters::parsePrice)
                 originalError = originalPrice.isNotBlank() &&
                     (parsedOriginal == null || (parsed != null && parsedOriginal <= parsed))
                 val parsedRating = rating.trim().takeIf { it.isNotEmpty() }?.toDoubleOrNull()
