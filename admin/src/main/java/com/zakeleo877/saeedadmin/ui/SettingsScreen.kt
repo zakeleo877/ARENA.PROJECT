@@ -169,5 +169,57 @@ fun SettingsScreen(
             onClick = onSignOut,
             modifier = Modifier.fillMaxWidth(),
         )
+
+        Spacer(Modifier.height(28.dp))
+        DiagnosticsCard()
     }
+}
+
+/**
+ * What the app is actually pointed at.
+ *
+ * Every report of "the product does not appear" and "the image is unreadable" is
+ * consistent with four different causes, and none of them can be told apart from
+ * the screen. This panel shows the address the package was built with, whether
+ * the session is still valid, and the last refusal the server sent, so the person
+ * holding the phone can read the answer out instead of describing a symptom.
+ */
+@Composable
+private fun DiagnosticsCard() {
+    val context = LocalContext.current
+    val build = remember { com.zakeleo877.saeedadmin.BuildConfig.SUPABASE_URL }
+    var copied by remember { mutableStateOf(false) }
+
+    Text(
+        text = stringResource(R.string.admin_diagnostics_title),
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+    Spacer(Modifier.height(8.dp))
+    Text(
+        text = stringResource(R.string.admin_diagnostics_url, build),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(Modifier.height(4.dp))
+    Text(
+        text = stringResource(R.string.admin_diagnostics_hint),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(Modifier.height(8.dp))
+    SaeedButton(
+        text = stringResource(
+            if (copied) R.string.admin_diagnostics_copied else R.string.admin_diagnostics_copy,
+        ),
+        onClick = {
+            val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
+            clipboard?.setPrimaryClip(
+                android.content.ClipData.newPlainText("saeed", build),
+            )
+            copied = true
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
+
 }

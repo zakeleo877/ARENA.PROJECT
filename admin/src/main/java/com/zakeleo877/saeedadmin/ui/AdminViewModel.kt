@@ -158,8 +158,6 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
     /** Set when a write is refused, so the form can show what the server said. */
     val saveFailure = MutableStateFlow<String?>(null)
 
-    private var lastFailure: String? = null
-
     fun saveProduct(
         id: String?,
         name: String,
@@ -171,25 +169,24 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
         sortOrder: Int,
         originalPrice: BigDecimal? = null,
         rating: Double? = null,
-        onDone: (Boolean) -> Unit,
+        onDone: (Boolean, String?) -> Unit,
     ) {
-        val session = repository.sessionHolder.session.value ?: return
+        val session = repository.sessionHolder.session.value ?: run {
+            onDone(false, "no_session")
+            return
+        }
         viewModelScope.launch {
             val ok = repository.upsertProduct(
                 session, id, name, price, description, imageUrl, category, available, sortOrder,
                 originalPrice = originalPrice,
                 rating = rating,
             )
-            if (ok) {
-                refresh()
-            } else {
-                // The list is re-read even on failure, so a write that landed but
-                // was answered oddly still shows up rather than looking lost.
-                refresh()
-            }
-            lastFailure = repository.lastFailure
-            saveFailure.value = if (ok) null else repository.lastFailure
-            onDone(ok)
+            // The list is re-read either way: a write that landed but was
+            // answered oddly must show up rather than look lost.
+            refresh()
+            val reason = if (ok) null else repository.lastFailure
+            saveFailure.value = reason
+            onDone(ok, reason)
         }
     }
 
@@ -197,16 +194,12 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
         val session = repository.sessionHolder.session.value ?: return
         viewModelScope.launch {
             val ok = repository.deleteProduct(session, id)
-            if (ok) {
-                refresh()
-            } else {
-                // The list is re-read even on failure, so a write that landed but
-                // was answered oddly still shows up rather than looking lost.
-                refresh()
-            }
-            lastFailure = repository.lastFailure
-            saveFailure.value = if (ok) null else repository.lastFailure
-            onDone(ok)
+            // The list is re-read either way: a write that landed but was
+            // answered oddly must show up rather than look lost.
+            refresh()
+            val reason = if (ok) null else repository.lastFailure
+            saveFailure.value = reason
+            onDone(ok, reason)
         }
     }
 
@@ -271,21 +264,20 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
         phone: String,
         notes: String,
         items: List<Pair<String, Int>>,
-        onDone: (Boolean) -> Unit,
+        onDone: (Boolean, String?) -> Unit,
     ) {
-        val session = repository.sessionHolder.session.value ?: return
+        val session = repository.sessionHolder.session.value ?: run {
+            onDone(false, "no_session")
+            return
+        }
         viewModelScope.launch {
             val ok = repository.insertManualOrder(session, customer, phone, notes, items)
-            if (ok) {
-                refresh()
-            } else {
-                // The list is re-read even on failure, so a write that landed but
-                // was answered oddly still shows up rather than looking lost.
-                refresh()
-            }
-            lastFailure = repository.lastFailure
-            saveFailure.value = if (ok) null else repository.lastFailure
-            onDone(ok)
+            // The list is re-read either way: a write that landed but was
+            // answered oddly must show up rather than look lost.
+            refresh()
+            val reason = if (ok) null else repository.lastFailure
+            saveFailure.value = reason
+            onDone(ok, reason)
         }
     }
 

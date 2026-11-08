@@ -150,9 +150,10 @@ fun ProductsScreen(
                     onSave(
                         null, name, price, description, imageUrl, category, available, sortOrder,
                         original, stars,
-                    ) { saved ->
+                    ) { saved, reason ->
                         saving = false
                         saveFailed = !saved
+                        saveReason = reason
                         if (saved) creating = false
                     }
                 },
@@ -174,9 +175,10 @@ fun ProductsScreen(
                     onSave(
                         product.id, name, price, description, imageUrl, category, available,
                         sortOrder, original, stars,
-                    ) { saved ->
+                    ) { saved, reason ->
                         saving = false
                         saveFailed = !saved
+                        saveReason = reason
                         if (saved) editing = null
                     }
                 },
@@ -296,7 +298,7 @@ private fun ProductFormSheet(
         sortOrder: Int,
         originalPrice: BigDecimal?,
         rating: Double?,
-        onDone: (Boolean) -> Unit,
+        onDone: (Boolean, String?) -> Unit,
     ) -> Unit,
     onUploadImage: (fileName: String, bytes: ByteArray, onDone: (String?) -> Unit) -> Unit,
     onDismiss: () -> Unit,
@@ -317,6 +319,7 @@ private fun ProductFormSheet(
     var ratingError by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var saveFailed by remember { mutableStateOf(false) }
+    var saveReason by remember { mutableStateOf<String?>(null) }
 
     // The form is taller than the sheet on a small phone once the image preview
     // is in place, so it scrolls as a whole; otherwise the save button sits
@@ -435,6 +438,15 @@ private fun ProductFormSheet(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
+            // The server's own words. Without them the owner can only say "it
+            // did not work", and every cause looks identical from there.
+            saveReason?.let { reason ->
+                Text(
+                    text = reason,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         SaeedButton(

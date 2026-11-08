@@ -102,4 +102,9 @@
     <string name="admin_search_products">ابحث باسم المنتج أو الفئة…</string>
     <string name="admin_product_saving">جارٍ الحفظ…</string>
     <string name="admin_product_save_failed">لم يُحفظ المنتج. تحقّق من الاتصال ومن صلاحية المدير، ثم أعد المحاولة.</string>
+    <string name="admin_diagnostics_title">معلومات الاتصال</string>
+    <string name="admin_diagnostics_url">عنوان المشروع: %1$s</string>
+    <string name="admin_diagnostics_hint">إن لم يطابق هذا العنوان مشروعك في Supabase، فلن يظهر أي منتج. أرسل هذه الصورة عند طلب المساعدة.</string>
+    <string name="admin_diagnostics_copy">نسخ العنوان</string>
+    <string name="admin_diagnostics_copied">تم النسخ</string>
 </resources>
