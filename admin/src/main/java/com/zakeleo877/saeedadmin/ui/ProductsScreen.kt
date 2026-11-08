@@ -153,7 +153,7 @@ fun ProductsScreen(
                 saveFailed = saveFailed,
                 saveReason = saveReason,
                 onSave = { name, price, description, imageUrl, category, available, sortOrder,
-                    original, stars, done ->
+                    original, stars ->
                     // Keeping the sheet open until the write lands is the
                     // difference between "saved" and "silently lost".
                     saving = true
@@ -166,7 +166,6 @@ fun ProductsScreen(
                         saving = false
                         saveFailed = !saved
                         saveReason = reason
-                        done(saved, reason)
                         if (saved) creating = false
                     }
                 },
@@ -187,7 +186,7 @@ fun ProductsScreen(
                 saveFailed = saveFailed,
                 saveReason = saveReason,
                 onSave = { name, price, description, imageUrl, category, available, sortOrder,
-                    original, stars, done ->
+                    original, stars ->
                     saving = true
                     saveFailed = false
                     saveReason = null
@@ -198,7 +197,6 @@ fun ProductsScreen(
                         saving = false
                         saveFailed = !saved
                         saveReason = reason
-                        done(saved, reason)
                         if (saved) editing = null
                     }
                 },
@@ -321,7 +319,6 @@ private fun ProductFormSheet(
         sortOrder: Int,
         originalPrice: BigDecimal?,
         rating: Double?,
-        onDone: (Boolean, String?) -> Unit,
     ) -> Unit,
     onUploadImage: (fileName: String, bytes: ByteArray, onDone: (String?) -> Unit) -> Unit,
     onDismiss: () -> Unit,
@@ -498,7 +495,6 @@ private fun ProductFormSheet(
                         category.trim(), available, sortOrder,
                         parsedOriginal?.takeIf { it > parsed },
                         parsedRating,
-                        done,
                     )
                 }
             },
