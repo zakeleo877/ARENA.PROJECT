@@ -276,7 +276,6 @@ class AdminApi(
         // it did not, so the save is not reported as lost.
         true
     }
-    }
 
     suspend fun deleteProduct(token: String, id: String): Boolean {
         val response = client.delete("${config.baseUrl}/rest/v1/products") {
