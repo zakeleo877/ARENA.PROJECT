@@ -62,7 +62,7 @@ def disc_icon(background, bag_body=WHITE, slot=GREEN, ring=None):
     if ring is not None:
         m = S * 0.30
         d.ellipse([m, m, S - m, S - m], outline=ring, width=int(S * 0.035))
-    draw_bag(d, S / 2, S / 2, S * 0.20, body=bag_body, slot=slot)
+    draw_bag(d, S / 2, S / 2, S * 0.27, body=bag_body, slot=slot)
     return img
 
 
@@ -71,14 +71,18 @@ def adaptive_foreground(bag_body=WHITE, slot=GREEN):
     img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     # 66/108 is the diameter the launcher can never crop away.
-    draw_bag(d, S / 2, S / 2, S * 0.155, body=bag_body, slot=slot)
+    draw_bag(d, S / 2, S / 2, S * 0.235, body=bag_body, slot=slot)
     return img
 
 
 def monochrome():
-    """One colour, used by themed icons (Android 13+) and by the system tint."""
+    """One colour on transparent, which the system tints itself.
+
+    Android 13+ draws themed icons by recolouring this layer, so the colour must
+    be a single opaque tone - not black, which the system would read as "no
+    tint", and not the ground, which would vanish into the mask.
+    """
     img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    draw_bag(d, S / 2, S / 2, S * 0.155, body=(0, 0, 0, 255), slot=(0, 0, 0, 0),
-             handle=(0, 0, 0, 255))
+    draw_bag(d, S / 2, S / 2, S * 0.235, body=WHITE, slot=(0, 0, 0, 0), handle=WHITE)
     return img
