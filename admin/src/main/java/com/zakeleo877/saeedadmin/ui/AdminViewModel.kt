@@ -10,6 +10,7 @@ import com.zakeleo877.saeedcore.data.remote.AdminSession
 import com.zakeleo877.saeedcore.data.remote.AuthError
 import com.zakeleo877.saeedcore.data.remote.AuthResult
 import com.zakeleo877.saeedcore.model.Order
+import com.zakeleo877.saeedcore.util.ArabicText
 import com.zakeleo877.saeedcore.model.OrderStatus
 import com.zakeleo877.saeedcore.model.Product
 import java.math.BigDecimal
@@ -59,13 +60,25 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
         AdminUiState(
             orders = orders.filter { order ->
                 val matchesStatus = filter == null || order.status == filter
+                // The same folding the catalogue uses: a customer name written
+                // «أحمد» must be found by a search for «احمد», which is what a
+                // phone keyboard produces. The order number and the phone are
+                // digits, so folding them is harmless.
                 val matchesQuery = query.isBlank() ||
-                    order.number.toString().contains(query) ||
-                    order.customer.contains(query, ignoreCase = true) ||
-                    order.phone.contains(query)
+                    ArabicText.contains(order.number.toString(), query) ||
+                    ArabicText.contains(order.customer, query) ||
+                    ArabicText.contains(order.phone, query)
                 matchesStatus && matchesQuery
             },
-            products = products,
+            products = if (query.isBlank()) {
+                products
+            } else {
+                products.filter {
+                    ArabicText.contains(it.name, query) ||
+                        ArabicText.contains(it.category, query) ||
+                        ArabicText.contains(it.description, query)
+                }
+            },
             statusFilter = filter,
             searchQuery = query,
             isLoading = load.loading,
