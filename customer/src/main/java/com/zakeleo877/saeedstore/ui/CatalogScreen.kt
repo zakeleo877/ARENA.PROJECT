@@ -64,7 +64,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.request.crossfade
 import com.zakeleo877.saeedcore.designsystem.RemoteImage
 import com.zakeleo877.saeedcore.designsystem.SaeedCardSurface
 import com.zakeleo877.saeedcore.designsystem.SaeedChipSurface

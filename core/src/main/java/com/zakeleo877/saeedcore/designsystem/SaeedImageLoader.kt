@@ -7,6 +7,8 @@ import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
+import java.util.concurrent.TimeUnit
+import okhttp3.OkHttpClient
 import okio.Path.Companion.toOkioPath
 
 /**
@@ -57,9 +59,9 @@ object SaeedImageLoader {
                     add(
                         OkHttpNetworkFetcherFactory(
                             callFactory = {
-                                okhttp3.OkHttpClient.Builder()
-                                    .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
-                                    .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+                                OkHttpClient.Builder()
+                                    .connectTimeout(8, TimeUnit.SECONDS)
+                                    .readTimeout(20, TimeUnit.SECONDS)
                                     .build()
                             },
                         ),

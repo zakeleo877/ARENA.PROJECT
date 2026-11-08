@@ -51,6 +51,7 @@ fun ProductImageDialog(
 ) {
     // The gesture progress drives the shrink so the exit is animated.
     var backProgress by remember { mutableFloatStateOf(0f) }
+    val context = LocalContext.current
     var scale by remember { mutableFloatStateOf(1f) }
     var offsetX by remember { mutableFloatStateOf(0f) }
     var offsetY by remember { mutableFloatStateOf(0f) }
@@ -101,10 +102,16 @@ fun ProductImageDialog(
             contentAlignment = Alignment.Center,
         ) {
             AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(imageUrl)
-                    .crossfade(true)
-                    .build(),
+                // Built once per URL. Inside the composition it was rebuilt on
+                // every pinch/scale frame, and each rebuild restarted the
+                // request: the full-size photo never settled while the customer
+                // was zooming.
+                model = remember(imageUrl) {
+                    ImageRequest.Builder(context)
+                        .data(imageUrl)
+                        .crossfade(true)
+                        .build()
+                },
                 contentDescription = contentDescription,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
