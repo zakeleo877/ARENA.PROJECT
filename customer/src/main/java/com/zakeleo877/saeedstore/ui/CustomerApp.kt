@@ -126,7 +126,10 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                     pendingCount = pendingOrders.size,
                     onProductClick = { product ->
                         selectedProduct = product
-                        navController.navigate(Routes.DETAIL)
+                        // The id travels in the route, so a restored process can
+                        // find the product again instead of falling back to the
+                        // non-saveable field.
+                        navController.navigate("${Routes.DETAIL}?id=${product.id}")
                     },
                     onAddToCart = { product ->
                         viewModel.addToCart(product)
@@ -171,7 +174,9 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                 route = "${Routes.DETAIL}?id={id}",
                 arguments = listOf(navArgument("id") { type = NavType.StringType; defaultValue = "" }),
             ) {
-                val product = state.products.firstOrNull { it.id == selectedProduct?.id } ?: selectedProduct
+                val routeId = it.arguments?.getString("id").orEmpty()
+                val wanted = routeId.ifBlank { selectedProduct?.id.orEmpty() }
+                val product = state.products.firstOrNull { p -> p.id == wanted } ?: selectedProduct
                 if (product == null) {
                     navController.popBackStack()
                 } else {

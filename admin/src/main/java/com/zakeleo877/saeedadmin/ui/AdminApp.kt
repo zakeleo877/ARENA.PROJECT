@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -66,7 +67,10 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
         return
     }
 
-    var tab by remember { mutableStateOf(AdminTab.DASHBOARD) }
+    // rememberSaveable keeps the tab across rotation and process death. With
+    // plain remember the owner was thrown back to the dashboard every time the
+    // phone was turned.
+    var tab by rememberSaveable { mutableStateOf(AdminTab.DASHBOARD) }
 
     // Wide screens (foldables and tablets) get a navigation rail instead of the
     // bottom bar, so the content area keeps its full height.
