@@ -142,6 +142,35 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
         }
     }
 
+    /** The latest connection check, newest first. Null before the first run. */
+    val diagnostics: StateFlow<List<com.zakeleo877.saeedcore.data.remote.DiagnosticCheck>?> =
+        _diagnostics
+    private val _diagnostics =
+        MutableStateFlow<List<com.zakeleo877.saeedcore.data.remote.DiagnosticCheck>?>(null)
+
+    /** Null while running, so the button can say so. */
+    val diagnosticsRunning: StateFlow<Boolean> = _diagnosticsRunning
+    private val _diagnosticsRunning = MutableStateFlow(false)
+
+    fun runDiagnostics() {
+        val session = repository.sessionHolder.session.value ?: return
+        if (_diagnosticsRunning.value) return
+        _diagnosticsRunning.value = true
+        viewModelScope.launch {
+            _diagnostics.value = runCatching { repository.diagnose(session) }
+                .getOrElse {
+                    listOf(
+                        com.zakeleo877.saeedcore.data.remote.DiagnosticCheck(
+                            "إجراء الفحص",
+                            false,
+                            "تعذّر إكمال الفحص — تحقّق من الاتصال",
+                        ),
+                    )
+                }
+            _diagnosticsRunning.value = false
+        }
+    }
+
     fun setStatusFilter(status: OrderStatus?) {
         _filter.value = status
     }

@@ -255,6 +255,104 @@ class AdminApi(
     }
 
     /**
+     * Reads the project back, one question at a time, so a shop with an empty
+     * catalogue can be told *which* link in the chain is broken.
+     *
+     * "The address is right and nothing appears" has four causes that all look
+     * identical from the outside: the schema was never applied, the key is not
+     * the project's key, the signed-in account is not an admin, or the insert
+     * is refused. Each one answers a different status, so each is asked
+     * separately. The API key goes in the `apikey` header; the user token goes
+     * in `Authorization`.
+     */
+    suspend fun diagnose(token: String): List<DiagnosticCheck> {
+        val checks = mutableListOf<DiagnosticCheck>()
+
+        // 1. Does the project answer at all?
+        val root = probe("https://${hostOf()}/auth/v1/health", token = null)
+        checks += if (root in 200..299) {
+            DiagnosticCheck("المشروع يستجيب", true, "HTTP $root")
+        } else {
+            DiagnosticCheck("المشروع يستجيب", false, "HTTP $root — العنوان غير صحيح أو المشروع موقوف")
+        }
+
+        // 2. Is the key this package carries accepted by the project?
+        val keyed = probe("${config.baseUrl}/rest/v1/products?select=id&limit=1", token = null)
+        checks += when (keyed) {
+            200 -> DiagnosticCheck("المفتاح مقبول", true, "HTTP 200")
+            401, 403 -> DiagnosticCheck(
+                "المفتاح مقبول",
+                false,
+                "HTTP $keyed — المفتاح ليس مفتاح هذا المشروع (مفتاح مشروع آخر)",
+            )
+            404 -> DiagnosticCheck("المفتاح مقبول", false, "HTTP 404 — جدول products غير موجود")
+            else -> DiagnosticCheck("المفتاح مقبول", false, "HTTP $keyed")
+        }
+
+        // 3. Was the schema applied? A missing table answers 404 or 42P01.
+        val table = probe("${config.baseUrl}/rest/v1/products?select=id&limit=1", token)
+        checks += when {
+            table == 200 -> DiagnosticCheck("جدول المنتجات موجود", true, "HTTP 200")
+            table == 404 -> DiagnosticCheck(
+                "جدول المنتجات موجود",
+                false,
+                "غير موجود — لم يُطبَّق supabase/schema.sql على هذا المشروع",
+            )
+            else -> DiagnosticCheck("جدول المنتجات موجود", false, "HTTP $table")
+        }
+
+        // 4. Is the signed-in account an admin? Without this the catalogue is
+        //    readable but every write is silently refused.
+        val admin = runCatching { callBoolean("is_admin", token) }.getOrDefault(false)
+        checks += if (admin) {
+            DiagnosticCheck("الحساب مدير", true, "is_admin() = true")
+        } else {
+            DiagnosticCheck(
+                "الحساب مدير",
+                false,
+                "الحساب المسجّل ليس مديراً — المنتجات التي يضيفها لا تظهر للعميل",
+            )
+        }
+
+        return checks
+    }
+
+    /**
+     * Calls a boolean database function with the user's token.
+     *
+     * `is_admin()` reads `auth.uid()` from that token, so the answer is about
+     * the signed-in account rather than about the key.
+     */
+    suspend fun callBoolean(function: String, token: String): Boolean = try {
+        val response = client.post("${config.baseUrl}/rest/v1/rpc/$function") {
+            header("apikey", config.apiKey)
+            header(HttpHeaders.Authorization, "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody("{}")
+        }
+        response.status.isSuccess() && response.bodyAsText().trim().equals("true", ignoreCase = true)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        false
+    }
+
+    /** The bare status code, or 0 when the request never reached the server. */
+    private suspend fun probe(url: String, token: String?): Int = try {
+        val response = client.get(url) {
+            header("apikey", config.apiKey)
+            if (token != null) header(HttpHeaders.Authorization, "Bearer $token")
+        }
+        response.status.value
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        0
+    }
+
+    private fun hostOf(): String = config.baseUrl.substringAfter("://").substringBefore("/")
+
+    /**
      * Confirms a product write by reading the row back.
      *
      * Only called when the write answered without a body. A create is confirmed
@@ -401,3 +499,15 @@ class AdminApi(
         return text.toBigDecimalOrNull()
     }
 }
+
+/**
+ * One link in the chain from "the app has a product" to "the shop shows it".
+ *
+ * @param passed true when this link is intact.
+ * @param detail the server's own words, so the owner can act on it.
+ */
+data class DiagnosticCheck(
+    val label: String,
+    val passed: Boolean,
+    val detail: String,
+)

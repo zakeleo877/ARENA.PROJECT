@@ -155,6 +155,14 @@ class AdminRepository(
         }
     }
 
+    /**
+     * Asks the project four questions that separate the four ways "nothing
+     * appears" happens: wrong address, wrong key, unapplied schema, or an
+     * account that is not an admin.
+     */
+    suspend fun diagnose(session: AdminSession): List<com.zakeleo877.saeedcore.data.remote.DiagnosticCheck> =
+        api.diagnose((liveSession() ?: session).accessToken)
+
     suspend fun products(session: AdminSession): List<Product> =
         api.products((liveSession() ?: session).accessToken)
 
