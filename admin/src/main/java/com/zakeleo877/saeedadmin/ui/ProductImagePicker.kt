@@ -390,6 +390,7 @@ private fun decodeWithBitmapFactory(source: ByteArray): Bitmap? {
     }
 }
 
+/**
  * A fresh file for one camera shot.
  *
  * The camera app writes the picture here, so the name must be unique and the

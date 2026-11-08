@@ -190,8 +190,11 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
         }
     }
 
-    fun deleteProduct(id: String, onDone: (Boolean) -> Unit = {}) {
-        val session = repository.sessionHolder.session.value ?: return
+    fun deleteProduct(id: String, onDone: (String?) -> Unit = {}) {
+        val session = repository.sessionHolder.session.value ?: run {
+            onDone("no_session")
+            return
+        }
         viewModelScope.launch {
             val ok = repository.deleteProduct(session, id)
             // The list is re-read either way: a write that landed but was
@@ -199,7 +202,7 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
             refresh()
             val reason = if (ok) null else repository.lastFailure
             saveFailure.value = reason
-            onDone(ok, reason)
+            onDone(reason)
         }
     }
 
