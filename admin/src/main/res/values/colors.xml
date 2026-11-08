@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- The panel keeps the store bag on its own dark ink. -->
+    <color name="saeed_launcher_background">#FF12151A</color>
     <color name="neon_void_background">#FFEDEEF2</color>
 </resources>
