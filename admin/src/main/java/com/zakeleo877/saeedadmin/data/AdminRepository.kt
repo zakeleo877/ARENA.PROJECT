@@ -4,6 +4,7 @@ import com.zakeleo877.saeedcore.data.remote.AdminApi
 import com.zakeleo877.saeedcore.data.remote.AdminSession
 import com.zakeleo877.saeedcore.data.remote.AuthManager
 import com.zakeleo877.saeedcore.data.remote.AuthResult
+import com.zakeleo877.saeedcore.data.remote.SessionVault
 import com.zakeleo877.saeedcore.data.remote.SupabasePublicConfig
 import com.zakeleo877.saeedcore.model.Order
 import com.zakeleo877.saeedcore.model.OrderStatus
@@ -60,8 +61,38 @@ class AdminRepository(
     private val config: SupabasePublicConfig,
     private val api: AdminApi,
     private val authManager: AuthManager,
+    private val vault: SessionVault? = null,
 ) {
     val sessionHolder = AdminSessionHolder()
+
+    /**
+     * Restores the session saved at the end of the last launch.
+     *
+     * Without it the manager typed an email and a password every time the app
+     * was closed, which on a shop phone is several times an hour. The token may
+     * be an hour old by now, and the first request refreshes it, so an expired
+     * stored session is still worth restoring.
+     *
+     * A session the server no longer accepts is dropped by the refresh path, so
+     * this cannot leave the app stuck behind a sign-in screen that never ends.
+     */
+    suspend fun restoreSession(): Boolean {
+        val saved = vault?.load() ?: return false
+        sessionHolder.setSession(saved)
+        val authorization = checkAuthorization(saved)
+        sessionHolder.setAuthorization(authorization)
+        if (authorization !is AdminAuthorization.Authorized) {
+            sessionHolder.clear()
+            vault?.clear()
+            return false
+        }
+        return true
+    }
+
+    fun signOut() {
+        sessionHolder.clear()
+        vault?.clear()
+    }
 
     suspend fun signIn(email: String, password: String): AuthResult {
         val result = authManager.signIn(email, password)
@@ -71,6 +102,11 @@ class AdminRepository(
             sessionHolder.setAuthorization(authorized)
             if (authorized !is AdminAuthorization.Authorized) {
                 sessionHolder.clear()
+                vault?.clear()
+            } else {
+                // Only a manager is remembered. Saving a refused session would
+                // restore it on every launch and fail the check every time.
+                vault?.save(result.session)
             }
         }
         return result
@@ -100,6 +136,9 @@ class AdminRepository(
         return when (val result = authManager.refresh(current)) {
             is AuthResult.Success -> {
                 sessionHolder.setSession(result.session)
+                // Supabase rotates the refresh token, so the stored copy is
+                // replaced or the next launch restores one that no longer works.
+                vault?.save(result.session)
                 result.session
             }
             // A refused refresh means the refresh token itself is gone, which
@@ -107,6 +146,7 @@ class AdminRepository(
             // keep sending a token that cannot work.
             is AuthResult.Failure -> {
                 sessionHolder.clear()
+                vault?.clear()
                 null
             }
         }

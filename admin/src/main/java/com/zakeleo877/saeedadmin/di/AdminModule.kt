@@ -2,6 +2,7 @@ package com.zakeleo877.saeedadmin.di
 
 import com.zakeleo877.saeedcore.data.remote.AdminApi
 import com.zakeleo877.saeedcore.data.remote.AuthManager
+import com.zakeleo877.saeedcore.data.remote.SessionVault
 import com.zakeleo877.saeedcore.data.remote.SupabasePublicConfig
 import com.zakeleo877.saeedadmin.BuildConfig
 import com.zakeleo877.saeedadmin.data.AdminRepository
@@ -50,10 +51,15 @@ object AdminModule {
 
     @Provides
     @Singleton
+    fun sessionVault(@ApplicationContext context: Context): SessionVault = SessionVault(context)
+
+    @Provides
+    @Singleton
     fun adminRepository(
         client: HttpClient,
         config: SupabasePublicConfig,
         api: AdminApi,
         authManager: AuthManager,
-    ): AdminRepository = AdminRepository(client, config, api, authManager)
+        vault: SessionVault,
+    ): AdminRepository = AdminRepository(client, config, api, authManager, vault)
 }
