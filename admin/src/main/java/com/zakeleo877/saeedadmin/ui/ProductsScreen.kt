@@ -47,6 +47,7 @@ import com.zakeleo877.saeedcore.designsystem.SaeedBottomSheet
 import com.zakeleo877.saeedcore.designsystem.SaeedButton
 import com.zakeleo877.saeedcore.designsystem.SaeedCard
 import com.zakeleo877.saeedcore.designsystem.SaeedEmptyState
+import com.zakeleo877.saeedcore.designsystem.SaeedSearchField
 import com.zakeleo877.saeedcore.designsystem.SaeedTextField
 import com.zakeleo877.saeedcore.model.Product
 import com.zakeleo877.saeedcore.util.CsvExporter
@@ -72,6 +73,8 @@ fun ProductsScreen(
     ) -> Unit,
     onDelete: (String) -> Unit,
     onUploadImage: (productId: String?, fileName: String, bytes: ByteArray, onDone: (String?) -> Unit) -> Unit,
+    searchQuery: String,
+    onSearchChange: (String) -> Unit,
 ) {
     var editing by remember { mutableStateOf<Product?>(null) }
     var creating by remember { mutableStateOf(false) }
@@ -105,7 +108,16 @@ fun ProductsScreen(
                 icon = Icons.Filled.Add,
             )
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
+
+        // The catalogue is filtered by the view model with the same folded
+        // comparison the order list uses, so the field only reports keystrokes.
+        SaeedSearchField(
+            value = searchQuery,
+            onValueChange = onSearchChange,
+            placeholder = stringResource(R.string.admin_search_products),
+        )
+        Spacer(Modifier.height(12.dp))
 
         if (products.isEmpty()) {
             SaeedEmptyState(

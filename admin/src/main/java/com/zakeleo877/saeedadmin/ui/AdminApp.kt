@@ -138,6 +138,8 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
                     )
                     AdminTab.PRODUCTS -> ProductsScreen(
                         products = state.products,
+                        searchQuery = state.searchQuery,
+                        onSearchChange = viewModel::setSearchQuery,
                         onSave = { id, name, price, description, imageUrl, category, available, sortOrder,
                             originalPrice, rating ->
                             viewModel.saveProduct(
