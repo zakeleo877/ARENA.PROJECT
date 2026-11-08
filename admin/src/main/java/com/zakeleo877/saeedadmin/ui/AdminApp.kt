@@ -140,13 +140,14 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
                         products = state.products,
                         searchQuery = state.searchQuery,
                         onSearchChange = viewModel::setSearchQuery,
-                        onSave = { id, name, price, description, imageUrl, category, available, sortOrder,
-                            originalPrice, rating ->
+                        onSave = { id, name, price, description, imageUrl, category, available,
+                            sortOrder, originalPrice, rating, onDone ->
                             viewModel.saveProduct(
                                 id, name, price, description, imageUrl, category, available, sortOrder,
                                 originalPrice = originalPrice,
                                 rating = rating,
-                            ) {}
+                                onDone = onDone,
+                            )
                         },
                         onDelete = { id -> viewModel.deleteProduct(id) },
                         onUploadImage = { productId, fileName, bytes, onDone ->
