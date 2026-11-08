@@ -70,6 +70,7 @@ fun ProductsScreen(
         sortOrder: Int,
         originalPrice: BigDecimal?,
         rating: Double?,
+        onDone: (Boolean, String?) -> Unit,
     ) -> Unit,
     onDelete: (String) -> Unit,
     onUploadImage: (productId: String?, fileName: String, bytes: ByteArray, onDone: (String?) -> Unit) -> Unit,
