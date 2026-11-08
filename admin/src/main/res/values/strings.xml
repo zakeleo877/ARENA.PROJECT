@@ -10,6 +10,7 @@
     <string name="admin_sign_out">تسجيل الخروج</string>
     <string name="admin_not_authorized">هذا الحساب غير مخوَّل.</string>
     <string name="admin_load_error">تعذّر تحميل البيانات، تحقّق من الاتصال.</string>
+    <string name="admin_retry">إعادة المحاولة</string>
 
     <string name="admin_tab_dashboard">اللوحة</string>
     <string name="admin_tab_orders">الطلبات</string>

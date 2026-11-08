@@ -26,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +77,8 @@ fun ProductsScreen(
     onUploadImage: (productId: String?, fileName: String, bytes: ByteArray, onDone: (String?) -> Unit) -> Unit,
     searchQuery: String,
     onSearchChange: (String) -> Unit,
+    loadError: String? = null,
+    onRetry: () -> Unit = {},
 ) {
     var editing by remember { mutableStateOf<Product?>(null) }
     var creating by remember { mutableStateOf(false) }
@@ -124,6 +127,25 @@ fun ProductsScreen(
             placeholder = stringResource(R.string.admin_search_products),
         )
         Spacer(Modifier.height(12.dp))
+
+        if (loadError != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.admin_load_error),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onRetry) {
+                    Text(stringResource(R.string.admin_retry))
+                }
+            }
+            Text(
+                text = loadError,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         if (products.isEmpty()) {
             SaeedEmptyState(
