@@ -2,6 +2,7 @@ package com.zakeleo877.saeedadmin.ui
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.os.Build
 import android.net.Uri
 import androidx.core.content.FileProvider
@@ -49,6 +50,7 @@ import com.zakeleo877.saeedcore.designsystem.SaeedButton
 import com.zakeleo877.saeedcore.designsystem.SaeedTextField
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.ByteBuffer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -289,50 +291,47 @@ private fun openSource(context: android.content.Context, uri: Uri): java.io.Inpu
         }
     }.getOrNull()
 
-/** Decodes the picked image, scales it down, and encodes it as WebP.
+/**
+ * Reads the picked bytes once, then decodes from memory.
  *
- * `inSampleSize` does the cheap first pass while decoding, so a 12-megapixel
- * photo never becomes a full-size bitmap in memory. The second pass then fits
- * the result into [MAX_IMAGE_EDGE] before quality is reduced.
+ * The previous version opened the source twice: once for the size and once for
+ * the pixels. A picker Uri can be opened once and then refuse, and a camera file
+ * the provider has already handed over behaves the same way. Reading the bytes
+ * first removes the whole class of "it worked when I tried it" failures, and a
+ * phone photo is a few megabytes, which fits in memory for the moment this takes.
+ *
+ * Decoding goes through ImageDecoder from API 28: it understands HEIC and HEIF,
+ * which is what a modern Samsung and most new phones actually store, and which
+ * BitmapFactory returns null for. That null was reported as an unreadable image,
+ * which is the message the owner saw. Older releases keep BitmapFactory.
  */
-@Suppress("DEPRECATION")
 private fun prepareImage(
     context: android.content.Context,
     uri: Uri,
 ): PreparedImage {
-    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    openSource(context, uri)?.use { stream ->
-        BitmapFactory.decodeStream(stream, null, bounds)
-    } ?: return PreparedImage.Unreadable
-    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return PreparedImage.Unreadable
+    val source = openSource(context, uri)?.use { it.readBytes() }
+        ?: return PreparedImage.Unreadable
 
-    var sample = 1
-    while (bounds.outWidth / (sample * 2) >= MAX_IMAGE_EDGE ||
-        bounds.outHeight / (sample * 2) >= MAX_IMAGE_EDGE
-    ) {
-        sample *= 2
-    }
-
-    val decoded = openSource(context, uri)?.use { stream ->
-        BitmapFactory.decodeStream(
-            stream,
-            null,
-            BitmapFactory.Options().apply { inSampleSize = sample },
-        )
-    } ?: return PreparedImage.Unreadable
-
-    val longestEdge = maxOf(decoded.width, decoded.height)
-    val scaled = if (longestEdge > MAX_IMAGE_EDGE) {
-        val ratio = MAX_IMAGE_EDGE.toFloat() / longestEdge
-        Bitmap.createScaledBitmap(
-            decoded,
-            (decoded.width * ratio).toInt().coerceAtLeast(1),
-            (decoded.height * ratio).toInt().coerceAtLeast(1),
-            true,
-        )
+    val decoded = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        runCatching {
+            val src = ImageDecoder.createSource(ByteBuffer.wrap(source))
+            ImageDecoder.decodeBitmap(src) { decoder, info, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                val longest = maxOf(info.size.width, info.size.height)
+                if (longest > MAX_IMAGE_EDGE) {
+                    val ratio = MAX_IMAGE_EDGE.toFloat() / longest
+                    decoder.setTargetSize(
+                        (info.size.width * ratio).toInt().coerceAtLeast(1),
+                        (info.size.height * ratio).toInt().coerceAtLeast(1),
+                    )
+                }
+            }
+        }.getOrNull()
     } else {
-        decoded
-    }
+        decodeWithBitmapFactory(source)
+    } ?: return PreparedImage.Unreadable
+
+    if (decoded.width <= 0 || decoded.height <= 0) return PreparedImage.Unreadable
 
     // 82 is visually indistinguishable from the original at phone sizes and is
     // well inside the bucket limit for a 1024px WebP. WEBP_LOSSY only exists
@@ -343,10 +342,9 @@ private fun prepareImage(
         Bitmap.CompressFormat.WEBP
     }
     val bytes = ByteArrayOutputStream().use { output ->
-        scaled.compress(format, 82, output)
+        decoded.compress(format, 82, output)
         output.toByteArray()
     }
-    if (scaled !== decoded) scaled.recycle()
     decoded.recycle()
 
     if (bytes.isEmpty()) return PreparedImage.Unreadable
@@ -358,7 +356,40 @@ private fun prepareImage(
     return PreparedImage.Ready(fileName, bytes)
 }
 
-/**
+/** The pre-28 path: sample down while decoding, then fit the long edge. */
+@Suppress("DEPRECATION")
+private fun decodeWithBitmapFactory(source: ByteArray): Bitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(source, 0, source.size, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+    var sample = 1
+    while (bounds.outWidth / (sample * 2) >= MAX_IMAGE_EDGE ||
+        bounds.outHeight / (sample * 2) >= MAX_IMAGE_EDGE
+    ) {
+        sample *= 2
+    }
+    val decoded = BitmapFactory.decodeByteArray(
+        source,
+        0,
+        source.size,
+        BitmapFactory.Options().apply { inSampleSize = sample },
+    ) ?: return null
+
+    val longestEdge = maxOf(decoded.width, decoded.height)
+    return if (longestEdge > MAX_IMAGE_EDGE) {
+        val ratio = MAX_IMAGE_EDGE.toFloat() / longestEdge
+        Bitmap.createScaledBitmap(
+            decoded,
+            (decoded.width * ratio).toInt().coerceAtLeast(1),
+            (decoded.height * ratio).toInt().coerceAtLeast(1),
+            true,
+        ).also { if (it !== decoded) decoded.recycle() }
+    } else {
+        decoded
+    }
+}
+
  * A fresh file for one camera shot.
  *
  * The camera app writes the picture here, so the name must be unique and the

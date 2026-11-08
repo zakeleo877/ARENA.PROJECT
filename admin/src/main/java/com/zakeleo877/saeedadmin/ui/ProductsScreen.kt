@@ -144,8 +144,17 @@ fun ProductsScreen(
                 product = null,
                 categories = products.map { it.category }.distinct().sorted(),
                 onSave = { name, price, description, imageUrl, category, available, sortOrder, original, stars ->
-                    onSave(null, name, price, description, imageUrl, category, available, sortOrder, original, stars)
-                    creating = false
+                    // Keeping the sheet open until the write lands is the
+                    // difference between "saved" and "silently lost".
+                    saving = true
+                    onSave(
+                        null, name, price, description, imageUrl, category, available, sortOrder,
+                        original, stars,
+                    ) { saved ->
+                        saving = false
+                        saveFailed = !saved
+                        if (saved) creating = false
+                    }
                 },
                 onUploadImage = { fileName, bytes, onDone ->
                     onUploadImage(null, fileName, bytes, onDone)
@@ -161,8 +170,15 @@ fun ProductsScreen(
                 product = product,
                 categories = products.map { it.category }.distinct().sorted(),
                 onSave = { name, price, description, imageUrl, category, available, sortOrder, original, stars ->
-                    onSave(product.id, name, price, description, imageUrl, category, available, sortOrder, original, stars)
-                    editing = null
+                    saving = true
+                    onSave(
+                        product.id, name, price, description, imageUrl, category, available,
+                        sortOrder, original, stars,
+                    ) { saved ->
+                        saving = false
+                        saveFailed = !saved
+                        if (saved) editing = null
+                    }
                 },
                 onUploadImage = { fileName, bytes, onDone ->
                     onUploadImage(product.id, fileName, bytes, onDone)
@@ -280,6 +296,7 @@ private fun ProductFormSheet(
         sortOrder: Int,
         originalPrice: BigDecimal?,
         rating: Double?,
+        onDone: (Boolean) -> Unit,
     ) -> Unit,
     onUploadImage: (fileName: String, bytes: ByteArray, onDone: (String?) -> Unit) -> Unit,
     onDismiss: () -> Unit,
@@ -298,6 +315,8 @@ private fun ProductFormSheet(
     var rating by remember { mutableStateOf(product?.rating?.let { formatRating(it) }.orEmpty()) }
     var originalError by remember { mutableStateOf(false) }
     var ratingError by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var saveFailed by remember { mutableStateOf(false) }
 
     // The form is taller than the sheet on a small phone once the image preview
     // is in place, so it scrolls as a whole; otherwise the save button sits
@@ -410,9 +429,23 @@ private fun ProductFormSheet(
             }
         }
 
+        if (saveFailed) {
+            Text(
+                text = stringResource(R.string.admin_product_save_failed),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+
         SaeedButton(
-            text = stringResource(R.string.admin_save),
+            text = stringResource(
+                if (saving) R.string.admin_product_saving else R.string.admin_save,
+            ),
+            // A second tap while the first write is in flight would send the
+            // same product twice.
+            enabled = !saving,
             onClick = {
+                saveFailed = false
                 // The keyboard may hand back Arabic-Indic digits, and a comma
                 // may be either a decimal mark or grouping. Formatters decides,
                 // and returns null when it cannot be sure.
@@ -433,6 +466,7 @@ private fun ProductFormSheet(
                         category.trim(), available, sortOrder,
                         parsedOriginal?.takeIf { it > parsed },
                         parsedRating,
+                        onDone,
                     )
                 }
             },
