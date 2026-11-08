@@ -89,6 +89,9 @@ class AdminRepository(
         return true
     }
 
+    /** The server's own words for the last refused write, for the screen. */
+    val lastFailure: String? get() = api.lastFailure
+
     fun signOut() {
         sessionHolder.clear()
         vault?.clear()

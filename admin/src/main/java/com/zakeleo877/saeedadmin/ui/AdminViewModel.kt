@@ -155,6 +155,11 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
         }
     }
 
+    /** Set when a write is refused, so the form can show what the server said. */
+    val saveFailure = MutableStateFlow<String?>(null)
+
+    private var lastFailure: String? = null
+
     fun saveProduct(
         id: String?,
         name: String,
@@ -175,7 +180,15 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
                 originalPrice = originalPrice,
                 rating = rating,
             )
-            if (ok) refresh()
+            if (ok) {
+                refresh()
+            } else {
+                // The list is re-read even on failure, so a write that landed but
+                // was answered oddly still shows up rather than looking lost.
+                refresh()
+            }
+            lastFailure = repository.lastFailure
+            saveFailure.value = if (ok) null else repository.lastFailure
             onDone(ok)
         }
     }
@@ -184,7 +197,15 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
         val session = repository.sessionHolder.session.value ?: return
         viewModelScope.launch {
             val ok = repository.deleteProduct(session, id)
-            if (ok) refresh()
+            if (ok) {
+                refresh()
+            } else {
+                // The list is re-read even on failure, so a write that landed but
+                // was answered oddly still shows up rather than looking lost.
+                refresh()
+            }
+            lastFailure = repository.lastFailure
+            saveFailure.value = if (ok) null else repository.lastFailure
             onDone(ok)
         }
     }
@@ -255,7 +276,15 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
         val session = repository.sessionHolder.session.value ?: return
         viewModelScope.launch {
             val ok = repository.insertManualOrder(session, customer, phone, notes, items)
-            if (ok) refresh()
+            if (ok) {
+                refresh()
+            } else {
+                // The list is re-read even on failure, so a write that landed but
+                // was answered oddly still shows up rather than looking lost.
+                refresh()
+            }
+            lastFailure = repository.lastFailure
+            saveFailure.value = if (ok) null else repository.lastFailure
             onDone(ok)
         }
     }

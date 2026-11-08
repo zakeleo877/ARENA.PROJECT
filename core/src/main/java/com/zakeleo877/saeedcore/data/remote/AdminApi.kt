@@ -226,7 +226,9 @@ class AdminApi(
                 setBody(payload)
             }
         }
-        return response.status.isSuccess()
+        if (!response.status.isSuccess()) return refuse("product", response)
+        lastFailure = null
+        return true
     }
 
     suspend fun deleteProduct(token: String, id: String): Boolean {
@@ -256,6 +258,23 @@ class AdminApi(
      * be sent without it, which made every call fail even though the rest of the
      * chain was in place.
      */
+    /**
+     * The last refusal, in the words the server used.
+     *
+     * A function that answers true or false leaves the owner with nothing to
+     * report and leaves me guessing between an expired session, a bucket policy
+     * and a rejected column. The status and the server's own message are kept so
+     * the screen can show them.
+     */
+    var lastFailure: String? = null
+        private set
+
+    private suspend fun refuse(prefix: String, response: io.ktor.client.statement.HttpResponse): Boolean {
+        val body = runCatching { response.bodyAsText() }.getOrDefault("")
+        lastFailure = "$prefix ${response.status.value}: ${body.take(300)}"
+        return false
+    }
+
     suspend fun uploadProductImage(token: String, fileName: String, bytes: ByteArray): String? {
         val response = client.post("${config.baseUrl}/storage/v1/object/product-images/$fileName") {
             headers(token)
@@ -263,7 +282,11 @@ class AdminApi(
             contentType(ContentType.parse("image/webp"))
             setBody(bytes)
         }
-        if (!response.status.isSuccess()) return null
+        if (!response.status.isSuccess()) {
+            refuse("upload", response)
+            return null
+        }
+        lastFailure = null
         val wire = runCatching { response.body<ProductImageWire>() }.getOrNull()
         return wire?.publicUrl
             ?: wire?.path?.let { "${config.baseUrl}/storage/v1/object/public/product-images/$it" }
