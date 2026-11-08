@@ -97,7 +97,10 @@ android {
         } else {
             javaString("")
         }
-        resValue("string", "demo_products", demoProducts)
+        // A constant rather than a resource: `resValue` needs the
+        // `buildConfig`-style resource feature that AGP 9.5 reports as
+        // disabled, and the value never needs translating.
+        buildConfigField("String", "DEMO_PRODUCTS", demoProducts)
     }
     signingConfigs {
         create("release") {

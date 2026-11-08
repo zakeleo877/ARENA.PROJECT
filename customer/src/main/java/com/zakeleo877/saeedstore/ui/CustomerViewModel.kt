@@ -20,8 +20,8 @@ import com.zakeleo877.saeedcore.model.PendingOrder
 import com.zakeleo877.saeedcore.model.PendingOrderItem
 import com.zakeleo877.saeedcore.model.Product
 import com.zakeleo877.saeedcore.model.StoreSettings
-import com.zakeleo877.saeedstore.R
 import com.zakeleo877.saeedcore.network.NetworkMonitor
+import com.zakeleo877.saeedstore.BuildConfig
 import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
@@ -125,7 +125,7 @@ class CustomerViewModel @Inject constructor(
      * A malformed value is ignored rather than crashing the screen.
      */
     private val demoProducts: List<Product>? by lazy {
-        val raw = context.getString(R.string.demo_products)
+        val raw = BuildConfig.DEMO_PRODUCTS
         if (raw.isBlank()) return@lazy null
         runCatching { demoJson.decodeFromString<List<DemoProduct>>(raw).map { it.toProduct() } }
             .getOrNull()
