@@ -47,6 +47,7 @@ import com.zakeleo877.saeedcore.designsystem.SaeedBottomSheet
 import com.zakeleo877.saeedcore.designsystem.SaeedButton
 import com.zakeleo877.saeedcore.designsystem.SaeedCard
 import com.zakeleo877.saeedcore.designsystem.SaeedEmptyState
+import com.zakeleo877.saeedcore.designsystem.SaeedSearchField
 import com.zakeleo877.saeedcore.designsystem.SaeedTextField
 import com.zakeleo877.saeedcore.model.Product
 import com.zakeleo877.saeedcore.util.CsvExporter
@@ -72,6 +73,8 @@ fun ProductsScreen(
     ) -> Unit,
     onDelete: (String) -> Unit,
     onUploadImage: (productId: String?, fileName: String, bytes: ByteArray, onDone: (String?) -> Unit) -> Unit,
+    searchQuery: String,
+    onSearchChange: (String) -> Unit,
 ) {
     var editing by remember { mutableStateOf<Product?>(null) }
     var creating by remember { mutableStateOf(false) }
@@ -105,7 +108,16 @@ fun ProductsScreen(
                 icon = Icons.Filled.Add,
             )
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
+
+        // The catalogue is filtered by the view model with the same folded
+        // comparison the order list uses, so the field only reports keystrokes.
+        SaeedSearchField(
+            value = searchQuery,
+            onValueChange = onSearchChange,
+            placeholder = stringResource(R.string.admin_search_products),
+        )
+        Spacer(Modifier.height(12.dp))
 
         if (products.isEmpty()) {
             SaeedEmptyState(
@@ -401,12 +413,16 @@ private fun ProductFormSheet(
         SaeedButton(
             text = stringResource(R.string.admin_save),
             onClick = {
-                val parsed = price.toBigDecimalOrNull()
+                // The keyboard may hand back Arabic-Indic digits, and a comma
+                // may be either a decimal mark or grouping. Formatters decides,
+                // and returns null when it cannot be sure.
+                val parsed = Formatters.parsePrice(price)
                 priceError = parsed == null || parsed.signum() < 0
                 // An old price only means something when it is above the new
                 // one; anything else is caught here instead of being silently
                 // dropped by the database check.
-                val parsedOriginal = originalPrice.trim().takeIf { it.isNotEmpty() }?.toBigDecimalOrNull()
+                val parsedOriginal = originalPrice.trim().takeIf { it.isNotEmpty() }
+                    ?.let(Formatters::parsePrice)
                 originalError = originalPrice.isNotBlank() &&
                     (parsedOriginal == null || (parsed != null && parsedOriginal <= parsed))
                 val parsedRating = rating.trim().takeIf { it.isNotEmpty() }?.toDoubleOrNull()

@@ -73,4 +73,5 @@
     <string name="catalog_offers_only">العروض فقط</string>
     <string name="catalog_clear_filters">إزالة التصفية</string>
 
+    <string name="catalog_tab_badge">%1$d عناصر</string>
 </resources>

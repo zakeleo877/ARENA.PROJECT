@@ -10,6 +10,7 @@ import com.zakeleo877.saeedcore.model.PendingOrderItem
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -89,7 +90,9 @@ class OrderRepository(
         } catch (failure: ApiFailure) {
             val reason = failure.kind.toReason()
             if (failure.kind == ApiFailureKind.INVALID_ORDER) {
-                // A permanent rejection must not loop forever.
+                // A permanent rejection must not loop forever. The decision is
+                // deliberate and a test holds it: retrying bad data can only
+                // fail again.
                 pendingDao.delete(order.clientId)
                 SubmitOutcome.Rejected(reason)
             } else {
@@ -100,6 +103,9 @@ class OrderRepository(
             markFailed(order.clientId, "network_error")
             SubmitOutcome.Rejected("network_error")
         } catch (_: SerializationException) {
+            // The order may have reached the server; keeping the row with the
+            // same client id means a retry returns the original number rather
+            // than placing a second order.
             markFailed(order.clientId, "invalid_response")
             SubmitOutcome.Rejected("invalid_response")
         } catch (_: IllegalArgumentException) {
@@ -141,6 +147,34 @@ class OrderRepository(
 
     suspend fun delete(clientId: String) {
         pendingDao.delete(clientId)
+    }
+
+    /**
+     * Sends every waiting order once the device is online again.
+     *
+     * The offline banner tells the customer the order will be sent when the
+     * connection returns, and nothing did that: the customer had to open the
+     * list and tap retry. This is the promise being kept.
+     *
+     * Orders that failed are left alone. A failure may be a permanent rejection
+     * the customer has to fix, and retrying it every few seconds would hide the
+     * reason behind a spinner.
+     */
+    suspend fun drainWaiting(): List<SubmitOutcome> {
+        val waiting = pendingDao.observeAll()
+            .first()
+            .filter { it.state == PendingState.WAITING.name }
+        return waiting.map { entity ->
+            val order = PendingOrder(
+                clientId = entity.clientId,
+                customer = entity.customer,
+                phone = entity.phone,
+                notes = entity.notes,
+                customerLocationUrl = entity.location,
+                items = decodeItems(entity.itemsJson),
+            )
+            send(order)
+        }
     }
 
     /**

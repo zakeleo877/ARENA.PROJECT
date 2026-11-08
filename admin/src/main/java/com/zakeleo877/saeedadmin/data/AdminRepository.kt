@@ -4,6 +4,7 @@ import com.zakeleo877.saeedcore.data.remote.AdminApi
 import com.zakeleo877.saeedcore.data.remote.AdminSession
 import com.zakeleo877.saeedcore.data.remote.AuthManager
 import com.zakeleo877.saeedcore.data.remote.AuthResult
+import com.zakeleo877.saeedcore.data.remote.SessionVault
 import com.zakeleo877.saeedcore.data.remote.SupabasePublicConfig
 import com.zakeleo877.saeedcore.model.Order
 import com.zakeleo877.saeedcore.model.OrderStatus
@@ -60,8 +61,38 @@ class AdminRepository(
     private val config: SupabasePublicConfig,
     private val api: AdminApi,
     private val authManager: AuthManager,
+    private val vault: SessionVault? = null,
 ) {
     val sessionHolder = AdminSessionHolder()
+
+    /**
+     * Restores the session saved at the end of the last launch.
+     *
+     * Without it the manager typed an email and a password every time the app
+     * was closed, which on a shop phone is several times an hour. The token may
+     * be an hour old by now, and the first request refreshes it, so an expired
+     * stored session is still worth restoring.
+     *
+     * A session the server no longer accepts is dropped by the refresh path, so
+     * this cannot leave the app stuck behind a sign-in screen that never ends.
+     */
+    suspend fun restoreSession(): Boolean {
+        val saved = vault?.load() ?: return false
+        sessionHolder.setSession(saved)
+        val authorization = checkAuthorization(saved)
+        sessionHolder.setAuthorization(authorization)
+        if (authorization !is AdminAuthorization.Authorized) {
+            sessionHolder.clear()
+            vault?.clear()
+            return false
+        }
+        return true
+    }
+
+    fun signOut() {
+        sessionHolder.clear()
+        vault?.clear()
+    }
 
     suspend fun signIn(email: String, password: String): AuthResult {
         val result = authManager.signIn(email, password)
@@ -71,6 +102,11 @@ class AdminRepository(
             sessionHolder.setAuthorization(authorized)
             if (authorized !is AdminAuthorization.Authorized) {
                 sessionHolder.clear()
+                vault?.clear()
+            } else {
+                // Only a manager is remembered. Saving a refused session would
+                // restore it on every launch and fail the check every time.
+                vault?.save(result.session)
             }
         }
         return result
@@ -84,15 +120,49 @@ class AdminRepository(
         return if (claimed) AdminAuthorization.Authorized else AdminAuthorization.NotAuthorized
     }
 
-    suspend fun products(session: AdminSession): List<Product> = api.products(session.accessToken)
+
+    /**
+     * The session to use for a request, refreshed when it is about to expire.
+     *
+     * Supabase's access token lasts an hour, and `refresh()` existed without
+     * every being called: at the hour mark every admin request started failing
+     * with the same 401 as a missing token, and nothing told the manager why.
+     * The refresh happens before the request rather than after the failure,
+     * because a failed write has no way back.
+     */
+    private suspend fun liveSession(): AdminSession? {
+        val current = sessionHolder.session.value ?: return null
+        if (!current.isExpiring(System.currentTimeMillis())) return current
+        return when (val result = authManager.refresh(current)) {
+            is AuthResult.Success -> {
+                sessionHolder.setSession(result.session)
+                // Supabase rotates the refresh token, so the stored copy is
+                // replaced or the next launch restores one that no longer works.
+                vault?.save(result.session)
+                result.session
+            }
+            // A refused refresh means the refresh token itself is gone, which
+            // only a new sign-in can repair. Keeping the stale session would
+            // keep sending a token that cannot work.
+            is AuthResult.Failure -> {
+                sessionHolder.clear()
+                vault?.clear()
+                null
+            }
+        }
+    }
+
+    suspend fun products(session: AdminSession): List<Product> =
+        api.products((liveSession() ?: session).accessToken)
 
     suspend fun orders(session: AdminSession, status: OrderStatus? = null): List<Order> =
-        api.orders(session.accessToken, status)
+        api.orders((liveSession() ?: session).accessToken, status)
 
     suspend fun updateOrderStatus(session: AdminSession, orderId: String, status: OrderStatus): Boolean =
-        api.updateOrderStatus(session.accessToken, orderId, status)
+        api.updateOrderStatus((liveSession() ?: session).accessToken, orderId, status)
 
-    suspend fun deleteProduct(session: AdminSession, id: String): Boolean = api.deleteProduct(session.accessToken, id)
+    suspend fun deleteProduct(session: AdminSession, id: String): Boolean =
+        api.deleteProduct((liveSession() ?: session).accessToken, id)
 
     suspend fun upsertProduct(
         session: AdminSession,
@@ -107,16 +177,17 @@ class AdminRepository(
         originalPrice: BigDecimal? = null,
         rating: Double? = null,
     ): Boolean = api.upsertProduct(
-        session.accessToken, id, name, price, description, imageUrl, category, available, sortOrder,
+        (liveSession() ?: session).accessToken,
+        id, name, price, description, imageUrl, category, available, sortOrder,
         originalPrice = originalPrice,
         rating = rating,
     )
 
     suspend fun uploadImage(session: AdminSession, fileName: String, bytes: ByteArray): String? =
-        api.uploadProductImage(session.accessToken, fileName, bytes)
+        api.uploadProductImage((liveSession() ?: session).accessToken, fileName, bytes)
 
     suspend fun updateSettings(session: AdminSession, values: Map<String, String>): Boolean =
-        api.updateSettings(session.accessToken, values)
+        api.updateSettings((liveSession() ?: session).accessToken, values)
 
     suspend fun insertManualOrder(
         session: AdminSession,
@@ -124,14 +195,17 @@ class AdminRepository(
         phone: String,
         notes: String,
         items: List<Pair<String, Int>>,
-    ): Boolean = api.insertManualOrder(session.accessToken, customer, phone, notes, items)
+    ): Boolean =
+        api.insertManualOrder((liveSession() ?: session).accessToken, customer, phone, notes, items)
 
     /** Reads the newest order number so the background worker only reports new work. */
     suspend fun latestOrder(session: AdminSession): Long? =
-        api.orders(session.accessToken, status = OrderStatus.NEW).firstOrNull()?.number
+        api.orders((liveSession() ?: session).accessToken, status = OrderStatus.NEW)
+            .firstOrNull()?.number
 
     suspend fun newOrdersSince(session: AdminSession, lastSeenNumber: Long): List<Order> =
-        api.orders(session.accessToken, status = OrderStatus.NEW).filter { it.number > lastSeenNumber }
+        api.orders((liveSession() ?: session).accessToken, status = OrderStatus.NEW)
+            .filter { it.number > lastSeenNumber }
 
     /** Calls a boolean RPC with the admin's bearer token. */
     private suspend fun rpcBoolean(session: AdminSession, function: String): Boolean = try {

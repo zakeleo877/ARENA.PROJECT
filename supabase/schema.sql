@@ -45,13 +45,22 @@ comment on column public.products.rating is
 -- rule was broken instead of a generic products_check.
 do $upgrade$
 begin
-    if not exists (
+    -- An old price equal to the price advertises nothing: the shop would be
+    -- asking today what it always asked. The app hides the badge in that case,
+    -- so the database must refuse to store a row the app will not show as a
+    -- discount. The rule is recreated each time, which is what repairs a row
+    -- written under the older, looser rule.
+    if exists (
         select 1 from pg_constraint where conname = 'products_original_price_above_price'
     ) then
-        alter table public.products add constraint products_original_price_above_price
-            check (original_price is null or original_price >= price) not valid;
-        alter table public.products validate constraint products_original_price_above_price;
+        alter table public.products drop constraint products_original_price_above_price;
     end if;
+    update public.products
+       set original_price = null
+     where original_price is not null and original_price <= price;
+    alter table public.products add constraint products_original_price_above_price
+        check (original_price is null or original_price > price) not valid;
+    alter table public.products validate constraint products_original_price_above_price;
     if not exists (
         select 1 from pg_constraint where conname = 'products_rating_range'
     ) then

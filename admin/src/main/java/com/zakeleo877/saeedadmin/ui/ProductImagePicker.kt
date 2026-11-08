@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,7 +86,11 @@ fun ProductImagePicker(
 
     // The camera writes into a file this app owns; the system camera cannot
     // hand back a readable Uri any other way on modern Android.
-    var pendingCapture by remember { mutableStateOf<File?>(null) }
+    //
+    // The path is saveable, not merely remembered: the camera runs in another
+    // process, and Android may reclaim this one while it is in front. The
+    // result would then arrive with no file to read.
+    var pendingCapturePath by rememberSaveable { mutableStateOf<String?>(null) }
 
     fun accept(uri: Uri) {
         scope.launch {
@@ -108,11 +113,15 @@ fun ProductImagePicker(
     val camera = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture(),
     ) { saved ->
-        val file = pendingCapture
-        if (saved && file != null) accept(Uri.fromFile(file))
-        // A cancelled shot leaves the temporary file behind; it is removed on
-        // the next attempt and by the system when the cache is trimmed.
-        if (!saved) file?.delete()
+        val file = pendingCapturePath?.let(::File)
+        pendingCapturePath = null
+        if (saved && file != null) {
+            accept(Uri.fromFile(file))
+        } else {
+            // A cancelled shot leaves the temporary file behind; it is removed
+            // on the next attempt and by the system when the cache is trimmed.
+            file?.delete()
+        }
     }
 
     val shownModel: Any? = previewUri ?: imageUrl.ifBlank { null }
@@ -180,11 +189,18 @@ fun ProductImagePicker(
             SaeedButton(
                 text = stringResource(R.string.admin_image_camera),
                 onClick = {
-                    val file = newCaptureFile(context)
-                    pendingCapture = file
-                    val authority = "${context.packageName}.fileprovider"
-                    val target = FileProvider.getUriForFile(context, authority, file)
-                    camera.launch(target)
+                    // A phone with no camera app at all would otherwise crash the
+                    // form. The button simply reports that the shot failed.
+                    val started = runCatching {
+                        val file = newCaptureFile(context)
+                        pendingCapturePath = file.absolutePath
+                        val authority = "${context.packageName}.fileprovider"
+                        camera.launch(FileProvider.getUriForFile(context, authority, file))
+                    }.isSuccess
+                    if (!started) {
+                        pendingCapturePath = null
+                        message = R.string.admin_image_camera_failed
+                    }
                 },
                 enabled = !uploading,
                 icon = Icons.Filled.PhotoCamera,
@@ -250,8 +266,30 @@ private sealed interface PreparedImage {
     data object TooLarge : PreparedImage
 }
 
+
 /**
- * Decodes the picked image, scales it down, and encodes it as WebP.
+ * Opens the picked image, whether it came from the photo picker or the camera.
+ *
+ * The camera hands back a `file:` Uri because the system camera writes into a
+ * file this app owns. `ContentResolver` only understands `content:` Uris: it
+ * throws `FileNotFoundException` for `file:` ones, so a photo taken with the
+ * camera was always reported as unreadable. Reading the path directly fixes it.
+ *
+ * It also swallows the failure. `openInputStream` throws rather than returning
+ * null when the picker’s grant has expired or the file is gone, and an
+ * exception on the IO dispatcher would take the whole form down instead of
+ * showing the "unreadable image" line.
+ */
+private fun openSource(context: android.content.Context, uri: Uri): java.io.InputStream? =
+    runCatching {
+        if (uri.scheme == "file") {
+            uri.path?.let { java.io.FileInputStream(it) }
+        } else {
+            context.contentResolver.openInputStream(uri)
+        }
+    }.getOrNull()
+
+/** Decodes the picked image, scales it down, and encodes it as WebP.
  *
  * `inSampleSize` does the cheap first pass while decoding, so a 12-megapixel
  * photo never becomes a full-size bitmap in memory. The second pass then fits
@@ -263,7 +301,7 @@ private fun prepareImage(
     uri: Uri,
 ): PreparedImage {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    context.contentResolver.openInputStream(uri)?.use { stream ->
+    openSource(context, uri)?.use { stream ->
         BitmapFactory.decodeStream(stream, null, bounds)
     } ?: return PreparedImage.Unreadable
     if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return PreparedImage.Unreadable
@@ -275,7 +313,7 @@ private fun prepareImage(
         sample *= 2
     }
 
-    val decoded = context.contentResolver.openInputStream(uri)?.use { stream ->
+    val decoded = openSource(context, uri)?.use { stream ->
         BitmapFactory.decodeStream(
             stream,
             null,

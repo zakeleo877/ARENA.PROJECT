@@ -257,4 +257,39 @@ class OrderRepositoryTest {
         assertEquals(SubmitOutcome.Sent(7), outcome)
         assertTrue(dao.rows.isEmpty())
     }
+
+    // ------------------------------------------------- automatic send on return ---
+
+    @Test fun aWaitingOrderIsSentWhenTheConnectionReturns() = runTest {
+        val dao = FakePendingDao()
+        val repository = OrderRepository(apiReturning(HttpStatusCode.OK, "77"), dao)
+        // The customer tapped send while the phone was offline.
+        repository.submit(order, online = false)
+        assertEquals("WAITING", dao.rows.values.single().state)
+
+        // The connection comes back; nothing else is tapped.
+        val outcomes = repository.drainWaiting()
+
+        assertEquals(listOf(SubmitOutcome.Sent(77)), outcomes)
+        assertTrue("a sent order leaves the queue", dao.rows.isEmpty())
+    }
+
+    @Test fun aFailedOrderIsNotResentAutomatically() = runTest {
+        val dao = FakePendingDao()
+        OrderRepository(apiLosingTheConnection(), dao).submit(order, online = true)
+        assertEquals("FAILED", dao.rows.values.single().state)
+
+        // A failure may be a rejection the customer has to fix. Sending it again
+        // every time the signal flickers would hide the reason behind a retry.
+        val outcomes = OrderRepository(apiReturning(HttpStatusCode.OK, "5"), dao).drainWaiting()
+
+        assertTrue("a failed order is the customer's decision to resend", outcomes.isEmpty())
+        assertEquals(1, dao.rows.size)
+    }
+
+    @Test fun anEmptyQueueSendsNothing() = runTest {
+        val dao = FakePendingDao()
+        val outcomes = OrderRepository(apiReturning(HttpStatusCode.OK, "1"), dao).drainWaiting()
+        assertTrue(outcomes.isEmpty())
+    }
 }

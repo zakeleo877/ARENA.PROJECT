@@ -158,6 +158,20 @@ class CustomerViewModel @Inject constructor(
                 delay(5_000)
             }
         }
+        viewModelScope.launch {
+            // The offline banner promises the order is sent when the connection
+            // returns, and nothing did it: the customer had to open the list and
+            // tap retry themselves. Watching the network is what keeps that
+            // promise. Only the transition from offline to online sends, so a
+            // device that is online all day does not retry anything.
+            var wasOnline = isOnline()
+            monitor.observe().collect { online ->
+                if (online && !wasOnline) {
+                    runCatching { orderRepository.drainWaiting() }
+                }
+                wasOnline = online
+            }
+        }
     }
 
     fun refresh() {

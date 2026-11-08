@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -82,6 +81,7 @@ import com.zakeleo877.saeedcore.designsystem.SaeedSearchField
 import com.zakeleo877.saeedcore.designsystem.SaeedSkeleton
 import com.zakeleo877.saeedcore.designsystem.SaeedStar
 import com.zakeleo877.saeedcore.model.Product
+import com.zakeleo877.saeedcore.util.ArabicText
 import com.zakeleo877.saeedcore.util.Formatters
 import com.zakeleo877.saeedcore.R as CoreR
 import com.zakeleo877.saeedstore.R
@@ -113,9 +113,11 @@ fun CatalogScreen(
     val categories = remember(state.products) { state.products.map { it.category }.distinct().sorted() }
     val visible = remember(state.products, query, selectedCategory, offersOnly) {
         state.products.filter { product ->
+            // Arabic is compared in its folded form: «أرز» must be found by a
+            // search for «ارز», which is the key a phone keyboard produces.
             val matchesQuery = query.isBlank() ||
-                product.name.contains(query, ignoreCase = true) ||
-                product.description.contains(query, ignoreCase = true)
+                ArabicText.contains(product.name, query) ||
+                ArabicText.contains(product.description, query)
             val matchesCategory = selectedCategory == null || product.category == selectedCategory
             val matchesOffers = !offersOnly || product.hasDiscount
             matchesQuery && matchesCategory && matchesOffers

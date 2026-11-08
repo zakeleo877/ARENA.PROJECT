@@ -99,4 +99,5 @@
 
     <string name="admin_image_camera">التقاط صورة</string>
     <string name="admin_image_camera_failed">تعذّر فتح الكاميرا. تحقّق من وجود تطبيق كاميرا في الجهاز.</string>
+    <string name="admin_search_products">ابحث باسم المنتج أو الفئة…</string>
 </resources>
