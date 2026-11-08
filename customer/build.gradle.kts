@@ -151,6 +151,10 @@ dependencies {
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.hilt.android)
     implementation(libs.kotlinx.coroutines.android)
+    // The optional throwaway catalogue is read with kotlinx.serialization.
+    // `core` had the dependency; this module used the library without declaring
+    // it, and nothing compiled until the build reached this line.
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.androidx.core.splashscreen)
