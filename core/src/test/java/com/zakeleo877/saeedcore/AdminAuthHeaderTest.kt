@@ -43,7 +43,7 @@ class AdminAuthHeaderTest {
         val client = HttpClient(engine) {
             install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
         }
-        return AdminApi(client, SupabasePublicConfig("https://project.example", "publishable"))
+        return AdminApi(client, SupabasePublicConfig("https://project.example", "sb_publishable_test_key"))
     }
 
     private fun assertBearer(record: List<Pair<HttpMethod, String?>>, what: String) {
@@ -111,7 +111,7 @@ class AdminAuthHeaderTest {
         val client = HttpClient(engine) {
             install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
         }
-        AdminApi(client, SupabasePublicConfig("https://project.example", "publishable"))
+        AdminApi(client, SupabasePublicConfig("https://project.example", "sb_publishable_test_key"))
             .uploadProductImage(token, "a.webp", ByteArray(4))
         assertBearer(record, "uploading an image")
     }

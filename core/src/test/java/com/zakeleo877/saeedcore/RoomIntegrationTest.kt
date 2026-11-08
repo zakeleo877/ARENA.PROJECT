@@ -44,7 +44,7 @@ class RoomIntegrationTest {
      * the migration is applied to it directly. A phone that already had the app
      * takes the same path.
      */
-    @Test fun theUpgradeKeepsCachedProductsAndAddsTheNewColumns() = runBlocking {
+    @Test fun theUpgradeKeepsCachedProductsAndAddsTheNewColumns(): Unit = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val file = java.io.File(context.cacheDir, "legacy-${System.nanoTime()}.db")
         val driver = AndroidSQLiteDriver()
