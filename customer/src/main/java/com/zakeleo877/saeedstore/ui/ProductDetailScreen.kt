@@ -33,13 +33,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.zakeleo877.saeedcore.designsystem.RemoteImage
 import com.zakeleo877.saeedcore.designsystem.SaeedButton
 import com.zakeleo877.saeedcore.model.Product
 import com.zakeleo877.saeedcore.util.Formatters
@@ -84,24 +82,21 @@ fun SharedTransitionScope.ProductDetailScreen(
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
         ) {
-            if (product.imageUrl.isNotBlank()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(product.imageUrl)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = product.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(280.dp)
-                        .sharedElement(
-                            sharedContentState = rememberSharedContentState(key = "product-image-${product.id}"),
-                            animatedVisibilityScope = animatedScope,
-                        )
-                        .clickable { zoomOpen = true },
-                )
-            }
+            // The hero is 280dp tall, so that is the decode bound too.
+            RemoteImage(
+                url = product.imageUrl,
+                contentDescription = product.name,
+                size = 280.dp,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp)
+                    .sharedElement(
+                        sharedContentState = rememberSharedContentState(key = "product-image-${product.id}"),
+                        animatedVisibilityScope = animatedScope,
+                    )
+                    .clickable { zoomOpen = true },
+            )
 
             Column(Modifier.padding(16.dp)) {
                 Text(

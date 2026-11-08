@@ -121,6 +121,9 @@ dependencies {
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons)
+    // The shared product-image composable lives here so the shop and the admin
+    // panel cannot drift apart in how they load a photograph.
+    api(libs.coil.compose)
     implementation(libs.androidx.room.runtime)
     ksp(libs.androidx.room.compiler)
     implementation(libs.hilt.android)

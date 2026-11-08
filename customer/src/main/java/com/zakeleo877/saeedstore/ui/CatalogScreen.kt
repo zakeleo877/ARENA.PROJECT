@@ -54,7 +54,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
@@ -65,9 +64,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.zakeleo877.saeedcore.designsystem.RemoteImage
 import com.zakeleo877.saeedcore.designsystem.SaeedCardSurface
 import com.zakeleo877.saeedcore.designsystem.SaeedChipSurface
 import com.zakeleo877.saeedcore.designsystem.SaeedDiscountRed
@@ -418,29 +416,22 @@ private fun SharedTransitionScope.ProductCard(
                         .background(SaeedChipSurface),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (product.imageUrl.isNotBlank()) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(LocalContext.current)
-                                .data(product.imageUrl)
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = product.name,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .sharedElement(
-                                    sharedContentState = rememberSharedContentState(key = "product-image-${product.id}"),
-                                    animatedVisibilityScope = animatedScope,
-                                ),
-                        )
-                    } else {
-                        Icon(
-                            Icons.Filled.Inventory2,
-                            contentDescription = null,
-                            tint = SaeedInkMuted,
-                            modifier = Modifier.size(40.dp),
-                        )
-                    }
+                    // The grid cell is at most a card wide, so the decode is
+                    // bounded to that: a phone photo stops costing 16 MB of
+                    // bitmap per card. A failed load now shows a marker instead
+                    // of an empty square that looks like "no photo".
+                    RemoteImage(
+                        url = product.imageUrl,
+                        contentDescription = product.name,
+                        size = 160.dp,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .sharedElement(
+                                sharedContentState = rememberSharedContentState(key = "product-image-${product.id}"),
+                                animatedVisibilityScope = animatedScope,
+                            ),
+                    )
                 }
 
                 // The badge only appears when a discount really exists, and it

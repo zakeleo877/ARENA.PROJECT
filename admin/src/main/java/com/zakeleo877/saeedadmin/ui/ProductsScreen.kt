@@ -41,9 +41,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.zakeleo877.saeedcore.designsystem.RemoteImage
 import com.zakeleo877.saeedcore.designsystem.SaeedBottomSheet
 import com.zakeleo877.saeedcore.designsystem.SaeedButton
 import com.zakeleo877.saeedcore.designsystem.SaeedCard
@@ -274,20 +273,17 @@ private fun ProductRow(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (product.imageUrl.isNotBlank()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(product.imageUrl)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = stringResource(R.string.admin_image_preview),
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(12.dp)),
-                )
-                Spacer(Modifier.size(12.dp))
-            }
+            // 56dp thumbnail: decoding the original photo for it is pure waste.
+            RemoteImage(
+                url = product.imageUrl,
+                contentDescription = stringResource(R.string.admin_image_preview),
+                size = 56.dp,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(12.dp)),
+            )
+            Spacer(Modifier.size(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     text = product.name,
