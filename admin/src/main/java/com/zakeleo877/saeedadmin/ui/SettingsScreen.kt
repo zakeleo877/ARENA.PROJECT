@@ -11,8 +11,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -36,6 +42,9 @@ import com.zakeleo877.saeedadmin.notifications.OrderNotificationScheduler
 fun SettingsScreen(
     onSave: (Map<String, String>) -> Unit,
     onSignOut: () -> Unit,
+    checks: List<com.zakeleo877.saeedcore.data.remote.DiagnosticCheck>? = null,
+    checking: Boolean = false,
+    onCheckConnection: () -> Unit = {},
 ) {
     val context = LocalContext.current
     var storeName by remember { mutableStateOf("") }
@@ -171,7 +180,11 @@ fun SettingsScreen(
         )
 
         Spacer(Modifier.height(28.dp))
-        DiagnosticsCard()
+        DiagnosticsCard(
+            checks = checks,
+            checking = checking,
+            onCheck = onCheckConnection,
+        )
     }
 }
 
@@ -185,7 +198,11 @@ fun SettingsScreen(
  * holding the phone can read the answer out instead of describing a symptom.
  */
 @Composable
-private fun DiagnosticsCard() {
+private fun DiagnosticsCard(
+    checks: List<com.zakeleo877.saeedcore.data.remote.DiagnosticCheck>?,
+    checking: Boolean,
+    onCheck: () -> Unit,
+) {
     val context = LocalContext.current
     val build = remember { com.zakeleo877.saeedadmin.BuildConfig.SUPABASE_URL }
     var copied by remember { mutableStateOf(false) }
@@ -221,5 +238,47 @@ private fun DiagnosticsCard() {
         },
         modifier = Modifier.fillMaxWidth(),
     )
-
+    Spacer(Modifier.height(8.dp))
+    // The address alone says nothing about why a product does not appear. This
+    // asks the project each question in turn and names the broken link.
+    SaeedButton(
+        text = stringResource(
+            if (checking) R.string.admin_diagnostics_checking else R.string.admin_diagnostics_check,
+        ),
+        onClick = onCheck,
+        enabled = !checking,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    checks?.forEach { check ->
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(
+                imageVector = if (check.passed) {
+                    Icons.Filled.CheckCircle
+                } else {
+                    Icons.Filled.ErrorOutline
+                },
+                contentDescription = null,
+                tint = if (check.passed) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.error
+                },
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Column {
+                Text(
+                    text = check.label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = check.detail,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
 }

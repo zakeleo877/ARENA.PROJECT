@@ -51,6 +51,8 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
     val session by viewModel.session.collectAsStateWithLifecycle()
     val authorization by viewModel.authorization.collectAsStateWithLifecycle()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val diagnostics by viewModel.diagnostics.collectAsStateWithLifecycle()
+    val diagnosticsRunning by viewModel.diagnosticsRunning.collectAsStateWithLifecycle()
 
     if (session == null) {
         LoginScreen(
@@ -164,6 +166,9 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
                     )
                     AdminTab.SETTINGS -> SettingsScreen(
                         onSave = { values -> viewModel.saveSettings(values) {} },
+                        checks = diagnostics,
+                        checking = diagnosticsRunning,
+                        onCheckConnection = viewModel::runDiagnostics,
                         onSignOut = viewModel::signOut,
                     )
                 }
