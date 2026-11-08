@@ -51,7 +51,16 @@ data class AdminSession(
     val accessToken: String,
     val refreshToken: String,
     val expiresAtMillis: Long,
-)
+) {
+    /**
+     * True a minute before the token actually expires.
+     *
+     * Supabase issues an access token for an hour. A request sent as it dies is
+     * rejected with a 401 that reads like "you are not an admin", so the margin
+     * exists to refresh first rather than to recover afterwards.
+     */
+    fun isExpiring(nowMillis: Long): Boolean = nowMillis >= expiresAtMillis - 60_000L
+}
 
 sealed interface AuthResult {
     data class Success(val session: AdminSession) : AuthResult

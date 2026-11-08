@@ -84,15 +84,45 @@ class AdminRepository(
         return if (claimed) AdminAuthorization.Authorized else AdminAuthorization.NotAuthorized
     }
 
-    suspend fun products(session: AdminSession): List<Product> = api.products(session.accessToken)
+
+    /**
+     * The session to use for a request, refreshed when it is about to expire.
+     *
+     * Supabase's access token lasts an hour, and `refresh()` existed without
+     * every being called: at the hour mark every admin request started failing
+     * with the same 401 as a missing token, and nothing told the manager why.
+     * The refresh happens before the request rather than after the failure,
+     * because a failed write has no way back.
+     */
+    private suspend fun liveSession(): AdminSession? {
+        val current = sessionHolder.session.value ?: return null
+        if (!current.isExpiring(System.currentTimeMillis())) return current
+        return when (val result = authManager.refresh(current)) {
+            is AuthResult.Success -> {
+                sessionHolder.setSession(result.session)
+                result.session
+            }
+            // A refused refresh means the refresh token itself is gone, which
+            // only a new sign-in can repair. Keeping the stale session would
+            // keep sending a token that cannot work.
+            is AuthResult.Failure -> {
+                sessionHolder.clear()
+                null
+            }
+        }
+    }
+
+    suspend fun products(session: AdminSession): List<Product> =
+        api.products((liveSession() ?: session).accessToken)
 
     suspend fun orders(session: AdminSession, status: OrderStatus? = null): List<Order> =
-        api.orders(session.accessToken, status)
+        api.orders((liveSession() ?: session).accessToken, status)
 
     suspend fun updateOrderStatus(session: AdminSession, orderId: String, status: OrderStatus): Boolean =
-        api.updateOrderStatus(session.accessToken, orderId, status)
+        api.updateOrderStatus((liveSession() ?: session).accessToken, orderId, status)
 
-    suspend fun deleteProduct(session: AdminSession, id: String): Boolean = api.deleteProduct(session.accessToken, id)
+    suspend fun deleteProduct(session: AdminSession, id: String): Boolean =
+        api.deleteProduct((liveSession() ?: session).accessToken, id)
 
     suspend fun upsertProduct(
         session: AdminSession,
@@ -107,16 +137,17 @@ class AdminRepository(
         originalPrice: BigDecimal? = null,
         rating: Double? = null,
     ): Boolean = api.upsertProduct(
-        session.accessToken, id, name, price, description, imageUrl, category, available, sortOrder,
+        (liveSession() ?: session).accessToken,
+        id, name, price, description, imageUrl, category, available, sortOrder,
         originalPrice = originalPrice,
         rating = rating,
     )
 
     suspend fun uploadImage(session: AdminSession, fileName: String, bytes: ByteArray): String? =
-        api.uploadProductImage(session.accessToken, fileName, bytes)
+        api.uploadProductImage((liveSession() ?: session).accessToken, fileName, bytes)
 
     suspend fun updateSettings(session: AdminSession, values: Map<String, String>): Boolean =
-        api.updateSettings(session.accessToken, values)
+        api.updateSettings((liveSession() ?: session).accessToken, values)
 
     suspend fun insertManualOrder(
         session: AdminSession,
@@ -124,14 +155,17 @@ class AdminRepository(
         phone: String,
         notes: String,
         items: List<Pair<String, Int>>,
-    ): Boolean = api.insertManualOrder(session.accessToken, customer, phone, notes, items)
+    ): Boolean =
+        api.insertManualOrder((liveSession() ?: session).accessToken, customer, phone, notes, items)
 
     /** Reads the newest order number so the background worker only reports new work. */
     suspend fun latestOrder(session: AdminSession): Long? =
-        api.orders(session.accessToken, status = OrderStatus.NEW).firstOrNull()?.number
+        api.orders((liveSession() ?: session).accessToken, status = OrderStatus.NEW)
+            .firstOrNull()?.number
 
     suspend fun newOrdersSince(session: AdminSession, lastSeenNumber: Long): List<Order> =
-        api.orders(session.accessToken, status = OrderStatus.NEW).filter { it.number > lastSeenNumber }
+        api.orders((liveSession() ?: session).accessToken, status = OrderStatus.NEW)
+            .filter { it.number > lastSeenNumber }
 
     /** Calls a boolean RPC with the admin's bearer token. */
     private suspend fun rpcBoolean(session: AdminSession, function: String): Boolean = try {
