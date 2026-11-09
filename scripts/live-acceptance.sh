@@ -123,13 +123,18 @@ printf '\n== Live acceptance against %s (mode %s) ==\n\n' "$BASE" "$MODE"
 
 # ---------------------------------------------------------------- 5. accounts
 printf -- '-- sign up, sign in, sign out --\n'
-SIGNUP_CODE="$(call POST '/auth/v1/signup' \
-  "{\"email\":\"probe-$$@example.invalid\",\"password\":\"Probe123456\"}")"
-case "$SIGNUP_CODE" in
-  400|403|422) pass "5a. public sign-up is disabled ($SIGNUP_CODE)" ;;
-  200)         fail "5a. public sign-up is enabled; anyone can create an account" ;;
-  *)           skip "5a. sign-up returned $SIGNUP_CODE; check the Auth settings by hand" ;;
-esac
+if [ "$MODE" = "production" ]; then
+  # A signup probe would create a real account if sign-up were enabled.
+  skip "5a. public sign-up was not probed in read-only production mode"
+else
+  SIGNUP_CODE="$(call POST '/auth/v1/signup' \
+    "{\"email\":\"probe-$$@example.invalid\",\"password\":\"Probe123456\"}")"
+  case "$SIGNUP_CODE" in
+    400|403|422) pass "5a. public sign-up is disabled ($SIGNUP_CODE)" ;;
+    200)         fail "5a. public sign-up is enabled; anyone can create an account" ;;
+    *)           skip "5a. sign-up returned $SIGNUP_CODE; check the Auth settings by hand" ;;
+  esac
+fi
 
 WRONG_CODE="$(call POST '/auth/v1/token?grant_type=password' \
   "{\"email\":\"$TEST_USER_EMAIL\",\"password\":\"definitely-wrong-$$\"}")"

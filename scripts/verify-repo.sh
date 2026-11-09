@@ -93,9 +93,13 @@ REAL_HITS="$(printf '%s\n' "$PUBLISHED_HITS" \
 if [ -z "$REAL_HITS" ]; then
   pass "12. no secrets committed"
 else
-  printf '%s\n' "$REAL_HITS"
+  printf '%s\n' "$REAL_HITS" | sed -E 's/:[^:]*$/:<redacted>/'
   fail "12. secrets found in the repository"
 fi
+
+# 12f. Independently scan key-like values by exact placeholder fingerprint.
+# Do not print credentials, including ones that masquerade as test data.
+python3 scripts/check-supabase-keys.py || fail "12f. unapproved Supabase key candidate found"
 
 # 12c. No application may accept a high-privilege key at configuration time.
 for module in customer admin; do

@@ -54,17 +54,15 @@ object CustomerModule {
         )
 
     /**
-     * The basket, restored before anyone can see it.
-     *
-     * The restore and the mirroring run off the main thread: the first frame
-     * must not wait for a disk read. The restore is applied before `bind`, so
-     * the first write mirrors the stored basket rather than overwriting it with
-     * the empty list the process started from.
+     * Restore off the main thread. Edits made while the disk is loading are
+     * replayed by CartStore, and checkout waits for the completed restore.
+     * Bind only afterwards, so the initial empty basket is never written over
+     * an existing saved one.
      */
     @Provides
     @Singleton
     fun cartStore(dataStore: DataStore<Preferences>): CartStore {
-        val store = CartStore()
+        val store = CartStore(awaitingRestore = true)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val persistence = CartPersistence(dataStore, scope)
         scope.launch {

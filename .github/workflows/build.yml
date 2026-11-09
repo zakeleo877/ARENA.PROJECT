@@ -247,40 +247,79 @@ jobs:
           # Report the shape only, never the value.
           echo "      address length: ${#SUPABASE_URL}, key length: ${#SUPABASE_KEY}, key prefix: ${SUPABASE_KEY%%_*}"
 
-      # Proves the project is reachable and the key is accepted before five
-      # minutes of Gradle run. A wrong address or a revoked key fails here.
+      # Check the exact catalog projection used by the Android apps. Checking
+      # only `id` used to report success even when optional columns were absent
+      # and PostgREST rejected the actual catalog request.
       - name: Check the connection to the project
         if: env.PLACEHOLDER != '1'
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
-          set -uo pipefail
-          BASE="${SUPABASE_URL%/}"
-          CODE="$(curl -sS -o /tmp/auth-health.json -w '%{http_code}' \
-            -H "apikey: $SUPABASE_KEY" "$BASE/auth/v1/health" || echo 000)"
+          set -euo pipefail
+          # Read the same validated values that Gradle will embed. This also
+          # handles the supported secret aliases and the default project URL.
+          BASE="$(sed -n 's/^SUPABASE_URL=//p' local.properties | head -n 1)"
+          KEY="$(sed -n 's/^SUPABASE_KEY=//p' local.properties | head -n 1)"
+          BASE="${BASE%/}"
+          test -n "$BASE" && test -n "$KEY"
+
+          if ! CODE="$(curl --silent --show-error --max-time 30 -o /tmp/auth-health.json -w '%{http_code}' \
+            -H "apikey: $KEY" "$BASE/auth/v1/health")"; then CODE=000; fi
           echo "auth health returned $CODE"
-          case "$CODE" in
-            200) echo "PASS: the project address answers and the key is accepted." ;;
-            000) echo "FAIL: the project address could not be reached."
-                 exit 1 ;;
-            401|403) echo "FAIL: the project refused the publishable key."
-                     exit 1 ;;
-            *) echo "NOTE: auth health returned $CODE; continuing, the catalog check decides." ;;
-          esac
-          CATALOG="$(curl -sS -o /tmp/catalog.json -w '%{http_code}' \
-            -H "apikey: $SUPABASE_KEY" "$BASE/rest/v1/products?select=id&limit=1" || echo 000)"
-          echo "the catalog returned $CATALOG"
-          case "$CATALOG" in
-            200) echo "PASS: the catalog is readable, so the schema is applied." ;;
-            404) echo "NOTE: the products table is missing."
-                 echo "      Apply supabase/schema.sql to the project before relying on this build."
-                 echo "      The package is still built so that checks 1-10 can run." ;;
-            401|403) echo "FAIL: reading the catalog was refused ($CATALOG)."
-                     echo "      Check the key and the row level security policies."
-                     exit 1 ;;
-            *) echo "NOTE: the catalog returned $CATALOG; the package is still built." ;;
-          esac
+          if [ "$CODE" != 200 ]; then
+            echo "FAIL: the configured project or publishable key is not working."
+            exit 1
+          fi
+
+          if ! CATALOG="$(curl --silent --show-error --max-time 30 --get -o /tmp/catalog.json -w '%{http_code}' \
+            -H "apikey: $KEY" \
+            --data-urlencode 'select=id,name,price,description,image_url,category,available,sort_order,created_at,original_price,rating' \
+            --data-urlencode 'order=sort_order.asc,created_at.desc' \
+            --data-urlencode 'limit=5000' "$BASE/rest/v1/products")"; then CATALOG=000; fi
+          echo "the app catalog query returned $CATALOG"
+          if [ "$CATALOG" != 200 ]; then
+            echo "FAIL: the catalog query used by the app was refused; check its columns and policies."
+            exit 1
+          fi
+          python3 - /tmp/catalog.json <<'PYCODE'
+          import json, sys
+          from decimal import Decimal, InvalidOperation
+          try:
+              rows = json.load(open(sys.argv[1], encoding='utf-8'))
+              if not isinstance(rows, list): raise ValueError('not a list')
+              for row in rows:
+                  if not isinstance(row, dict): raise ValueError('invalid row')
+                  for field in ('id', 'name', 'description', 'image_url', 'category', 'created_at'):
+                      if not isinstance(row.get(field), str): raise ValueError('missing string field')
+                  if not isinstance(row.get('available'), bool) or type(row.get('sort_order')) is not int:
+                      raise ValueError('invalid availability or sort order')
+                  if Decimal(str(row['price'])) < 0: raise ValueError('negative price')
+                  for field in ('original_price', 'rating'):
+                      if field not in row: raise ValueError('missing optional column')
+                      if row[field] is not None: Decimal(str(row[field]))
+              print(f'PASS: the app catalog projection is readable ({len(rows)} visible products).')
+          except (KeyError, TypeError, ValueError, InvalidOperation, OSError):
+              print('FAIL: a product cannot be decoded by the app; inspect its fields in the dashboard.')
+              sys.exit(1)
+          PYCODE
+
+          if ! SETTINGS="$(curl --silent --show-error --max-time 30 --get -o /tmp/settings.json -w '%{http_code}' \
+            -H "apikey: $KEY" --data-urlencode 'select=key,value' "$BASE/rest/v1/settings")"; then SETTINGS=000; fi
+          echo "the public settings query returned $SETTINGS"
+          if [ "$SETTINGS" != 200 ]; then
+            echo "FAIL: the public store settings could not be read."
+            exit 1
+          fi
+          python3 - /tmp/settings.json <<'PYCODE'
+          import json, sys
+          try:
+              rows = json.load(open(sys.argv[1], encoding='utf-8'))
+              values = {r['key']: r['value'] for r in rows}
+              if not all(isinstance(values.get(k), str) for k in ('storeName', 'whatsapp', 'currency', 'footerNote')):
+                  raise ValueError('missing setting')
+              print('PASS: the four required public settings are readable.')
+          except (KeyError, TypeError, ValueError, OSError):
+              print('FAIL: a required public setting is missing or not a string.')
+              sys.exit(1)
+          PYCODE
 
       # Production signing uses the GitHub Secrets when they are configured.
       # Otherwise a throwaway key is generated inside the runner so that the
@@ -620,7 +659,7 @@ jobs:
       # only reachable by someone signed in, and its link expires; the release
       # assets stay put and can be fetched with a plain browser.
       - name: Publish the APKs as a release
-        if: always()
+        if: success()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

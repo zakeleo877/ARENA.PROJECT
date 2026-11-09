@@ -57,7 +57,7 @@ esac
 # --------------------------------------------------------------------- schema
 printf -- '\n-- the tables the applications read --\n'
 for pair in \
-  'products|id&limit=1' \
+  'products|id,name,price,description,image_url,category,available,sort_order,created_at,original_price,rating&limit=1' \
   'settings|key&is_public=eq.true&limit=1'; do
   table="${pair%%|*}"
   query="${pair#*|}"
