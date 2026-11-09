@@ -475,11 +475,16 @@ jobs:
       # secret does not hide the result of the build itself.
       - name: Report the release signing key (acceptance check 10)
         run: |
-          set -uo pipefail
-          MODE="$(cat /tmp/signing-mode.txt 2>/dev/null || echo unknown)"
+          set -euo pipefail
+          MODE="$(sed -n 's/^SIGNING_MODE=//p' /tmp/signing-mode.txt 2>/dev/null || true)"
+          MODE="${MODE:-unknown}"
           FINGERPRINT="unknown"
-          if command -v apksigner > /dev/null 2>&1; then
-            FINGERPRINT="$(apksigner verify --print-certs artifacts/apk/saeed-store-1.0.apk 2>/dev/null \
+          APKSIGNER="$(command -v apksigner || true)"
+          if [ -z "$APKSIGNER" ] && [ -n "${ANDROID_HOME:-}" ]; then
+            APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f 2>/dev/null | sort -V | tail -n 1 || true)"
+          fi
+          if [ -n "$APKSIGNER" ]; then
+            FINGERPRINT="$("$APKSIGNER" verify --print-certs artifacts/apk/saeed-store-1.0.apk 2>/dev/null \
               | grep -i 'SHA-256 digest' | head -n 1 | sed 's/.*: //')" || true
           fi
           {
@@ -487,10 +492,13 @@ jobs:
             echo "Certificate SHA-256: ${FINGERPRINT:-unknown}"
             if [ "$MODE" = "production" ]; then
               bash scripts/verify-signing.sh "$MODE" "${FINGERPRINT:-unknown}"
-            else
+            elif [ "$MODE" = "throwaway" ]; then
               echo "NOTE: 10. the build fell back to a throwaway key."
               echo "      The APK is not distributable. The Release gate workflow"
               echo "      reports this as a failure until the production secrets are set."
+            else
+              echo "FAIL: the signing mode is unknown."
+              exit 1
             fi
           } | tee /tmp/verify-signing.txt
 
@@ -711,16 +719,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -uo pipefail
+          set -euo pipefail
           if [ ! -s artifacts/apk/saeed-store-1.0.apk ] || [ ! -s artifacts/apk/saeed-admin-1.0.apk ]; then
             echo "No APK was produced, so there is nothing to publish."
             exit 0
           fi
           TAG="build-${GITHUB_RUN_NUMBER}"
-          if grep -q '^SIGNING_MODE=production$' /tmp/signing-mode.txt 2>/dev/null; then
+          # A throwaway certificate produces a test build, never a stable
+          # GitHub release. An unknown mode must fail instead of being guessed.
+          RELEASE_FLAGS=()
+          if grep -qxF 'SIGNING_MODE=production' /tmp/signing-mode.txt 2>/dev/null; then
             SIGNING_NOTE="الحزمتان موقعتان بمفتاح الإنتاج المضبوط للمشروع."
-          else
+          elif grep -qxF 'SIGNING_MODE=throwaway' /tmp/signing-mode.txt 2>/dev/null; then
             SIGNING_NOTE="هذه نسخة اختبار بمفتاح توقيع مؤقت وليست للنشر الإنتاجي. قد يرفض الهاتف تثبيتها فوق نسخة سابقة. لا تحذف التطبيق قبل إرسال الطلبات المنتظرة، لأن الحذف يمسح بياناته المحلية."
+            RELEASE_FLAGS+=(--prerelease)
+          else
+            echo "FAIL: the signing mode is unknown; refusing to publish the APKs."
+            exit 1
           fi
           NOTES="النسخة المبنية من الالتزام ${GITHUB_SHA:0:7}.
           ${SIGNING_NOTE}
@@ -734,6 +749,6 @@ jobs:
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "نسخة ${GITHUB_RUN_NUMBER}" \
-              --notes "$NOTES"
+              --notes "$NOTES" "${RELEASE_FLAGS[@]}"
           fi
           echo "The download page is https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
