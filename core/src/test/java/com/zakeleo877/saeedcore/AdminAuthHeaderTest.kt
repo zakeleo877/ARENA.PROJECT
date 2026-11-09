@@ -101,6 +101,13 @@ class AdminAuthHeaderTest {
     }
 
     @Test
+    fun `reading settings carries the token`() = runTest {
+        val record = mutableListOf<Pair<HttpMethod, String?>>()
+        apiWith(record).settings(token)
+        assertBearer(record, "reading settings")
+    }
+
+    @Test
     fun `saving settings carries the token`() = runTest {
         val record = mutableListOf<Pair<HttpMethod, String?>>()
         apiWith(record).updateSettings(token, mapOf("storeName" to "متجري"))

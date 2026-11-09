@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,10 +50,13 @@ fun OrdersScreen(
     state: AdminUiState,
     onFilterChange: (OrderStatus?) -> Unit,
     onSearchChange: (String) -> Unit,
-    onStatusUpdate: (String, OrderStatus) -> Unit,
+    onStatusUpdate: (String, OrderStatus, (Boolean) -> Unit) -> Unit,
     onRefresh: () -> Unit,
+    currency: String = "د.ج",
 ) {
-    var selected by remember { mutableStateOf<Order?>(null) }
+    var selectedOrderId by remember { mutableStateOf<String?>(null) }
+    var statusUpdating by remember { mutableStateOf(false) }
+    var statusFailed by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     Column(
@@ -67,6 +71,17 @@ fun OrdersScreen(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
+            IconButton(
+                onClick = onRefresh,
+                enabled = !state.isLoading,
+                modifier = Modifier.size(48.dp),
+            ) {
+                Icon(
+                    Icons.Filled.Refresh,
+                    contentDescription = stringResource(R.string.admin_refresh),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
             IconButton(
                 onClick = { exportOrders(context, state.orders) },
                 modifier = Modifier.size(48.dp),
@@ -105,31 +120,65 @@ fun OrdersScreen(
         }
         Spacer(Modifier.height(12.dp))
 
+        if (state.ordersLoadFailed && state.orders.isNotEmpty()) {
+            Text(
+                text = stringResource(R.string.admin_orders_stale),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Spacer(Modifier.height(8.dp))
+        }
         if (state.orders.isEmpty()) {
             SaeedEmptyState(
-                message = stringResource(R.string.admin_no_orders),
+                message = stringResource(
+                    when {
+                        state.ordersLoadFailed -> R.string.admin_orders_load_failed
+                        state.isLoading -> R.string.admin_orders_loading
+                        else -> R.string.admin_no_orders
+                    },
+                ),
                 icon = Icons.Filled.ReceiptLong,
-                retry = onRefresh,
+                retry = if (state.isLoading) null else onRefresh,
             )
             return@Column
         }
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(state.orders, key = { it.id }) { order ->
-                OrderRow(order = order, onClick = { selected = order })
+                OrderRow(order = order, onClick = { selectedOrderId = order.id; statusFailed = false }, currency = currency)
             }
         }
     }
 
+    // Read the detail from the unfiltered snapshot so a successful status
+    // change remains visible even when it no longer matches the list filter.
+    val selected = state.allOrders.firstOrNull { it.id == selectedOrderId }
+        ?: state.orders.firstOrNull { it.id == selectedOrderId }
     selected?.let { order ->
-        SaeedBottomSheet(onDismiss = { selected = null }) {
+        SaeedBottomSheet(onDismiss = { selectedOrderId = null }) {
+            if (statusFailed) {
+                Text(
+                    stringResource(R.string.admin_status_update_failed),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                )
+            }
             OrderDetailSheet(
                 order = order,
                 onStatusChange = { status ->
-                    onStatusUpdate(order.id, status)
-                    selected = selected?.copy(status = status)
+                    if (!statusUpdating) {
+                        statusUpdating = true
+                        statusFailed = false
+                        onStatusUpdate(order.id, status) { succeeded ->
+                            statusUpdating = false
+                            if (selectedOrderId == order.id) statusFailed = !succeeded
+                        }
+                    }
                 },
-                onClose = { selected = null },
+                onClose = { selectedOrderId = null },
+                statusUpdating = statusUpdating,
+                currency = currency,
             )
         }
     }
@@ -168,7 +217,7 @@ private fun exportOrders(context: android.content.Context, orders: List<Order>) 
 }
 
 @Composable
-private fun OrderRow(order: Order, onClick: () -> Unit) {
+internal fun OrderRow(order: Order, onClick: () -> Unit, currency: String = "د.ج") {
     SaeedCard(onClick = onClick) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -195,7 +244,7 @@ private fun OrderRow(order: Order, onClick: () -> Unit) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = Formatters.money(order.total, "د.ج"),
+                text = Formatters.money(order.total, currency),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )

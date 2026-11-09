@@ -5,6 +5,7 @@ import androidx.room3.Insert
 import androidx.room3.OnConflictStrategy
 import androidx.room3.Query
 import androidx.room3.Transaction
+import androidx.room3.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -62,6 +63,10 @@ interface PendingOrderDao {
 
     @Query("SELECT * FROM pending_orders WHERE client_id = :clientId LIMIT 1")
     suspend fun find(clientId: String): PendingOrderEntity?
+
+    // One atomic UPDATE: never delete an unsent order merely to change its state.
+    @Update
+    suspend fun update(order: PendingOrderEntity)
 
     @Query("DELETE FROM pending_orders WHERE client_id = :clientId")
     suspend fun delete(clientId: String)

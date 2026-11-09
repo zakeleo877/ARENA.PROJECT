@@ -185,7 +185,9 @@ class CatalogApi(private val client: HttpClient, private val config: SupabasePub
         }
         ensureSuccess(response)
         return response.bodyAsText().trim().toLongOrNull()?.takeIf { it > 0 }
-            ?: throw IllegalArgumentException("Invalid order number returned by server.")
+            // A successful HTTP response with an unreadable number does NOT
+            // prove the order was rejected. Retry with the original client ID.
+            ?: throw kotlinx.serialization.SerializationException("Invalid order number returned by server.")
     }
 
     private fun io.ktor.client.request.HttpRequestBuilder.publicHeaders() {

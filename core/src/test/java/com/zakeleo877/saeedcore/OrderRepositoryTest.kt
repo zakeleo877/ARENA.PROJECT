@@ -2,6 +2,7 @@ package com.zakeleo877.saeedcore
 
 import com.zakeleo877.saeedcore.data.OrderRepository
 import com.zakeleo877.saeedcore.data.SubmitOutcome
+import com.zakeleo877.saeedcore.data.PendingState
 import com.zakeleo877.saeedcore.data.local.PendingOrderDao
 import com.zakeleo877.saeedcore.data.local.PendingOrderEntity
 import com.zakeleo877.saeedcore.data.remote.CatalogApi
@@ -17,6 +18,8 @@ import io.ktor.client.engine.mock.respondError
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.http.HttpHeaders
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -46,6 +49,10 @@ class OrderRepositoryTest {
         override fun observeAll(): Flow<List<PendingOrderEntity>> = flowOf(rows.values.toList())
 
         override suspend fun find(clientId: String): PendingOrderEntity? = rows[clientId]
+
+        override suspend fun update(order: PendingOrderEntity) {
+            if (rows.containsKey(order.clientId)) rows[order.clientId] = order
+        }
 
         override suspend fun delete(clientId: String) {
             rows.remove(clientId)
@@ -102,7 +109,7 @@ class OrderRepositoryTest {
         )
 
         val outcome = repository.submit(order, online = true)
-        assertTrue(outcome is SubmitOutcome.Rejected)
+        assertTrue(outcome is SubmitOutcome.Queued)
         assertEquals(1, dao.rows.size)
         assertEquals(order.clientId, dao.rows.values.first().clientId)
     }
@@ -139,13 +146,12 @@ class OrderRepositoryTest {
 
         val outcome = repository.submit(order, online = true)
 
-        assertTrue(outcome is SubmitOutcome.Rejected)
-        assertEquals("network_error", (outcome as SubmitOutcome.Rejected).reason)
+        assertEquals(SubmitOutcome.Queued(order.clientId), outcome)
         // The order must survive the failure, otherwise the customer loses it.
         assertEquals(1, dao.rows.size)
         val stored = dao.rows.values.first()
         assertEquals(order.clientId, stored.clientId)
-        assertEquals("FAILED", stored.state)
+        assertEquals("WAITING", stored.state)
         assertEquals(1, stored.attemptCount)
         assertEquals("network_error", stored.lastErrorCode)
     }
@@ -191,7 +197,7 @@ class OrderRepositoryTest {
         assertTrue(seen.any { it.contains(order.clientId) })
     }
 
-    @Test fun aPermanentRejectionRemovesTheOrderInsteadOfLoopingForever() = runTest {
+    @Test fun aPermanentRejectionIsKeptForTheCustomerWithoutLoopingForever() = runTest {
         val dao = FakePendingDao()
         val engine = MockEngine {
             respond(
@@ -215,8 +221,9 @@ class OrderRepositoryTest {
 
         assertTrue(outcome is SubmitOutcome.Rejected)
         assertEquals("invalid_order", (outcome as SubmitOutcome.Rejected).reason)
-        // A permanently invalid order must not stay in the queue.
-        assertTrue(dao.rows.isEmpty())
+        // Do not delete a customer's data even when the server rejects it.
+        assertEquals("FAILED", dao.rows.values.single().state)
+        assertEquals("invalid_order", dao.rows.values.single().lastErrorCode)
     }
 
     @Test fun aRateLimitKeepsTheOrderSoItCanBeSentLater() = runTest {
@@ -241,8 +248,8 @@ class OrderRepositoryTest {
 
         val outcome = repository.submit(order, online = true)
 
-        assertTrue(outcome is SubmitOutcome.Rejected)
-        assertEquals(1, dao.rows.size)
+        assertEquals(SubmitOutcome.Queued(order.clientId), outcome)
+        assertEquals("WAITING", dao.rows.values.single().state)
     }
 
     @Test fun anOrderQueuedWhileOfflineIsSentWithTheSameClientId() = runTest {
@@ -276,7 +283,8 @@ class OrderRepositoryTest {
 
     @Test fun aFailedOrderIsNotResentAutomatically() = runTest {
         val dao = FakePendingDao()
-        OrderRepository(apiLosingTheConnection(), dao).submit(order, online = true)
+        val invalid = order.copy(phone = "")
+        OrderRepository(apiReturning(HttpStatusCode.OK, "5"), dao).submit(invalid, online = true)
         assertEquals("FAILED", dao.rows.values.single().state)
 
         // A failure may be a rejection the customer has to fix. Sending it again
@@ -285,6 +293,97 @@ class OrderRepositoryTest {
 
         assertTrue("a failed order is the customer's decision to resend", outcomes.isEmpty())
         assertEquals(1, dao.rows.size)
+    }
+
+
+    @Test fun failedRetryNeverDeletesThePersistedSnapshot() = runTest {
+        val dao = FakePendingDao()
+        val repository = OrderRepository(apiLosingTheConnection(), dao)
+        repository.submit(order, online = false)
+        val before = dao.rows.values.single()
+
+        val outcome = repository.retry(order.clientId)
+
+        assertEquals(SubmitOutcome.Queued(order.clientId), outcome)
+        val after = dao.rows.values.single()
+        assertEquals(before.clientId, after.clientId)
+        assertEquals(before.itemsJson, after.itemsJson)
+        assertEquals(before.customer, after.customer)
+        assertEquals("WAITING", after.state)
+        assertEquals(1, after.attemptCount)
+    }
+
+    @Test fun interruptedSendingIsRecoveredUsingTheOriginalClientId() = runTest {
+        val dao = FakePendingDao()
+        val repository = OrderRepository(apiReturning(HttpStatusCode.OK, "88"), dao)
+        // Represents a process killed between the network request and response.
+        repository.queue(order, PendingState.SENDING)
+
+        assertEquals(listOf(SubmitOutcome.Sent(88)), repository.drainWaiting())
+        assertTrue(dao.rows.isEmpty())
+    }
+
+    @Test fun transientFailureSavedByAnOlderVersionIsRecovered() = runTest {
+        val dao = FakePendingDao()
+        val repository = OrderRepository(apiReturning(HttpStatusCode.OK, "81"), dao)
+        repository.queue(order, PendingState.FAILED, "network_error")
+
+        assertEquals(listOf(SubmitOutcome.Sent(81)), repository.drainWaiting())
+        assertTrue(dao.rows.isEmpty())
+    }
+
+    @Test fun malformedSuccessfulResponseIsNotTreatedAsRejectedOrDeleted() = runTest {
+        val dao = FakePendingDao()
+        val repository = OrderRepository(apiReturning(HttpStatusCode.OK, "not-a-number"), dao)
+
+        assertEquals(SubmitOutcome.Queued(order.clientId), repository.submit(order, online = true))
+        assertEquals("WAITING", dao.rows.values.single().state)
+        assertEquals("invalid_response", dao.rows.values.single().lastErrorCode)
+    }
+
+    @Test fun schedulingOccursOnlyAfterTheSnapshotIsDurable() = runTest {
+        val dao = FakePendingDao()
+        val repository = OrderRepository(apiReturning(HttpStatusCode.OK, "8"), dao)
+        var scheduled = false
+
+        val result = repository.submit(order, online = true) {
+            assertEquals(order.clientId, dao.rows.values.single().clientId)
+            scheduled = true
+        }
+        assertTrue(scheduled)
+        assertEquals(SubmitOutcome.Sent(8), result)
+    }
+
+    @Test fun foregroundAndBackgroundDoNotSendTheSameRowAtOnce() = runTest {
+        val dao = FakePendingDao()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var calls = 0
+        val engine = MockEngine {
+            calls += 1
+            entered.complete(Unit)
+            release.await()
+            respond("9", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+        }
+        val client = HttpClient(engine) {
+            expectSuccess = false
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+        val repository = OrderRepository(
+            CatalogApi(client, SupabasePublicConfig("https://project.example", "sb_publishable_fake_for_test")),
+            dao,
+        )
+        try {
+            val foreground = async { repository.submit(order, online = true) }
+            entered.await()
+            val background = async { repository.drainWaiting() }
+            release.complete(Unit)
+            assertEquals(SubmitOutcome.Sent(9), foreground.await())
+            assertTrue(background.await().isEmpty())
+            assertEquals(1, calls)
+        } finally {
+            client.close()
+        }
     }
 
     @Test fun anEmptyQueueSendsNothing() = runTest {

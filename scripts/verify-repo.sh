@@ -133,6 +133,11 @@ else
   fail "12e. the values are not masked in the build log"
 fi
 
+# Exercise the actual release workflow with fake files, a fake gh and a fake
+# signing tool. No network or production keys are involved.
+python3 scripts/test-release-workflow.py || fail "10b. release metadata regression test failed"
+pass "10b. temporary builds are marked as prereleases"
+
 # 13. Tests and lint must pass. This runs inside GitHub Actions.
 if [ "${CI:-}" = "true" ] || [ -n "${GITHUB_ACTIONS:-}" ]; then
   ./gradlew --no-daemon test lint && pass "13. unit tests and lint passed" || fail "13. tests or lint failed"

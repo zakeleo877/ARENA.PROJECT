@@ -12,6 +12,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 
@@ -38,9 +40,9 @@ sealed interface SubmitOutcome {
 }
 
 /**
- * Sends orders and keeps a durable local queue for offline use.
- * The clientId is created once per order and reused on every retry, so the
- * server returns the same invoice number and only one row is ever stored.
+ * Sends orders and keeps a durable local queue. An order is removed only after
+ * a confirmed server number or an explicit customer deletion. The same client
+ * ID is retained through retries, including an interrupted send.
  */
 class OrderRepository(
     private val api: CatalogApi,
@@ -48,6 +50,8 @@ class OrderRepository(
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
+    // Foreground, connectivity callback and WorkManager share this singleton.
+    private val sendMutex = Mutex()
 
     fun observePending(): Flow<List<PendingOrderRow>> = pendingDao.observeAll().map { rows ->
         rows.map { row ->
@@ -65,52 +69,51 @@ class OrderRepository(
         }
     }
 
-    /**
-     * Sends immediately when possible. If the device is offline the order is queued
-     * and the caller shows the "will be sent automatically" message.
-     */
-    suspend fun submit(order: PendingOrder, online: Boolean): SubmitOutcome {
-        if (!online) {
-            queue(order, PendingState.WAITING, null)
-            return SubmitOutcome.Queued(order.clientId)
-        }
-        // The order is stored before the first attempt, so a transient failure
-        // never loses the customer order. The same clientId is reused on every
-        // retry, so the server returns the same invoice number.
-        queue(order, PendingState.SENDING, null)
-        return send(order)
+    /** Persist before scheduling or sending, even if the phone is online. */
+    suspend fun submit(
+        order: PendingOrder,
+        online: Boolean,
+        afterPersist: () -> Unit = {},
+    ): SubmitOutcome = sendMutex.withLock {
+        queue(order, if (online) PendingState.SENDING else PendingState.WAITING)
+        // Work may start immediately, but it cannot enter this mutex until the
+        // foreground send has finished. If the process dies, the row survives.
+        afterPersist()
+        if (online) sendLocked(order) else SubmitOutcome.Queued(order.clientId)
     }
 
-    /** Sends a queued order. Keeps the same clientId so the server de-duplicates. */
-    suspend fun send(order: PendingOrder): SubmitOutcome {
+    /** Call only with [sendMutex] held and an existing durable row. */
+    private suspend fun sendLocked(order: PendingOrder): SubmitOutcome {
         return try {
             val number = api.placeOrder(order)
-            pendingDao.delete(order.clientId)
+            try {
+                pendingDao.delete(order.clientId)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // The server already confirmed it. A leftover SENDING row can
+                // be safely reconciled with the same client ID on the next run.
+            }
             SubmitOutcome.Sent(number)
+        } catch (cancelled: CancellationException) {
+            // Leave SENDING in place; the next worker retries the same ID.
+            throw cancelled
         } catch (failure: ApiFailure) {
             val reason = failure.kind.toReason()
-            if (failure.kind == ApiFailureKind.INVALID_ORDER) {
-                // A permanent rejection must not loop forever. The decision is
-                // deliberate and a test holds it: retrying bad data can only
-                // fail again.
-                pendingDao.delete(order.clientId)
-                SubmitOutcome.Rejected(reason)
-            } else {
-                markFailed(order.clientId, reason)
-                SubmitOutcome.Rejected(reason)
+            when (failure.kind) {
+                ApiFailureKind.SERVER, ApiFailureKind.RATE_LIMITED -> keepWaiting(order.clientId, reason)
+                else -> keepFailed(order.clientId, reason)
             }
         } catch (_: IOException) {
-            markFailed(order.clientId, "network_error")
-            SubmitOutcome.Rejected("network_error")
+            keepWaiting(order.clientId, "network_error")
         } catch (_: SerializationException) {
-            // The order may have reached the server; keeping the row with the
-            // same client id means a retry returns the original number rather
-            // than placing a second order.
-            markFailed(order.clientId, "invalid_response")
-            SubmitOutcome.Rejected("invalid_response")
+            // The order might already exist remotely despite the bad response.
+            keepWaiting(order.clientId, "invalid_response")
         } catch (_: IllegalArgumentException) {
-            pendingDao.delete(order.clientId)
-            SubmitOutcome.Rejected("invalid_request")
+            keepFailed(order.clientId, "invalid_request")
+        } catch (_: Exception) {
+            // Preserve customer data even for an unexpected local failure.
+            keepFailed(order.clientId, "request_failed")
         }
     }
 
@@ -131,69 +134,63 @@ class OrderRepository(
         )
     }
 
-    suspend fun retry(clientId: String): SubmitOutcome {
+    suspend fun retry(clientId: String, afterPersist: () -> Unit = {}): SubmitOutcome =
+        sendMutex.withLock { retryLocked(clientId, afterPersist) }
+
+    private suspend fun retryLocked(clientId: String, afterPersist: () -> Unit = {}): SubmitOutcome {
         val entity = pendingDao.find(clientId) ?: return SubmitOutcome.Rejected("not_found")
-        val order = PendingOrder(
-            clientId = entity.clientId,
-            customer = entity.customer,
-            phone = entity.phone,
-            notes = entity.notes,
-            customerLocationUrl = entity.location,
-            items = decodeItems(entity.itemsJson),
-        )
-        pendingDao.delete(clientId)
-        return send(order)
-    }
-
-    suspend fun delete(clientId: String) {
-        pendingDao.delete(clientId)
-    }
-
-    /**
-     * Sends every waiting order once the device is online again.
-     *
-     * The offline banner tells the customer the order will be sent when the
-     * connection returns, and nothing did that: the customer had to open the
-     * list and tap retry. This is the promise being kept.
-     *
-     * Orders that failed are left alone. A failure may be a permanent rejection
-     * the customer has to fix, and retrying it every few seconds would hide the
-     * reason behind a spinner.
-     */
-    suspend fun drainWaiting(): List<SubmitOutcome> {
-        val waiting = pendingDao.observeAll()
-            .first()
-            .filter { it.state == PendingState.WAITING.name }
-        return waiting.map { entity ->
-            val order = PendingOrder(
+        pendingDao.update(entity.copy(state = PendingState.SENDING.name, lastErrorCode = null))
+        afterPersist()
+        return sendLocked(
+            PendingOrder(
                 clientId = entity.clientId,
                 customer = entity.customer,
                 phone = entity.phone,
                 notes = entity.notes,
                 customerLocationUrl = entity.location,
                 items = decodeItems(entity.itemsJson),
-            )
-            send(order)
-        }
+            ),
+        )
     }
 
+    suspend fun delete(clientId: String) = sendMutex.withLock { pendingDao.delete(clientId) }
+
     /**
-     * Records a failed attempt. When the order is not stored yet the caller
-     * only knows the client id, so the entry is created through [queue] first.
+     * Recover waiting/interrupted rows and transient failures saved by older
+     * versions. Invalid orders remain visible for an explicit customer action.
      */
-    private suspend fun markFailed(clientId: String, reason: String) {
+    suspend fun drainWaiting(): List<SubmitOutcome> = sendMutex.withLock {
+        val retryableErrors = setOf("network_error", "server_error", "rate_limited", "invalid_response")
+        val ids = pendingDao.observeAll().first()
+            .filter {
+                it.state == PendingState.WAITING.name || it.state == PendingState.SENDING.name ||
+                    (it.state == PendingState.FAILED.name && it.lastErrorCode in retryableErrors)
+            }
+            .map { it.clientId }
+        ids.map { retryLocked(it) }
+    }
+
+    private suspend fun keepWaiting(clientId: String, reason: String): SubmitOutcome {
+        updateAfterFailure(clientId, PendingState.WAITING, reason)
+        return SubmitOutcome.Queued(clientId)
+    }
+
+    private suspend fun keepFailed(clientId: String, reason: String): SubmitOutcome {
+        updateAfterFailure(clientId, PendingState.FAILED, reason)
+        return SubmitOutcome.Rejected(reason)
+    }
+
+    private suspend fun updateAfterFailure(clientId: String, state: PendingState, reason: String) {
         val existing = pendingDao.find(clientId) ?: return
-        pendingDao.delete(clientId)
-        pendingDao.insert(
+        pendingDao.update(
             existing.copy(
-                state = PendingState.FAILED.name,
+                state = state.name,
                 attemptCount = existing.attemptCount + 1,
                 lastErrorCode = reason,
             ),
         )
     }
 
-    /** Serializable shape of a queued item, so the snapshot survives a restart. */
     @kotlinx.serialization.Serializable
     private data class PendingItemWire(val productId: String, val quantity: Int)
 

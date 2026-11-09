@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -41,12 +42,7 @@ import com.zakeleo877.saeedcore.util.Links
 import com.zakeleo877.saeedstore.R
 import kotlinx.coroutines.launch
 
-private object Routes {
-    const val CATALOG = "catalog"
-    const val CART = "cart"
-    const val PENDING = "pending"
-    const val DETAIL = "product"
-}
+private data class ConfirmedOrder(val number: Long, val items: List<CartItem>)
 
 /** Root composable of the customer app: navigation, checkout sheet and order feedback. */
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -67,28 +63,40 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
     val addedToCartText = stringResource(R.string.add_to_cart)
     val cartRemovedText = stringResource(R.string.cart_removed)
     val undoText = stringResource(R.string.action_undo)
-    val genericErrorText = stringResource(R.string.generic_error)
     val orderSuccessTitle = stringResource(R.string.order_success_title)
     val orderNumberLabel = stringResource(R.string.order_number)
     val orderDoneText = stringResource(R.string.order_done)
     val orderQueuedTitle = stringResource(R.string.order_queued_title)
     val orderQueuedMessage = stringResource(R.string.order_queued_message)
-    val cartTotalLabel = stringResource(R.string.cart_total)
+    val estimatedTotalLabel = stringResource(R.string.order_estimated_total)
+    val whatsappHint = stringResource(R.string.order_success_whatsapp_hint)
+    val orderRejectedText = stringResource(R.string.order_rejected_message)
 
     var checkoutOpen by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
     var selectedProduct by remember { mutableStateOf<Product?>(null) }
-    var successNumber by remember { mutableStateOf<Long?>(null) }
+    var confirmedOrder by remember { mutableStateOf<ConfirmedOrder?>(null) }
     var queuedMessage by remember { mutableStateOf(false) }
     var lastRemoved by remember { mutableStateOf<CartItem?>(null) }
+    // The two catalogue views share their filters and restore them on rotation.
+    var query by rememberSaveable { mutableStateOf("") }
+    var selectedCategory by rememberSaveable { mutableStateOf<String?>(null) }
+    var offersOnly by rememberSaveable { mutableStateOf(false) }
 
     val currency = state.settings?.currency ?: "د.ج"
 
-    // The bar belongs to the shell, not to one screen. It used to be drawn by
-    // the catalogue alone, so the cart and the pending list had no bar and no
-    // way back to the shop.
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-    val showBar = currentRoute != null && !currentRoute.startsWith(Routes.DETAIL)
+    val showBar = customerShowsBottomBar(currentRoute)
+
+    // Tabs are top-level destinations. Returning to home does not accumulate
+    // duplicate carts or pending screens on the back stack.
+    fun navigateTab(route: String) {
+        if (currentRoute == route) return
+        navController.navigate(route) {
+            popUpTo(CustomerRoutes.HOME) { inclusive = false }
+            launchSingleTop = true
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -97,51 +105,53 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                 SaeedBottomBar(
                     cartCount = cartCount,
                     pendingCount = pendingOrders.size,
-                    current = when {
-                        currentRoute.orEmpty().startsWith(Routes.CART) -> SaeedTab.CART
-                        currentRoute.orEmpty().startsWith(Routes.PENDING) -> SaeedTab.PENDING
-                        else -> SaeedTab.CATALOG
-                    },
-                    onCatalogClick = {
-                        navController.navigate(Routes.CATALOG) {
-                            popUpTo(Routes.CATALOG) { inclusive = false }
-                            launchSingleTop = true
-                        }
-                    },
-                    onCartClick = { navController.navigate(Routes.CART) { launchSingleTop = true } },
-                    onPendingClick = { navController.navigate(Routes.PENDING) { launchSingleTop = true } },
+                    current = customerTabForRoute(currentRoute),
+                    onHomeClick = { navigateTab(CustomerRoutes.HOME) },
+                    onProductsClick = { navigateTab(CustomerRoutes.PRODUCTS) },
+                    onCartClick = { navigateTab(CustomerRoutes.CART) },
+                    onPendingClick = { navigateTab(CustomerRoutes.PENDING) },
                 )
             }
         },
     ) { innerPadding ->
     Box(Modifier.fillMaxSize().padding(innerPadding)) {
       SharedTransitionLayout {
-        NavHost(navController = navController, startDestination = Routes.CATALOG) {
-            composable(Routes.CATALOG) {
-                CatalogScreen(
-                    sharedScope = this@SharedTransitionLayout,
-                    animatedScope = this,
-                    state = state,
-                    cartCount = cartCount,
-                    pendingCount = pendingOrders.size,
-                    onProductClick = { product ->
-                        selectedProduct = product
-                        // The id travels in the route, so a restored process can
-                        // find the product again instead of falling back to the
-                        // non-saveable field.
-                        navController.navigate("${Routes.DETAIL}?id=${product.id}")
-                    },
-                    onAddToCart = { product ->
-                        viewModel.addToCart(product)
-                        scope.launch { snackbarHostState.showSnackbar(addedToCartText) }
-                    },
-                    onCartClick = { navController.navigate(Routes.CART) },
-                    onPendingClick = { navController.navigate(Routes.PENDING) },
-                    onRetry = viewModel::refresh,
-                )
+        NavHost(navController = navController, startDestination = CustomerRoutes.HOME) {
+            listOf(CustomerRoutes.HOME, CustomerRoutes.PRODUCTS).forEach { route ->
+                composable(route) {
+                    CatalogScreen(
+                        sharedScope = this@SharedTransitionLayout,
+                        animatedScope = this,
+                        state = state,
+                        isHome = route == CustomerRoutes.HOME,
+                        cartCount = cartCount,
+                        query = query,
+                        onQueryChange = { query = it },
+                        selectedCategory = selectedCategory,
+                        onCategorySelected = { selectedCategory = it },
+                        offersOnly = offersOnly,
+                        onOffersOnlyChange = { offersOnly = it },
+                        onProductClick = { product ->
+                            selectedProduct = product
+                            navController.navigate("${CustomerRoutes.DETAIL}?id=${product.id}")
+                        },
+                        onAddToCart = { product ->
+                            viewModel.addToCart(product)
+                            scope.launch { snackbarHostState.showSnackbar(addedToCartText) }
+                        },
+                        onCartClick = { navigateTab(CustomerRoutes.CART) },
+                        onShowAll = {
+                            query = ""
+                            selectedCategory = null
+                            offersOnly = false
+                            navigateTab(CustomerRoutes.PRODUCTS)
+                        },
+                        onRetry = viewModel::refresh,
+                    )
+                }
             }
 
-            composable(Routes.CART) {
+            composable(CustomerRoutes.CART) {
                 CartScreen(
                     items = cartItems,
                     currency = currency,
@@ -153,14 +163,18 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                 )
             }
 
-            composable(Routes.PENDING) {
+            composable(CustomerRoutes.PENDING) {
                 PendingOrdersScreen(
                     orders = pendingOrders,
                     onRetry = { clientId ->
                         scope.launch {
-                            when (viewModel.retry(clientId)) {
-                                is SubmitOutcome.Sent -> navController.popBackStack()
-                                else -> Unit
+                            when (val outcome = viewModel.retry(clientId)) {
+                                is SubmitOutcome.Sent -> {
+                                    confirmedOrder = ConfirmedOrder(outcome.orderNumber, emptyList())
+                                    navController.popBackStack()
+                                }
+                                is SubmitOutcome.Queued -> queuedMessage = true
+                                is SubmitOutcome.Rejected -> snackbarHostState.showSnackbar(orderRejectedText)
                             }
                         }
                     },
@@ -171,7 +185,7 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
             }
 
             composable(
-                route = "${Routes.DETAIL}?id={id}",
+                route = CustomerRoutes.DETAIL_PATTERN,
                 arguments = listOf(navArgument("id") { type = NavType.StringType; defaultValue = "" }),
             ) {
                 val routeId = it.arguments?.getString("id").orEmpty()
@@ -239,7 +253,8 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                             is SubmitOutcome.Sent -> {
                                 submitting = false
                                 checkoutOpen = false
-                                successNumber = outcome.orderNumber
+                                // Preserve the ordered snapshot before clearing the cart.
+                                confirmedOrder = ConfirmedOrder(outcome.orderNumber, viewModel.cart.snapshot())
                                 viewModel.clearCart()
                             }
                             is SubmitOutcome.Queued -> {
@@ -250,7 +265,7 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                             }
                             is SubmitOutcome.Rejected -> {
                                 submitting = false
-                                scope.launch { snackbarHostState.showSnackbar(genericErrorText) }
+                                scope.launch { snackbarHostState.showSnackbar(orderRejectedText) }
                             }
                         }
                     }
@@ -259,9 +274,10 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
         }
     }
 
-    successNumber?.let { number ->
+    confirmedOrder?.let { confirmed ->
+        val number = confirmed.number
         val settings = state.settings
-        val total = cartItems.sumOf { it.estimatedTotal }
+        val total = confirmed.items.sumOf { it.estimatedTotal }
         val summary = buildString {
             append(orderNumberLabel)
             append(": ")
@@ -269,10 +285,16 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
             if (settings != null) {
                 append('\n')
                 append(settings.storeName)
-                append(" · ")
-                append(cartTotalLabel)
-                append(": ")
-                append(Formatters.money(total, settings.currency))
+                if (confirmed.items.isNotEmpty()) {
+                    append(" · ")
+                    append(estimatedTotalLabel)
+                    append(": ")
+                    append(Formatters.money(total, settings.currency))
+                }
+                if (settings.whatsapp.isNotBlank()) {
+                    append('\n')
+                    append(whatsappHint)
+                }
             }
         }
 
@@ -280,8 +302,8 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
             title = orderSuccessTitle,
             message = summary,
             confirmLabel = orderDoneText,
-            onConfirm = { successNumber = null },
-            onDismiss = { successNumber = null },
+            onConfirm = { confirmedOrder = null },
+            onDismiss = { confirmedOrder = null },
         )
 
         // The WhatsApp message carries the invoice number, the items and the total.
@@ -292,10 +314,18 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                 append(orderNumberLabel)
                 append(": ")
                 append(Formatters.orderNumber(number))
-                append('\n')
-                append(cartTotalLabel)
-                append(": ")
-                append(Formatters.money(total, current.currency))
+                confirmed.items.forEach { item ->
+                    append('\n')
+                    append(item.product.name)
+                    append(" ×")
+                    append(item.quantity)
+                }
+                if (confirmed.items.isNotEmpty()) {
+                    append('\n')
+                    append(estimatedTotalLabel)
+                    append(": ")
+                    append(Formatters.money(total, current.currency))
+                }
             }
             Links.whatsapp(current.whatsapp, message)
         }

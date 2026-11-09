@@ -9,15 +9,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.HourglassEmpty
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,8 +34,8 @@ import com.zakeleo877.saeedcore.data.PendingState
 import com.zakeleo877.saeedcore.designsystem.SaeedButton
 import com.zakeleo877.saeedcore.designsystem.SaeedCard
 import com.zakeleo877.saeedcore.designsystem.SaeedEmptyState
-import com.zakeleo877.saeedcore.designsystem.SaeedStatusChip
-import com.zakeleo877.saeedcore.model.OrderStatus
+import com.zakeleo877.saeedcore.designsystem.SaeedGoldInk
+import com.zakeleo877.saeedcore.designsystem.SaeedGoldSoft
 import com.zakeleo877.saeedstore.R
 
 /** Lists queued and failed orders so the customer can retry, edit or delete them. */
@@ -50,6 +54,11 @@ fun PendingOrdersScreen(
             text = stringResource(R.string.pending_title),
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = stringResource(R.string.pending_hint),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
 
@@ -137,19 +146,18 @@ private fun PendingStateChip(state: PendingState) {
         PendingState.SENDING -> stringResource(R.string.pending_sending)
         PendingState.FAILED -> stringResource(R.string.pending_failed)
     }
-    SaeedStatusChip(
-        status = when (state) {
-            PendingState.FAILED -> OrderStatus.CANCELLED
-            else -> OrderStatus.PREPARING
-        },
-        modifier = Modifier,
-    )
-    Text(
-        text = label,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 4.dp),
-    )
+    val failed = state == PendingState.FAILED
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = if (failed) MaterialTheme.colorScheme.errorContainer else SaeedGoldSoft,
+        contentColor = if (failed) MaterialTheme.colorScheme.onErrorContainer else SaeedGoldInk,
+    ) {
+        Row(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(if (failed) Icons.Filled.ErrorOutline else Icons.Filled.HourglassEmpty, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium)
+        }
+    }
 }
 
 @Composable

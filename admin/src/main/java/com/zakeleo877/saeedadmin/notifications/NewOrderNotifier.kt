@@ -30,16 +30,27 @@ object NewOrderNotifier {
         manager.createNotificationChannel(channel)
     }
 
-    /** Posts a notification for one new order. Silently skipped without permission. */
-    fun notifyNewOrder(context: Context, orderNumber: Long) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val granted = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS,
-            ) == PackageManager.PERMISSION_GRANTED
-            if (!granted) return
-        }
+    /** False when Android or the notification channel is blocked. */
+    fun canNotify(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return false
         createChannel(context)
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = context.getSystemService(NotificationManager::class.java)?.getNotificationChannel(CHANNEL_ID)
+            if (channel == null || channel.importance == NotificationManager.IMPORTANCE_NONE) return false
+        }
+        return true
+    }
+
+    /** True only when the OS accepted this notification for posting. */
+    fun notifyNewOrder(context: Context, orderNumber: Long): Boolean {
+        if (!canNotify(context)) return false
+        // Keep the explicit runtime permission check here as well for Android lint.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) return false
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -60,8 +71,8 @@ object NewOrderNotifier {
             .setContentIntent(pendingIntent)
             .build()
 
-        runCatching {
+        return runCatching {
             NotificationManagerCompat.from(context).notify(orderNumber.toInt(), notification)
-        }
+        }.isSuccess
     }
 }

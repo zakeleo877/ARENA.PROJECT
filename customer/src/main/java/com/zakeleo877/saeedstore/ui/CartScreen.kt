@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -30,9 +32,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.zakeleo877.saeedcore.designsystem.RemoteImage
+import com.zakeleo877.saeedcore.designsystem.SaeedChipSurface
 import com.zakeleo877.saeedcore.designsystem.SaeedButton
 import com.zakeleo877.saeedcore.designsystem.SaeedCard
 import com.zakeleo877.saeedcore.designsystem.SaeedEmptyState
@@ -61,6 +67,11 @@ fun CartScreen(
             text = stringResource(R.string.cart_title),
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = stringResource(R.string.cart_subtitle),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
 
@@ -107,7 +118,7 @@ fun CartScreen(
 
         Spacer(Modifier.height(16.dp))
         Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            color = SaeedChipSurface,
             shape = MaterialTheme.shapes.medium,
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -164,53 +175,52 @@ private fun CartRow(
     onRemove: () -> Unit,
 ) {
     SaeedCard {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = item.product.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                RemoteImage(
+                    url = item.product.imageUrl,
+                    contentDescription = item.product.name,
+                    size = 72.dp,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(72.dp).clip(RoundedCornerShape(12.dp)).background(SaeedChipSurface),
                 )
-                Text(
-                    text = Formatters.money(item.product.price, currency),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = item.product.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = Formatters.money(item.product.price, currency),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = onRemove, modifier = Modifier.size(48.dp)) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = stringResource(R.string.pending_delete),
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { onQuantityChange(item.quantity - 1) }, modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.Filled.Remove, contentDescription = stringResource(R.string.decrease))
+                }
+                Text(item.quantity.toString(), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                IconButton(onClick = { onQuantityChange(item.quantity + 1) }, modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.increase))
+                }
+                Spacer(Modifier.weight(1f))
                 Text(
                     text = Formatters.money(item.estimatedTotal, currency),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
-                )
-            }
-
-            IconButton(onClick = { onQuantityChange(item.quantity - 1) }, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Filled.Remove, contentDescription = stringResource(R.string.decrease))
-            }
-            Text(
-                text = item.quantity.toString(),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            IconButton(onClick = { onQuantityChange(item.quantity + 1) }, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.increase))
-            }
-            Text(
-                text = stringResource(R.string.quantity_label),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            IconButton(onClick = onRemove, modifier = Modifier.size(48.dp)) {
-                Icon(
-                    Icons.Filled.Delete,
-                    contentDescription = stringResource(R.string.pending_delete),
-                    tint = MaterialTheme.colorScheme.error,
                 )
             }
         }

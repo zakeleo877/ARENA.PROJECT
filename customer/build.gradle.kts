@@ -4,6 +4,9 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    // DemoProduct is decoded only in isolated emulator builds; it still needs
+    // its generated serializer instead of failing silently at runtime.
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
@@ -18,6 +21,10 @@ val signingSettings = Properties().apply {
 }
 val supabaseUrl = localSettings.getProperty("SUPABASE_URL", "").trim()
 val supabaseKey = localSettings.getProperty("SUPABASE_KEY", "").trim()
+val demoBuild = providers.gradleProperty("saeed.demo").getOrElse("false") == "true"
+require(!demoBuild || supabaseUrl == "https://placeholder.invalid") {
+    "The emulator catalogue requires the isolated placeholder backend."
+}
 
 /** Reads the `role` claim of a legacy JWT key, or null when the key is opaque. */
 fun roleOfLegacyJwt(key: String): String? {
@@ -82,17 +89,14 @@ android {
         versionName = "1.0"
         buildConfigField("String", "SUPABASE_URL", javaString(supabaseUrl))
         buildConfigField("String", "SUPABASE_KEY", javaString(supabaseKey))
-        // Throwaway catalogue for the emulator run, which has no route to a
-        // project. Off by default, so a build for the shop contains an empty
-        // string and shows nothing. Ask for it with -Psaeed.demo=true.
-        val demoProducts = if (providers.gradleProperty("saeed.demo").getOrElse("false") == "true") {
+        // Throwaway catalogue for the isolated emulator only. Normal builds
+        // contain no examples, and the guard above forbids a real backend when
+        // explicitly opting in with -Psaeed.demo=true.
+        val demoProducts = if (demoBuild) {
+            // A raw JSON string, escaped once by javaString for BuildConfig.
+            // These are emulator-only examples; normal APKs contain no demo catalogue.
             javaString(
-                "[{\"id\":\"demo-1\",\"name\":\"خلاط زجاجي\",\"price\":\"8900\"," +
-                    "\"category\":\"المطبخ\",\"originalPrice\":\"11900\",\"rating\":4.8}," +
-                    "{\"id\":\"demo-2\",\"name\":\"مشط شعر هوائي\",\"price\":\"3600\"," +
-                    "\"category\":\"أدوات تجميلية\",\"rating\":4.5}," +
-                    "{\"id\":\"demo-3\",\"name\":\"طقم سكاكين\",\"price\":\"5800\"," +
-                    "\"category\":\"المطبخ\",\"originalPrice\":\"7200\"}]",
+                """[{"id":"demo-1","name":"أداة تصفيف تجريبية","price":"8900","category":"العناية","originalPrice":"11900","rating":4.8},{"id":"demo-2","name":"مشط تجريبي","price":"3600","category":"العناية","rating":4.5},{"id":"demo-3","name":"كريم تجريبي","price":"5800","category":"التجميل","originalPrice":"7200"}]""",
             )
         } else {
             javaString("")
@@ -132,6 +136,15 @@ android {
         compose = true
         buildConfig = true
     }
+    // Screen semantics and interactions run in a local Android environment.
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            it.maxHeapSize = providers.gradleProperty("saeed.testHeap").getOrElse("768m")
+            it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+            it.systemProperty("robolectric.useFullClasspathForInstrumentation", "true")
+        }
+    }
 }
 
 dependencies {
@@ -149,6 +162,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.hilt.navigation.compose)
+    implementation(libs.androidx.hilt.work)
+    implementation(libs.androidx.work.runtime)
     implementation(libs.hilt.android)
     implementation(libs.kotlinx.coroutines.android)
     // The optional throwaway catalogue is read with kotlinx.serialization.
@@ -164,4 +179,12 @@ dependencies {
     ksp(libs.androidx.hilt.compiler)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.androidx.junit)
+    testImplementation(libs.androidx.runner)
+    testImplementation(libs.androidx.rules)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

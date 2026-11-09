@@ -22,6 +22,7 @@ import com.zakeleo877.saeedcore.model.Product
 import com.zakeleo877.saeedcore.model.StoreSettings
 import com.zakeleo877.saeedcore.network.NetworkMonitor
 import com.zakeleo877.saeedstore.BuildConfig
+import com.zakeleo877.saeedstore.orders.PendingOrdersScheduler
 import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
@@ -75,6 +76,14 @@ private object PriceReader {
 /** Shared JSON reader for the optional throwaway catalogue. */
 private val demoJson = Json { ignoreUnknownKeys = true }
 
+/** Parse only explicitly injected emulator data; an empty normal build seeds nothing. */
+internal fun parseDemoCatalog(raw: String): List<Product>? {
+    if (raw.isBlank()) return null
+    return runCatching { demoJson.decodeFromString<List<DemoProduct>>(raw).map { it.toProduct() } }
+        .getOrNull()
+        ?.takeIf { it.isNotEmpty() }
+}
+
 data class CustomerUiState(
     val products: List<Product> = emptyList(),
     val settings: StoreSettings? = null,
@@ -124,13 +133,7 @@ class CustomerViewModel @Inject constructor(
      * demo data, so parsing yields nothing and no shop ever sees these products.
      * A malformed value is ignored rather than crashing the screen.
      */
-    private val demoProducts: List<Product>? by lazy {
-        val raw = BuildConfig.DEMO_PRODUCTS
-        if (raw.isBlank()) return@lazy null
-        runCatching { demoJson.decodeFromString<List<DemoProduct>>(raw).map { it.toProduct() } }
-            .getOrNull()
-            ?.takeIf { it.isNotEmpty() }
-    }
+    private val demoProducts: List<Product>? by lazy { parseDemoCatalog(BuildConfig.DEMO_PRODUCTS) }
 
     val uiState: StateFlow<CustomerUiState> = combine(
         dao.observeProducts(),
@@ -149,6 +152,8 @@ class CustomerViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CustomerUiState())
 
     init {
+        // Recover waiting/interrupted rows left by older versions or a killed process.
+        PendingOrdersScheduler.enqueue(context)
         viewModelScope.launch { seedDemoCatalog() }
         refresh()
         viewModelScope.launch {
@@ -246,9 +251,11 @@ class CustomerViewModel @Inject constructor(
         )
     }
 
-    suspend fun submit(order: PendingOrder): SubmitOutcome = orderRepository.submit(order, isOnline())
+    suspend fun submit(order: PendingOrder): SubmitOutcome =
+        orderRepository.submit(order, isOnline()) { PendingOrdersScheduler.enqueue(context) }
 
-    suspend fun retry(clientId: String): SubmitOutcome = orderRepository.retry(clientId)
+    suspend fun retry(clientId: String): SubmitOutcome =
+        orderRepository.retry(clientId) { PendingOrdersScheduler.enqueue(context) }
 
     suspend fun deletePending(clientId: String) = orderRepository.delete(clientId)
 

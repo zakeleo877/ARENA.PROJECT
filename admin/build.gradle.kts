@@ -113,6 +113,15 @@ android {
         compose = true
         buildConfig = true
     }
+    // Screen semantics and interactions run in a local Android environment.
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            it.maxHeapSize = providers.gradleProperty("saeed.testHeap").getOrElse("768m")
+            it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+            it.systemProperty("robolectric.useFullClasspathForInstrumentation", "true")
+        }
+    }
 }
 
 dependencies {
@@ -150,4 +159,14 @@ dependencies {
     ksp(libs.androidx.hilt.compiler)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.androidx.junit)
+    testImplementation(libs.androidx.runner)
+    testImplementation(libs.androidx.rules)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

@@ -4,6 +4,8 @@
 
     <string name="admin_title">إدارة محلات السعيد</string>
     <string name="admin_subtitle">سجّل الدخول لإدارة الطلبات والمنتجات</string>
+    <string name="admin_login_label">لوحة الإدارة</string>
+    <string name="admin_login_hint">استخدم حساب الإدارة المخوّل</string>
     <string name="admin_email">البريد الإلكتروني</string>
     <string name="admin_password">كلمة المرور</string>
     <string name="admin_sign_in">تسجيل الدخول</string>
@@ -18,14 +20,29 @@
     <string name="admin_tab_settings">الإعدادات</string>
 
     <string name="admin_stat_new">طلبات جديدة</string>
-    <string name="admin_stat_today">طلبات اليوم</string>
-    <string name="admin_stat_total">إجمالي الطلبات</string>
-    <string name="admin_stat_products">عدد المنتجات</string>
-    <string name="admin_stat_sales">مبيعات المسلَّم</string>
+    <string name="admin_stat_today">طلبات اليوم المحمّلة</string>
+    <string name="admin_stat_total">الطلبات المحمّلة</string>
+    <string name="admin_stat_products">المنتجات المحمّلة</string>
+    <string name="admin_stat_sales">مبيعات المسلَّم المحمّلة</string>
+    <string name="admin_dashboard_welcome">مرحباً بعودتك</string>
+    <string name="admin_dashboard_title">متجرك في لمحة</string>
+    <string name="admin_dashboard_new_hint">ضمن أحدث الطلبات المحمّلة</string>
+    <string name="admin_dashboard_scope">الإحصاءات تخص أحدث 100 طلب محمّل، وليست إجمالي المتجر.</string>
+    <string name="admin_dashboard_recent">آخر الطلبات</string>
+    <string name="admin_dashboard_view_all">عرض الكل</string>
+    <string name="admin_dashboard_products">منتجات المتجر</string>
+    <string name="admin_dashboard_products_hint">راجع المعروض وتفاصيله</string>
+    <string name="admin_products_stale">تعذّر تحديث المنتجات؛ العدد المعروض قد يكون قديماً.</string>
+    <string name="admin_status_update_failed">تعذّر تغيير حالة الطلب. تحقّق من الاتصال وأعد المحاولة.</string>
 
     <string name="admin_search_orders">ابحث برقم الطلب أو الاسم أو الهاتف…</string>
     <string name="admin_filter_all">الكل</string>
     <string name="admin_no_orders">لا توجد طلبات.</string>
+    <string name="admin_orders_loading">جارٍ تحميل الطلبات…</string>
+    <string name="admin_orders_load_failed">تعذّر تحميل الطلبات. تحقّق من الإنترنت واضغط إعادة المحاولة.</string>
+    <string name="admin_orders_stale">تعذّر تحديث الطلبات؛ القائمة والأرقام المعروضة قد تكون قديمة. اضغط تحديث.</string>
+    <string name="admin_invalid_credentials">البريد الإلكتروني أو كلمة المرور غير صحيحة.</string>
+    <string name="admin_rate_limited">محاولات كثيرة؛ انتظر قليلاً ثم أعد المحاولة.</string>
     <string name="admin_no_name">بدون اسم</string>
 
     <string name="admin_order_number">فاتورة %1$s</string>
@@ -64,10 +81,15 @@
     <string name="admin_setting_currency">العملة</string>
     <string name="admin_setting_footer">ملاحظة الفاتورة</string>
     <string name="admin_settings_saved">تم الحفظ.</string>
+    <string name="admin_settings_saving">جارٍ الحفظ…</string>
+    <string name="admin_settings_save_failed">تعذّر حفظ الإعدادات؛ تحقّق من الاتصال وأعد المحاولة.</string>
+    <string name="admin_settings_unavailable">لم تُحمّل إعدادات المتجر بعد. اضغط تحديث قبل تعديلها.</string>
     <string name="admin_battery_title">إشعارات الطلبات في الخلفية</string>
-    <string name="admin_battery_hint">قد يتأخر الإشعار 15 دقيقة أو أكثر في وضع Doze. استثنِ التطبيق من تحسين البطارية لضمان وصوله.</string>
+    <string name="admin_battery_hint">يُفحص وجود طلبات دورياً، وقد يتأخر الإشعار 15 دقيقة أو أكثر. يمكن تقليل التأخير بالسماح للتطبيق بالعمل في الخلفية.</string>
     <string name="admin_battery_button">فتح إعدادات البطارية</string>
     <string name="admin_notifications_enabled">إشعارات الطلبات الجديدة</string>
+    <string name="admin_notification_permission_hint">الإشعارات محظورة في الهاتف أو في قناة الطلبات. افتح إعدادات الإشعارات واسمح بها.</string>
+    <string name="admin_notification_open_settings">فتح إعدادات الإشعارات</string>
 
     <string name="admin_notification_channel">طلبات جديدة</string>
     <string name="admin_notification_title">طلب جديد</string>

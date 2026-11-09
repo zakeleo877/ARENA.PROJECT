@@ -12,28 +12,22 @@ import javax.crypto.spec.GCMParameterSpec
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
+/** Injectable storage contract; the production implementation is encrypted. */
+interface SessionStore {
+    fun load(): AdminSession?
+    fun save(session: AdminSession)
+    fun clear()
+}
+
 /**
- * Keeps the signed-in admin session between launches, encrypted.
- *
- * The session is an access token, a refresh token and an identity. Stored as
- * plain preferences, any app with root, any adb backup and any device image
- * would carry a live key to the shop's order table. So the bytes are sealed with
- * AES-GCM under a key that lives in the Android keystore: the key never leaves
- * that store, and the store refuses to hand it to another app or to a device the
- * screen lock no longer protects.
- *
- * GCM rather than CBC because GCM authenticates: a tampered ciphertext fails to
- * open instead of decrypting into a different session.
- *
- * Nothing here is called on a background thread, and the payload is a few
- * hundred bytes, so the main thread cost is one keystore round trip — small
- * enough that it does not need a worker, and the session is needed before the
- * first screen is drawn.
+ * Stores the admin session encrypted with an Android Keystore AES-GCM key.
+ * The foreground and the background worker both restore through this vault;
+ * neither writes the tokens to logs or to plaintext preferences.
  */
-class SessionVault(private val context: Context) {
+class SessionVault(private val context: Context) : SessionStore {
 
     /** The decrypted session, or null when there is none or it cannot be read. */
-    fun load(): AdminSession? {
+    override fun load(): AdminSession? {
         val stored = preferences().getString(KEY_BLOB, null) ?: return null
         val plain = open(stored) ?: return null
         return runCatching { json.decodeFromString<StoredSession>(plain) }
@@ -41,7 +35,7 @@ class SessionVault(private val context: Context) {
             ?.toSession()
     }
 
-    fun save(session: AdminSession) {
+    override fun save(session: AdminSession) {
         val sealed = runCatching { seal(json.encodeToString(StoredSession.from(session))) }.getOrNull()
         if (sealed == null) {
             // Failing to save is not a reason to lose the session the manager
@@ -52,7 +46,7 @@ class SessionVault(private val context: Context) {
         preferences().edit().putString(KEY_BLOB, sealed).commit()
     }
 
-    fun clear() {
+    override fun clear() {
         preferences().edit().remove(KEY_BLOB).commit()
     }
 

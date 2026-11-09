@@ -157,8 +157,9 @@ fun SharedTransitionScope.ProductDetailScreen(
             }
             Spacer(Modifier.size(12.dp))
             SaeedButton(
-                text = stringResource(R.string.add_to_cart),
+                text = stringResource(if (product.available) R.string.add_to_cart else com.zakeleo877.saeedcore.R.string.product_unavailable),
                 onClick = { onAddToCart(quantity) },
+                enabled = product.available,
                 icon = Icons.Filled.Add,
                 modifier = Modifier.weight(1f),
             )

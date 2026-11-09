@@ -6,6 +6,10 @@ import com.zakeleo877.saeedcore.designsystem.SaeedCardSurface
 import com.zakeleo877.saeedcore.designsystem.SaeedChipSurface
 import com.zakeleo877.saeedcore.designsystem.SaeedColorScheme
 import com.zakeleo877.saeedcore.designsystem.SaeedDiscountRed
+import com.zakeleo877.saeedcore.designsystem.SaeedGold
+import com.zakeleo877.saeedcore.designsystem.SaeedGoldInk
+import com.zakeleo877.saeedcore.designsystem.SaeedGoldSoft
+import com.zakeleo877.saeedcore.designsystem.SaeedGreen
 import com.zakeleo877.saeedcore.designsystem.SaeedGreenDark
 import com.zakeleo877.saeedcore.designsystem.SaeedGreenHeader
 import com.zakeleo877.saeedcore.designsystem.SaeedInk
@@ -72,6 +76,11 @@ class ColorContrastTest {
         assertReadable(SaeedGreenDark, SaeedChipSurface, "green label on a chip")
         // The star sits next to a number, so it must be legible on its own too.
         assertReadable(SaeedStar, SaeedCardSurface, "star on a card")
+        // Gold is reserved for accents that remain legible in their context.
+        assertReadable(SaeedInk, SaeedGold, "dark text on a gold badge")
+        assertReadable(SaeedGold, SaeedGreen, "gold text on the dark brand green")
+        assertReadable(SaeedGoldInk, SaeedGoldSoft, "dark gold text on a pale gold surface")
+        assertReadable(SaeedInk, SaeedGoldSoft, "offline notice on a pale gold surface")
         // The error colour carries the only message a failed save shows.
         assertReadable(SaeedColorScheme.error, SaeedCardSurface, "error text on a card")
     }

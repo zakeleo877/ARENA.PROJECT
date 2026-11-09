@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">محلات السعيد</string>
 
-    <string name="catalog_tagline">حلاقة وتجميل — اطلب من مكانك</string>
+    <string name="catalog_tagline">حلاقة وتجميل بالجملة</string>
     <string name="catalog_empty">لا توجد منتجات مطابقة لبحثك.</string>
     <string name="catalog_error">تعذّر تحميل المنتجات. تحقّق من الاتصال ثم أعد المحاولة.</string>
     <string name="cart">السلة</string>
@@ -11,6 +11,7 @@
     <string name="search_products">ابحث عن منتج…</string>
 
     <string name="cart_title">سلة المشتريات</string>
+    <string name="cart_subtitle">راجع اختياراتك قبل إرسال الطلب</string>
     <string name="cart_empty">السلة فارغة. تصفّح المنتجات وأضف ما تحتاجه.</string>
     <string name="cart_total">المجموع</string>
     <string name="cart_checkout">إتمام الطلب</string>
@@ -33,29 +34,33 @@
     <string name="checkout_phone">رقم الهاتف</string>
     <string name="checkout_notes">ملاحظات (اختياري)</string>
     <string name="checkout_add_location">إضافة موقعي</string>
-    <string name="checkout_location_hint">لمساعدة المحل على التواصل معك — اختياري</string>
+    <string name="checkout_location_hint">لمساعدتنا على التواصل معك — اختياري</string>
     <string name="checkout_submit">إرسال الطلب</string>
     <string name="checkout_phone_error">أدخل رقم هاتف جزائري صحيح (8 إلى 15 رقماً).</string>
     <string name="checkout_name_error">أدخل اسمك الكامل.</string>
     <string name="checkout_location_error">تعذّر تحديد الموقع. يمكنك إرسال الطلب بدونه.</string>
-    <string name="checkout_location_permission">نحتاج إذن الموقع لإرساله إلى المحل فقط، ويمكنك رفضه.</string>
+    <string name="checkout_location_permission">نحتاج إذن الموقع لإضافته إلى طلبك، ويمكنك رفضه.</string>
 
     <string name="order_success_title">تم استلام طلبك</string>
     <string name="order_number">رقم الفاتورة</string>
     <string name="order_queued_title">تم حفظ طلبك</string>
-    <string name="order_queued_message">سيُرسل طلبك تلقائياً عند عودة الاتصال.</string>
+    <string name="order_queued_message">حُفظ الطلب على جهازك ولم نتأكد من وصوله بعد. سيحاول التطبيق إرساله عند توفر الإنترنت؛ تابع حالته في الطلبات المعلّقة.</string>
+    <string name="order_estimated_total">المجموع التقديري</string>
+    <string name="order_success_whatsapp_hint">إذا فتح واتساب، اضغط زر الإرسال لتصل الرسالة إلينا.</string>
+    <string name="order_rejected_message">تعذّر إرسال الطلب. راجع البيانات والطلبات المعلّقة ثم أعد المحاولة.</string>
     <string name="order_done">تم</string>
 
     <string name="pending_title">الطلبات المعلّقة</string>
+    <string name="pending_hint">طلبات محفوظة على هذا الجهاز ولم يتأكد إرسالها بعد.</string>
     <string name="pending_empty">لا توجد طلبات معلّقة.</string>
-    <string name="pending_waiting">بانتظار الاتصال</string>
+    <string name="pending_waiting">بانتظار الإرسال</string>
     <string name="pending_sending">جارٍ الإرسال</string>
     <string name="pending_failed">فشل</string>
     <string name="pending_retry_now">إعادة المحاولة الآن</string>
     <string name="pending_delete">حذف</string>
     <string name="pending_error_network">تعذّر الاتصال بالخادم.</string>
     <string name="pending_error_server">خطأ في الخادم، أعد المحاولة لاحقاً.</string>
-    <string name="pending_error_invalid">الطلب مرفوض من المتجر، عدّل البيانات ثم أعد المحاولة.</string>
+    <string name="pending_error_invalid">رُفض الطلب. راجع البيانات والمنتجات في السلة قبل إعادة المحاولة.</string>
     <string name="pending_error_rate">تم تجاوز عدد الطلبات المسموح بها، حاول لاحقاً.</string>
 
     <string name="generic_error">حدث خطأ، حاول مجدداً.</string>
@@ -65,7 +70,22 @@
     <string name="catalog_all">الكل</string>
     <string name="catalog_filter">تصفية</string>
     <string name="catalog_offers">العروض</string>
-    <string name="catalog_pending_tab">الطلبات</string>
+    <string name="catalog_home_tab">الرئيسية</string>
+    <string name="catalog_products_tab">المنتجات</string>
+    <string name="catalog_pending_tab">المعلّقة</string>
+    <string name="catalog_welcome">مرحباً بك</string>
+    <string name="catalog_welcome_title">تسوّق بالجملة لمحلك</string>
+    <string name="catalog_feature_label">لأصحاب المحلات</string>
+    <string name="catalog_feature_title">مستلزمات محلك بالجملة</string>
+    <string name="catalog_discover">تصفّح المنتجات</string>
+    <string name="catalog_categories">تسوّق حسب التصنيف</string>
+    <string name="catalog_choices">منتجات الجملة</string>
+    <string name="catalog_view_all">عرض الكل</string>
+    <string name="catalog_all_products">كل المنتجات</string>
+    <string name="catalog_no_products">لا توجد منتجات لعرضها حالياً.</string>
+    <string name="catalog_results_count">%1$d منتج</string>
+    <string name="catalog_cart_description">السلة، %1$d منتجات</string>
+    <string name="catalog_add_named">أضف %1$s إلى السلة</string>
     <string name="catalog_previous_price">%1$s قبل</string>
     <string name="catalog_discount_badge">-%1$d%%</string>
     <string name="catalog_rating">%1$s</string>

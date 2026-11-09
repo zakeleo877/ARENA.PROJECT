@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class DashboardStats(
@@ -30,11 +31,18 @@ data class DashboardStats(
 )
 
 data class AdminUiState(
+    // The list tab is filtered; the dashboard must always use the unfiltered snapshot.
     val orders: List<Order> = emptyList(),
+    val allOrders: List<Order> = emptyList(),
+    val dashboardStats: DashboardStats = DashboardStats(),
     val products: List<Product> = emptyList(),
     val statusFilter: OrderStatus? = null,
     val searchQuery: String = "",
     val isLoading: Boolean = false,
+    val ordersLoaded: Boolean = false,
+    val productsLoaded: Boolean = false,
+    val ordersLoadFailed: Boolean = false,
+    val productsLoadFailed: Boolean = false,
     val errorMessage: String? = null,
 )
 
@@ -44,13 +52,22 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
     private val _products = MutableStateFlow<List<Product>>(emptyList())
     private val _filter = MutableStateFlow<OrderStatus?>(null)
     private val _query = MutableStateFlow("")
+    private val _settings = MutableStateFlow<Map<String, String>?>(null)
+    val settings: StateFlow<Map<String, String>?> = _settings
 
     // The holder already exposes read-only state flows.
     val session: StateFlow<AdminSession?> = repository.sessionHolder.session
     val authorization: StateFlow<AdminAuthorization?> = repository.sessionHolder.authorization
 
     /** The loading flag and the error message travel together. */
-    private data class LoadState(val loading: Boolean = false, val error: String? = null)
+    private data class LoadState(
+        val loading: Boolean = false,
+        val error: String? = null,
+        val ordersLoaded: Boolean = false,
+        val productsLoaded: Boolean = false,
+        val ordersFailed: Boolean = false,
+        val productsFailed: Boolean = false,
+    )
 
     private val _load = MutableStateFlow(LoadState())
 
@@ -70,6 +87,8 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
                     ArabicText.contains(order.phone, query)
                 matchesStatus && matchesQuery
             },
+            allOrders = orders,
+            dashboardStats = calculateDashboardStats(orders, products),
             products = if (query.isBlank()) {
                 products
             } else {
@@ -82,15 +101,23 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
             statusFilter = filter,
             searchQuery = query,
             isLoading = load.loading,
+            ordersLoaded = load.ordersLoaded,
+            productsLoaded = load.productsLoaded,
+            ordersLoadFailed = load.ordersFailed,
+            productsLoadFailed = load.productsFailed,
             errorMessage = load.error,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AdminUiState())
 
     init {
         viewModelScope.launch {
-            // A remembered session is restored before the login gate is drawn,
-            // so reopening the shop does not ask for a password again.
-            repository.restoreSession()
+            // A temporary outage must not strand the encrypted session behind
+            // the login screen. Retry while this screen remains open; sign-out
+            // after a successful restore does not start this loop again.
+            while (repository.sessionHolder.session.value == null) {
+                if (repository.restoreSession()) break
+                delay(30_000)
+            }
         }
         // Load the catalog as soon as an admin session becomes available.
         viewModelScope.launch {
@@ -106,39 +133,67 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
         viewModelScope.launch {
             _load.value = _load.value.copy(loading = true)
             val result = repository.signIn(email, password)
-            _load.value = _load.value.copy(loading = false)
-            if (result is AuthResult.Success) {
-                refresh()
-            }
+            _load.value = _load.value.copy(
+                loading = false,
+                error = when (result) {
+                    is AuthResult.Success -> null
+                    is AuthResult.Failure -> when (result.reason) {
+                        AuthError.INVALID_CREDENTIALS -> "invalid_credentials"
+                        AuthError.RATE_LIMITED -> "rate_limited"
+                        else -> "load_failed"
+                    }
+                },
+            )
+            if (result is AuthResult.Success) refresh()
             onResult(result)
         }
     }
 
     fun signOut() {
-        // Clearing the remembered copy matters more than clearing the screen: a
-        // session left in the vault would sign the next person in automatically
-        // on a shop phone that is passed around.
-        repository.signOut()
-        _orders.value = emptyList()
-        _products.value = emptyList()
+        viewModelScope.launch {
+            repository.signOut()
+            _orders.value = emptyList()
+            _products.value = emptyList()
+            _settings.value = null
+            _load.value = LoadState()
+        }
     }
 
     fun refresh() {
         val session = repository.sessionHolder.session.value ?: return
+        if (_load.value.loading) return
+        _load.value = _load.value.copy(loading = true)
         viewModelScope.launch {
-            _load.value = _load.value.copy(loading = true)
-            val ordersResult = runCatching { repository.orders(session) }
-            val productsResult = runCatching { repository.products(session) }
-            _orders.value = ordersResult.getOrDefault(_orders.value)
-            _products.value = productsResult.getOrDefault(_products.value)
-            _load.value = _load.value.copy(
-                error = when {
-                    productsResult.isFailure -> repository.lastFailure ?: "products_failed"
-                    ordersResult.isFailure -> "load_failed"
-                    else -> null
-                },
-            )
-            _load.value = _load.value.copy(loading = false)
+            try {
+                val ordersResult = runCatching { repository.orders(session) }
+                val productsResult = runCatching { repository.products(session) }
+                val settingsResult = runCatching { repository.settings(session) }
+                // A response from a session that signed out must not populate
+                // the next user's screen.
+                if (repository.sessionHolder.session.value?.userId != session.userId) return@launch
+                // A failed read keeps the last list, but is explicitly labelled
+                // as stale rather than pretending that the shop has no orders.
+                _orders.value = ordersResult.getOrDefault(_orders.value)
+                _products.value = productsResult.getOrDefault(_products.value)
+                settingsResult.onSuccess { values ->
+                    if (values.keys.containsAll(listOf("storeName", "whatsapp", "currency", "footerNote"))) {
+                        _settings.value = values
+                    }
+                }
+                _load.value = _load.value.copy(
+                    ordersLoaded = _load.value.ordersLoaded || ordersResult.isSuccess,
+                    productsLoaded = _load.value.productsLoaded || productsResult.isSuccess,
+                    ordersFailed = ordersResult.isFailure,
+                    productsFailed = productsResult.isFailure,
+                    error = when {
+                        productsResult.isFailure -> repository.lastFailure ?: "products_failed"
+                        ordersResult.isFailure -> "load_failed"
+                        else -> null
+                    },
+                )
+            } finally {
+                _load.value = _load.value.copy(loading = false)
+            }
         }
     }
 
@@ -182,13 +237,24 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
     }
 
     fun updateOrderStatus(orderId: String, status: OrderStatus, onDone: (Boolean) -> Unit = {}) {
-        val session = repository.sessionHolder.session.value ?: return
+        val session = repository.sessionHolder.session.value ?: run {
+            onDone(false)
+            return
+        }
         viewModelScope.launch {
-            val ok = repository.updateOrderStatus(session, orderId, status)
-            if (ok) {
+            val ok = try {
+                repository.updateOrderStatus(session, orderId, status)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                false
+            }
+            // A response from an old session must not change the current view.
+            val sameSession = repository.sessionHolder.session.value?.userId == session.userId
+            if (ok && sameSession) {
                 _orders.value = _orders.value.map { if (it.id == orderId) it.copy(status = status) else it }
             }
-            onDone(ok)
+            onDone(ok && sameSession)
         }
     }
 
@@ -293,9 +359,14 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
     }
 
     fun saveSettings(values: Map<String, String>, onDone: (Boolean) -> Unit) {
-        val session = repository.sessionHolder.session.value ?: return
+        val session = repository.sessionHolder.session.value ?: run {
+            onDone(false)
+            return
+        }
         viewModelScope.launch {
-            onDone(repository.updateSettings(session, values))
+            val saved = runCatching { repository.updateSettings(session, values) }.getOrDefault(false)
+            if (saved) _settings.value = (_settings.value.orEmpty() + values)
+            onDone(saved)
         }
     }
 
@@ -321,19 +392,4 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
         }
     }
 
-    fun stats(): DashboardStats {
-        val orders = _orders.value
-        val today = java.time.LocalDate.now()
-        return DashboardStats(
-            newOrders = orders.count { it.status == OrderStatus.NEW },
-            todayOrders = orders.count {
-                it.createdAt.atZone(java.time.ZoneId.systemDefault()).toLocalDate() == today
-            },
-            totalOrders = orders.size,
-            productCount = _products.value.size,
-            handedOverTotal = orders
-                .filter { it.status == OrderStatus.HANDED_OVER }
-                .fold(BigDecimal.ZERO) { acc, order -> acc + order.total },
-        )
-    }
 }

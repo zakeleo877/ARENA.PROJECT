@@ -1,9 +1,13 @@
 package com.zakeleo877.saeedadmin.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +27,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,16 +38,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.zakeleo877.saeedcore.designsystem.SaeedButton
 import com.zakeleo877.saeedcore.designsystem.SaeedTextField
 import com.zakeleo877.saeedadmin.R
 import com.zakeleo877.saeedadmin.notifications.OrderNotificationScheduler
+import com.zakeleo877.saeedadmin.notifications.NewOrderNotifier
 
 /** Store settings: name, WhatsApp number, currency and the invoice footer. */
 @Composable
 fun SettingsScreen(
-    onSave: (Map<String, String>) -> Unit,
+    onSave: (Map<String, String>, (Boolean) -> Unit) -> Unit,
     onSignOut: () -> Unit,
+    initialSettings: Map<String, String>?,
+    onRefresh: () -> Unit,
     checks: List<com.zakeleo877.saeedcore.data.remote.DiagnosticCheck>? = null,
     checking: Boolean = false,
     onCheckConnection: () -> Unit = {},
@@ -52,7 +65,38 @@ fun SettingsScreen(
     var currency by remember { mutableStateOf("") }
     var footerNote by remember { mutableStateOf("") }
     var saved by remember { mutableStateOf(false) }
-    var notificationsEnabled by remember { mutableStateOf(true) }
+    var saving by remember { mutableStateOf(false) }
+    var saveFailed by remember { mutableStateOf(false) }
+    var settingsLoaded by remember { mutableStateOf(false) }
+    var notificationsEnabled by remember(context) { mutableStateOf(OrderNotificationScheduler.isEnabled(context)) }
+    var canNotify by remember(context) { mutableStateOf(NewOrderNotifier.canNotify(context)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        canNotify = NewOrderNotifier.canNotify(context)
+        if (canNotify) OrderNotificationScheduler.checkNow(context)
+    }
+
+    // Pre-fill from the real store. Saving blank placeholders used to overwrite
+    // the existing WhatsApp number and other settings.
+    LaunchedEffect(initialSettings) {
+        if (!settingsLoaded && initialSettings != null) {
+            storeName = initialSettings["storeName"].orEmpty()
+            whatsapp = initialSettings["whatsapp"].orEmpty()
+            currency = initialSettings["currency"].orEmpty()
+            footerNote = initialSettings["footerNote"].orEmpty()
+            settingsLoaded = true
+        }
+    }
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                canNotify = NewOrderNotifier.canNotify(context)
+                if (canNotify && notificationsEnabled) OrderNotificationScheduler.checkNow(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Column(
         Modifier
@@ -66,6 +110,11 @@ fun SettingsScreen(
             color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.height(16.dp))
+        if (!settingsLoaded) {
+            Text(stringResource(R.string.admin_settings_unavailable), color = MaterialTheme.colorScheme.error)
+            SaeedButton(text = stringResource(R.string.admin_refresh), onClick = onRefresh)
+            Spacer(Modifier.height(12.dp))
+        }
 
         SaeedTextField(
             value = storeName,
@@ -97,8 +146,12 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(20.dp))
         SaeedButton(
-            text = stringResource(R.string.admin_save),
+            text = stringResource(if (saving) R.string.admin_settings_saving else R.string.admin_save),
+            enabled = settingsLoaded && !saving,
             onClick = {
+                saving = true
+                saved = false
+                saveFailed = false
                 onSave(
                     mapOf(
                         "storeName" to storeName.trim(),
@@ -106,17 +159,20 @@ fun SettingsScreen(
                         "currency" to currency.trim(),
                         "footerNote" to footerNote.trim(),
                     ),
-                )
-                saved = true
+                ) { ok ->
+                    saving = false
+                    saved = ok
+                    saveFailed = !ok
+                }
             },
             modifier = Modifier.fillMaxWidth(),
         )
-        if (saved) {
+        if (saved || saveFailed) {
             Spacer(Modifier.height(8.dp))
             Text(
-                text = stringResource(R.string.admin_settings_saved),
+                text = stringResource(if (saved) R.string.admin_settings_saved else R.string.admin_settings_save_failed),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
+                color = if (saved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
             )
         }
 
@@ -147,12 +203,39 @@ fun SettingsScreen(
                 checked = notificationsEnabled,
                 onCheckedChange = { enabled ->
                     notificationsEnabled = enabled
-                    if (enabled) {
-                        OrderNotificationScheduler.start(context)
-                    } else {
-                        OrderNotificationScheduler.stop(context)
+                    OrderNotificationScheduler.setEnabled(context, enabled)
+                    if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        OrderNotificationScheduler.markPermissionPrompted(context)
+                        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                     }
+                    canNotify = NewOrderNotifier.canNotify(context)
                 },
+            )
+        }
+
+        if (notificationsEnabled && !canNotify) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.admin_notification_permission_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+            SaeedButton(
+                text = stringResource(R.string.admin_notification_open_settings),
+                onClick = {
+                    val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    } else {
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", context.packageName, null)
+                        }
+                    }
+                    runCatching { context.startActivity(intent) }
+                },
+                modifier = Modifier.fillMaxWidth(),
             )
         }
 

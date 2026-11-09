@@ -118,6 +118,7 @@ class IsolatedBackendTest {
         override suspend fun insert(order: PendingOrderEntity) { rows[order.clientId] = order }
         override fun observeAll(): Flow<List<PendingOrderEntity>> = flowOf(rows.values.toList())
         override suspend fun find(clientId: String): PendingOrderEntity? = rows[clientId]
+        override suspend fun update(order: PendingOrderEntity) { if (rows.containsKey(order.clientId)) rows[order.clientId] = order }
         override suspend fun delete(clientId: String) { rows.remove(clientId) }
     }
 
@@ -245,6 +246,38 @@ class IsolatedBackendTest {
             val sent = repository.retry(order.clientId)
             assertTrue("the queued order must be sent: $sent", sent is SubmitOutcome.Sent)
             assertTrue(dao.rows.isEmpty())
+        } finally {
+            httpClient.close()
+        }
+    }
+
+    /** Full order path against a throwaway in-memory database, never the shop. */
+    @Test
+    fun anOrderPlacedByTheCustomerIsReadableByTheAdminAndNotificationQuery() = runTest {
+        val httpClient = client()
+        try {
+            val customer = CatalogApi(httpClient, config())
+            val product = customer.products().first()
+            val order = PendingOrder(
+                clientId = UUID.randomUUID().toString(),
+                customer = "عميل اختبار محلي",
+                phone = "0550123099",
+                notes = "",
+                customerLocationUrl = "",
+                items = listOf(PendingOrderItem(product.id, 2)),
+            )
+            val number = customer.placeOrder(order)
+            val login = AuthManager(httpClient, config()).signIn("owner@example.invalid", "OwnerPass123")
+            assertTrue("isolated admin sign-in must succeed", login is AuthResult.Success)
+            val token = (login as AuthResult.Success).session.accessToken
+            val admin = AdminApi(httpClient, config())
+
+            val saved = admin.orders(token).single { it.clientId == order.clientId }
+            assertEquals(number, saved.number)
+            assertEquals(2, saved.items.single().quantity)
+            assertEquals(0, product.price.compareTo(saved.items.single().price))
+            assertEquals(0, product.price.multiply(2.toBigDecimal()).compareTo(saved.total))
+            assertTrue(admin.newOrderNumbers(token, number - 1).contains(number))
         } finally {
             httpClient.close()
         }

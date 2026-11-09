@@ -1,6 +1,11 @@
 package com.zakeleo877.saeedadmin.ui
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +25,7 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,7 +41,15 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.core.content.ContextCompat
 import com.zakeleo877.saeedadmin.R
+import com.zakeleo877.saeedadmin.notifications.OrderNotificationScheduler
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 private enum class AdminTab(val labelRes: Int, val icon: ImageVector) {
     DASHBOARD(R.string.admin_tab_dashboard, Icons.Filled.Dashboard),
@@ -53,6 +67,35 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val diagnostics by viewModel.diagnostics.collectAsStateWithLifecycle()
     val diagnosticsRunning by viewModel.diagnosticsRunning.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) OrderNotificationScheduler.checkNow(context)
+    }
+
+    LaunchedEffect(session?.userId) {
+        if (session != null && OrderNotificationScheduler.isEnabled(context)) {
+            OrderNotificationScheduler.checkNow(context)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                !OrderNotificationScheduler.permissionWasPrompted(context) &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                OrderNotificationScheduler.markPermissionPrompted(context)
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+    // Keep an open admin screen reasonably fresh, and refresh on every resume.
+    // This is separate from Android's delayed background notification checks.
+    LaunchedEffect(session?.userId, lifecycleOwner) {
+        if (session != null) lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (currentCoroutineContext().isActive) {
+                viewModel.refresh()
+                delay(30_000)
+            }
+        }
+    }
 
     if (session == null) {
         LoginScreen(
@@ -73,6 +116,9 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
     // plain remember the owner was thrown back to the dashboard every time the
     // phone was turned.
     var tab by rememberSaveable { mutableStateOf(AdminTab.DASHBOARD) }
+    val storeName = settings?.get("storeName")?.takeIf { it.isNotBlank() }
+        ?: stringResource(R.string.app_name)
+    val currency = settings?.get("currency")?.takeIf { it.isNotBlank() } ?: "د.ج"
 
     // Wide screens (foldables and tablets) get a navigation rail instead of the
     // bottom bar, so the content area keeps its full height.
@@ -132,15 +178,28 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
             ) {
                 when (tab) {
                     AdminTab.DASHBOARD -> DashboardScreen(
-                        stats = viewModel.stats(),
+                        state = state,
+                        storeName = storeName,
+                        currency = currency,
                         onRefresh = viewModel::refresh,
+                        onOrdersClick = {
+                            viewModel.setStatusFilter(null)
+                            viewModel.setSearchQuery("")
+                            tab = AdminTab.ORDERS
+                        },
+                        onProductsClick = {
+                            viewModel.setSearchQuery("")
+                            tab = AdminTab.PRODUCTS
+                        },
+                        onStatusUpdate = { id, status, onDone -> viewModel.updateOrderStatus(id, status, onDone) },
                     )
                     AdminTab.ORDERS -> OrdersScreen(
                         state = state,
                         onFilterChange = viewModel::setStatusFilter,
                         onSearchChange = viewModel::setSearchQuery,
-                        onStatusUpdate = { id, status -> viewModel.updateOrderStatus(id, status) },
+                        onStatusUpdate = { id, status, onDone -> viewModel.updateOrderStatus(id, status, onDone) },
                         onRefresh = viewModel::refresh,
+                        currency = currency,
                     )
                     AdminTab.PRODUCTS -> ProductsScreen(
                         products = state.products,
@@ -165,7 +224,9 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
                         },
                     )
                     AdminTab.SETTINGS -> SettingsScreen(
-                        onSave = { values -> viewModel.saveSettings(values) {} },
+                        onSave = viewModel::saveSettings,
+                        initialSettings = settings,
+                        onRefresh = viewModel::refresh,
                         checks = diagnostics,
                         checking = diagnosticsRunning,
                         onCheckConnection = viewModel::runDiagnostics,
@@ -191,6 +252,8 @@ private fun authErrorMessage(
 ): String? = when {
     authorization == com.zakeleo877.saeedadmin.data.AdminAuthorization.NotAuthorized ->
         stringResource(R.string.admin_not_authorized)
+    loadError == "invalid_credentials" -> stringResource(R.string.admin_invalid_credentials)
+    loadError == "rate_limited" -> stringResource(R.string.admin_rate_limited)
     loadError != null -> stringResource(R.string.admin_load_error)
     else -> null
 }
