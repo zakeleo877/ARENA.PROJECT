@@ -1,6 +1,8 @@
 package com.zakeleo877.saeedcore
 
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.zakeleo877.saeedcore.data.CartPersistence
@@ -14,10 +16,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -28,22 +29,32 @@ import org.junit.Test
  * The basket has to survive the app being closed.
  *
  * The store was documented as persisted and nothing wrote it, so every restart
- * emptied the basket. These tests use the real file rather than a mock: a bug in
- * the serialisation is exactly the kind a mock hides.
+ * emptied the basket. These tests use a real file rather than a mock: the
+ * serialisation is exactly the part a mock would hide.
+ *
+ * One rule governs the whole file: **only one DataStore may be alive for a given
+ * file at a time**. DataStore enforces this, and two live instances deadlock
+ * rather than fail loudly, which is what made the first version of these tests
+ * time out. A "restart" is therefore modelled by stopping the first instance
+ * before the second is created.
  */
 class CartPersistenceTest {
 
     private val directory: File = Files.createTempDirectory("cart").toFile()
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scopes = mutableListOf<CoroutineScope>()
 
     @After
     fun tearDown() {
-        scope.cancel()
+        scopes.forEach { it.cancel() }
         directory.deleteRecursively()
     }
 
-    private fun dataStore(name: String = "cart.preferences_pb") =
-        PreferenceDataStoreFactory.create(scope = scope) { File(directory, name) }
+    /** A DataStore with its own scope, so it can be stopped before the next one starts. */
+    private fun freshStore(name: String = "cart.preferences_pb"): Pair<DataStore<Preferences>, CoroutineScope> {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        scopes += scope
+        return PreferenceDataStoreFactory.create(scope = scope) { File(directory, name) } to scope
+    }
 
     private fun product(id: String, price: String = "1200.50") = Product(
         id = id,
@@ -58,92 +69,117 @@ class CartPersistenceTest {
     )
 
     /**
-     * Waits for the mirroring collector, on real time.
+     * Reads the raw bytes that were written.
      *
-     * The collector runs on Dispatchers.IO, so virtual time is the wrong clock:
-     * the 5s budget would expire instantly while the write had not happened yet.
-     * `runBlocking` on the IO dispatcher keeps the two clocks apart.
+     * Asserting on the stored JSON, rather than on a second in-memory object,
+     * is what makes this a test of persistence and not of caching.
      */
-    private fun awaitWritten(expected: Int) = runBlocking(Dispatchers.IO) {
-        withTimeout(5_000) {
-            while (CartPersistence(dataStore(), scope).load().size != expected) {
-                delay(20)
+    private fun storedJson(ds: DataStore<Preferences>) = runBlocking(Dispatchers.IO) {
+        withTimeout(10_000) {
+            var raw: String? = null
+            while (raw == null) {
+                raw = ds.data.first()[stringPreferencesKey("cart_v1")]
+                if (raw == null) delay(20)
             }
-        }
-    }
-
-    /** Waits until the first stored line reports [quantity]. */
-    private fun awaitQuantity(id: String, quantity: Int) = runBlocking(Dispatchers.IO) {
-        withTimeout(5_000) {
-            while (CartPersistence(dataStore(), scope).load()
-                    .firstOrNull { it.product.id == id }?.quantity != quantity
-            ) {
-                delay(20)
-            }
+            raw
         }
     }
 
     @Test
-    fun `a basket written by one process is read by the next`() = runTest {
+    fun `the basket reaches the disk and can be read back`() {
+        val (ds, _) = freshStore()
         val store = CartStore()
         store.add(product("a"), 2)
         store.add(product("b"), 1)
-        val persistence = CartPersistence(dataStore(), scope)
-        persistence.bind(store)
-        awaitWritten(2)
+        CartPersistence(ds, scopes.last()).bind(store)
 
-        // A second instance over the same file stands in for the next launch.
-        val restarted = CartPersistence(dataStore(), scope).load()
-        assertEquals(2, restarted.size)
-        assertEquals(2, restarted.first { it.product.id == "a" }.quantity)
-        assertEquals(
-            "the price the customer saw is the price remembered",
-            BigDecimal("1200.50"),
-            restarted.first { it.product.id == "a" }.product.price,
+        val written = storedJson(ds)
+        assertTrue("the file must carry both lines", written.contains("\"id\":\"a\""))
+        assertTrue(written.contains("\"id\":\"b\""))
+        assertTrue("the quantity is stored, not just the id", written.contains("\"quantity\":2"))
+        assertTrue(
+            "the price the customer saw is remembered, not looked up again",
+            written.contains("1200.50"),
         )
     }
 
     @Test
-    fun `an empty file is an empty basket, not a crash`() = runTest {
-        assertTrue(CartPersistence(dataStore("fresh.preferences_pb"), scope).load().isEmpty())
+    fun `a basket written by one process is read by the next`() {
+        val (first, firstScope) = freshStore()
+        val store = CartStore()
+        store.add(product("a"), 3)
+        CartPersistence(first, firstScope).bind(store)
+        storedJson(first)
+        // The process ends: its scope, and with it the DataStore, is stopped
+        // before the next launch opens the same file.
+        firstScope.cancel()
+        Thread.sleep(100)
+
+        val (second, secondScope) = freshStore()
+        val restarted = runBlocking(Dispatchers.IO) { CartPersistence(second, secondScope).load() }
+        assertEquals("the basket survived the restart", 1, restarted.size)
+        assertEquals(3, restarted.single().quantity)
+        assertEquals(
+            BigDecimal("1200.50"),
+            restarted.single().product.price,
+        )
     }
 
     @Test
-    fun `a corrupt row is dropped and the rest of the basket survives`() = runTest {
-        val ds = dataStore("corrupt.preferences_pb")
-        ds.edit { prefs ->
-            prefs[stringPreferencesKey("cart_v1")] =
-                """[{"id":"a","name":"جيد","price":"100","quantity":3},""" +
-                    """{"id":"b","name":"تالف","price":"ليس رقماً","quantity":1}]"""
+    fun `an empty file is an empty basket, not a crash`() {
+        val (ds, scope) = freshStore("fresh.preferences_pb")
+        assertTrue(runBlocking(Dispatchers.IO) { CartPersistence(ds, scope).load() }.isEmpty())
+    }
+
+    @Test
+    fun `a corrupt row is dropped and the rest of the basket survives`() {
+        val (ds, scope) = freshStore("corrupt.preferences_pb")
+        runBlocking(Dispatchers.IO) {
+            ds.edit { prefs ->
+                prefs[stringPreferencesKey("cart_v1")] =
+                    """[{"id":"a","name":"جيد","price":"100","quantity":3},""" +
+                        """{"id":"b","name":"تالف","price":"ليس رقماً","quantity":1}]"""
+            }
         }
-        val items = CartPersistence(ds, scope).load()
+        val items = runBlocking(Dispatchers.IO) { CartPersistence(ds, scope).load() }
         assertEquals("only the usable row is kept", 1, items.size)
         assertEquals("a", items.single().product.id)
     }
 
     @Test
-    fun `quantities outside the allowed range are clamped, not rejected`() = runTest {
-        val ds = dataStore("clamp.preferences_pb")
-        ds.edit { prefs ->
-            prefs[stringPreferencesKey("cart_v1")] =
-                """[{"id":"a","name":"كثير","price":"10","quantity":900}]"""
+    fun `quantities outside the allowed range are clamped, not rejected`() {
+        val (ds, scope) = freshStore("clamp.preferences_pb")
+        runBlocking(Dispatchers.IO) {
+            ds.edit { prefs ->
+                prefs[stringPreferencesKey("cart_v1")] =
+                    """[{"id":"a","name":"كثير","price":"10","quantity":900}]"""
+            }
         }
-        assertEquals(99, CartPersistence(ds, scope).load().single().quantity)
+        val items = runBlocking(Dispatchers.IO) { CartPersistence(ds, scope).load() }
+        assertEquals(99, items.single().quantity)
     }
 
     @Test
-    fun `the mirror follows later edits`() = runTest {
+    fun `the mirror follows later edits`() {
+        val (ds, scope) = freshStore()
         val store = CartStore()
-        val persistence = CartPersistence(dataStore(), scope)
-        persistence.bind(store)
+        CartPersistence(ds, scope).bind(store)
+
         store.add(product("a"), 1)
-        awaitWritten(1)
+        assertTrue(storedJson(ds).contains("\"quantity\":1"))
 
         store.setQuantity("a", 5)
-        awaitQuantity("a", 5)
+        runBlocking(Dispatchers.IO) {
+            withTimeout(10_000) {
+                while (!storedJson(ds).contains("\"quantity\":5")) delay(20)
+            }
+        }
 
         store.remove("a")
-        awaitWritten(0)
-        assertTrue(store.items.first().isEmpty())
+        runBlocking(Dispatchers.IO) {
+            withTimeout(10_000) {
+                while (storedJson(ds) != "[]") delay(20)
+            }
+        }
     }
 }
