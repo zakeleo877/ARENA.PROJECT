@@ -81,9 +81,21 @@ class CustomerDesignUiTest {
     @Test
     fun `home discovery opens the distinct products view`() {
         setCatalog()
-        composeRule.onNodeWithText("اكتشف المنتجات").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("حلاقة وتجميل").assertIsDisplayed()
+        composeRule.onNodeWithText("عنايتك تبدأ هنا").assertIsDisplayed()
+        composeRule.onNodeWithText("من اختيارات السعيد").assertDoesNotExist()
+        composeRule.onNodeWithText("تصفّح المنتجات").assertIsDisplayed().performClick()
         composeRule.onNodeWithText("كل المنتجات").assertIsDisplayed()
-        composeRule.onNodeWithText("اكتشف المنتجات").assertDoesNotExist()
+        composeRule.onNodeWithText("تصفّح المنتجات").assertDoesNotExist()
+    }
+
+    @Test
+    @Config(qualifiers = "w320dp-h640dp")
+    fun `home feature stays visible and usable on a narrow screen`() {
+        setCatalog()
+        composeRule.onNodeWithText("عنايتك تبدأ هنا").assertIsDisplayed()
+        composeRule.onNodeWithText("تصفّح المنتجات").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("كل المنتجات").assertIsDisplayed()
     }
 
     @Test

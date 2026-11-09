@@ -50,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -72,6 +73,7 @@ import com.zakeleo877.saeedcore.designsystem.SaeedChipSurface
 import com.zakeleo877.saeedcore.designsystem.SaeedDiscountRed
 import com.zakeleo877.saeedcore.designsystem.SaeedEmptyState
 import com.zakeleo877.saeedcore.designsystem.SaeedGold
+import com.zakeleo877.saeedcore.designsystem.SaeedGoldInk
 import com.zakeleo877.saeedcore.designsystem.SaeedGoldSoft
 import com.zakeleo877.saeedcore.designsystem.SaeedGreen
 import com.zakeleo877.saeedcore.designsystem.SaeedGreenDark
@@ -268,25 +270,38 @@ private fun CatalogHeader(storeName: String, isHome: Boolean, cartCount: Int, on
 @Composable
 private fun CatalogFeature(onShowAll: () -> Unit) {
     Box(
-        Modifier.fillMaxWidth().heightIn(min = 190.dp).clip(RoundedCornerShape(20.dp)).background(SaeedGreen),
+        Modifier.fillMaxWidth().heightIn(min = 190.dp).clip(RoundedCornerShape(20.dp)).background(SaeedGoldSoft),
     ) {
-        // A neutral botanical background, never a photograph of a fictitious product.
+        // The tools are a decorative scene, not products from the shop catalogue.
         Image(
             painter = painterResource(R.drawable.catalog_editorial),
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.matchParentSize(),
         )
+        // Keep the right-hand RTL copy on a consistent light surface, even if
+        // the image is cropped differently on a wider or narrower screen.
+        Box(
+            Modifier.matchParentSize().background(
+                Brush.horizontalGradient(
+                    0f to Color.Transparent,
+                    0.24f to Color.Transparent,
+                    0.34f to SaeedGoldSoft,
+                    1f to SaeedGoldSoft,
+                ),
+            ),
+        )
         Column(
-            modifier = Modifier.fillMaxWidth(0.8f).align(Alignment.CenterStart).padding(18.dp),
+            modifier = Modifier.fillMaxWidth(0.67f).align(Alignment.CenterStart).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(stringResource(R.string.catalog_feature_label), style = MaterialTheme.typography.labelMedium, color = SaeedGold)
-            Text(stringResource(R.string.catalog_feature_title), style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Text(stringResource(R.string.catalog_feature_label), style = MaterialTheme.typography.labelMedium, color = SaeedGoldInk)
+            Text(stringResource(R.string.catalog_feature_title), style = MaterialTheme.typography.titleLarge, color = SaeedInk)
             Button(
                 onClick = onShowAll,
                 shape = MaterialTheme.shapes.small,
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = SaeedGreen),
+                colors = ButtonDefaults.buttonColors(containerColor = SaeedGreen, contentColor = Color.White),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 modifier = Modifier.defaultMinSize(minHeight = 48.dp),
             ) { Text(stringResource(R.string.catalog_discover), style = MaterialTheme.typography.labelLarge) }
         }

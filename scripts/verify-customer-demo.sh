@@ -86,11 +86,24 @@ snapshot() {
   [ -s "$OUTPUT/$1" ] || { echo "FAIL: empty screenshot $1"; exit 1; }
 }
 
-# Open the independent product tab and verify the test catalogue was actually seeded.
-tap desc 'المنتجات'
-wait_node text 'كل المنتجات' >/dev/null
+# The preceding screenshot check may have scrolled the page. Return to the top
+# before checking the redesigned banner and its real products action.
 size="$("$ADB" -s "$SERIAL" shell wm size | tr -d '\r' | grep -oE '[0-9]+x[0-9]+' | tail -1)"
 width="${size%x*}"; height="${size#*x}"
+for _ in 1 2; do
+  "$ADB" -s "$SERIAL" shell input swipe "$((width / 2))" "$((height / 4))" "$((width / 2))" "$((height * 3 / 4))" 350
+done
+wait_node text 'عنايتك تبدأ هنا' >/dev/null
+snapshot customer-home-feature.png
+tap text 'تصفّح المنتجات'
+wait_node text 'كل المنتجات' >/dev/null
+printf 'PASS: redesigned home feature opens the products view\n'
+
+# Also verify the independent product tab and its isolated sample catalogue.
+tap desc 'الرئيسية'
+wait_node text 'عنايتك تبدأ هنا' >/dev/null
+tap desc 'المنتجات'
+wait_node text 'كل المنتجات' >/dev/null
 for _ in 1 2 3 4; do
   dump_ui || true
   if find_node contains 'أداة تصفيف تجريبية' >/dev/null; then break; fi

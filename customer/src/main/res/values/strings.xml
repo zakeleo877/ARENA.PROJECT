@@ -75,9 +75,9 @@
     <string name="catalog_pending_tab">المعلّقة</string>
     <string name="catalog_welcome">مرحباً بك</string>
     <string name="catalog_welcome_title">تفاصيل أجمل ليومك</string>
-    <string name="catalog_feature_label">من اختيارات السعيد</string>
-    <string name="catalog_feature_title">أشياء تحبّها، قريبة منك.</string>
-    <string name="catalog_discover">اكتشف المنتجات</string>
+    <string name="catalog_feature_label">حلاقة وتجميل</string>
+    <string name="catalog_feature_title">عنايتك تبدأ هنا</string>
+    <string name="catalog_discover">تصفّح المنتجات</string>
     <string name="catalog_categories">تسوّق حسب التصنيف</string>
     <string name="catalog_choices">اختيارات لك</string>
     <string name="catalog_view_all">عرض الكل</string>
