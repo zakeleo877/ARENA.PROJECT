@@ -22,6 +22,7 @@ import com.zakeleo877.saeedcore.model.Product
 import com.zakeleo877.saeedcore.model.StoreSettings
 import com.zakeleo877.saeedcore.network.NetworkMonitor
 import com.zakeleo877.saeedstore.BuildConfig
+import com.zakeleo877.saeedstore.orders.PendingOrdersScheduler
 import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.serialization.SerialName
@@ -149,6 +150,8 @@ class CustomerViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CustomerUiState())
 
     init {
+        // Recover waiting/interrupted rows left by older versions or a killed process.
+        PendingOrdersScheduler.enqueue(context)
         viewModelScope.launch { seedDemoCatalog() }
         refresh()
         viewModelScope.launch {
@@ -246,9 +249,11 @@ class CustomerViewModel @Inject constructor(
         )
     }
 
-    suspend fun submit(order: PendingOrder): SubmitOutcome = orderRepository.submit(order, isOnline())
+    suspend fun submit(order: PendingOrder): SubmitOutcome =
+        orderRepository.submit(order, isOnline()) { PendingOrdersScheduler.enqueue(context) }
 
-    suspend fun retry(clientId: String): SubmitOutcome = orderRepository.retry(clientId)
+    suspend fun retry(clientId: String): SubmitOutcome =
+        orderRepository.retry(clientId) { PendingOrdersScheduler.enqueue(context) }
 
     suspend fun deletePending(clientId: String) = orderRepository.delete(clientId)
 

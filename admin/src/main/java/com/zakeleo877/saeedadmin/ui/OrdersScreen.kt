@@ -105,11 +105,25 @@ fun OrdersScreen(
         }
         Spacer(Modifier.height(12.dp))
 
+        if (state.ordersLoadFailed && state.orders.isNotEmpty()) {
+            Text(
+                text = stringResource(R.string.admin_orders_stale),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Spacer(Modifier.height(8.dp))
+        }
         if (state.orders.isEmpty()) {
             SaeedEmptyState(
-                message = stringResource(R.string.admin_no_orders),
+                message = stringResource(
+                    when {
+                        state.ordersLoadFailed -> R.string.admin_orders_load_failed
+                        state.isLoading -> R.string.admin_orders_loading
+                        else -> R.string.admin_no_orders
+                    },
+                ),
                 icon = Icons.Filled.ReceiptLong,
-                retry = onRefresh,
+                retry = if (state.isLoading) null else onRefresh,
             )
             return@Column
         }

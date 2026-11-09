@@ -13,7 +13,8 @@ class LastSeenOrderStore(context: Context) {
     fun lastSeenNumber(): Long = preferences.getLong(KEY_LAST_SEEN, 0L)
 
     fun setLastSeenNumber(number: Long) {
-        preferences.edit().putLong(KEY_LAST_SEEN, number).apply()
+        // The cursor is a posting receipt: persist it before checking the next order.
+        preferences.edit().putLong(KEY_LAST_SEEN, number).commit()
     }
 
     private companion object {

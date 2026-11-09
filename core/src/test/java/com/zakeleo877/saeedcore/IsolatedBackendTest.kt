@@ -118,6 +118,7 @@ class IsolatedBackendTest {
         override suspend fun insert(order: PendingOrderEntity) { rows[order.clientId] = order }
         override fun observeAll(): Flow<List<PendingOrderEntity>> = flowOf(rows.values.toList())
         override suspend fun find(clientId: String): PendingOrderEntity? = rows[clientId]
+        override suspend fun update(order: PendingOrderEntity) { if (rows.containsKey(order.clientId)) rows[order.clientId] = order }
         override suspend fun delete(clientId: String) { rows.remove(clientId) }
     }
 

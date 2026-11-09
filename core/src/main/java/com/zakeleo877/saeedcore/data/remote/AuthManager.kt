@@ -10,6 +10,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import java.util.Base64
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -105,6 +106,8 @@ class AuthManager(
             } else {
                 AuthResult.Success(session(response.body<AuthTokenWire>(), email.trim()))
             }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: java.io.IOException) {
             AuthResult.Failure(AuthError.NETWORK)
         } catch (_: Exception) {
@@ -120,7 +123,12 @@ class AuthManager(
             setBody(RefreshRequest(session.refreshToken))
         }
         if (!response.status.isSuccess()) {
-            AuthResult.Failure(AuthError.INVALID_CREDENTIALS)
+            val reason = when (response.status.value) {
+                400, 401, 403 -> AuthError.INVALID_CREDENTIALS
+                429 -> AuthError.RATE_LIMITED
+                else -> AuthError.SERVER
+            }
+            AuthResult.Failure(reason)
         } else {
             val token = response.body<AuthTokenWire>()
             AuthResult.Success(
@@ -131,6 +139,8 @@ class AuthManager(
                 ),
             )
         }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
     } catch (_: java.io.IOException) {
         AuthResult.Failure(AuthError.NETWORK)
     } catch (_: Exception) {

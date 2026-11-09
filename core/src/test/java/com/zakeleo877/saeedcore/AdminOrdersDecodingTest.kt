@@ -47,6 +47,27 @@ class AdminOrdersDecodingTest {
     }
 
     @Test
+    fun `notification query requests only unseen numbers with the admin token`() = runTest {
+        var requested: io.ktor.http.Url? = null
+        var authorization: String? = null
+        val client = HttpClient(MockEngine { request ->
+            requested = request.url
+            authorization = request.headers[HttpHeaders.Authorization]
+            respond("""[{"number":11},{"number":12}]""", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+        }) {
+            install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+        }
+        try {
+            val api = AdminApi(client, SupabasePublicConfig("https://project.example", "sb_publishable_test_key"))
+            assertEquals(listOf(11L, 12L), api.newOrderNumbers("admin-token", after = 10))
+            assertEquals("Bearer admin-token", authorization)
+            assertEquals("number", requested?.parameters?.get("select"))
+            assertEquals("gt.10", requested?.parameters?.get("number"))
+            assertEquals("number.asc", requested?.parameters?.get("order"))
+        } finally { client.close() }
+    }
+
+    @Test
     fun `reads quoted prices and nullable optional fields without hiding the order`() = runTest {
         val result = decode(
             """[{"id":"00000000-0000-4000-8000-000000000002","number":43,"customer":"عميل تجريبي","phone":"0000000000","notes":null,"location":null,"channel":"التطبيق","status":"جديد","details":[{"product_id":null,"name":"منتج اختباري","price":"10.75","qty":1}],"total":"10.75","client_id":null,"created_at":"2026-01-01T12:00:00+00:00"}]""",

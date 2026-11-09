@@ -30,10 +30,16 @@ import kotlinx.serialization.json.Json
  * enough that it does not need a worker, and the session is needed before the
  * first screen is drawn.
  */
-class SessionVault(private val context: Context) {
+interface SessionStore {
+    fun load(): AdminSession?
+    fun save(session: AdminSession)
+    fun clear()
+}
+
+class SessionVault(private val context: Context) : SessionStore {
 
     /** The decrypted session, or null when there is none or it cannot be read. */
-    fun load(): AdminSession? {
+    override fun load(): AdminSession? {
         val stored = preferences().getString(KEY_BLOB, null) ?: return null
         val plain = open(stored) ?: return null
         return runCatching { json.decodeFromString<StoredSession>(plain) }
@@ -41,7 +47,7 @@ class SessionVault(private val context: Context) {
             ?.toSession()
     }
 
-    fun save(session: AdminSession) {
+    override fun save(session: AdminSession) {
         val sealed = runCatching { seal(json.encodeToString(StoredSession.from(session))) }.getOrNull()
         if (sealed == null) {
             // Failing to save is not a reason to lose the session the manager
@@ -52,7 +58,7 @@ class SessionVault(private val context: Context) {
         preferences().edit().putString(KEY_BLOB, sealed).commit()
     }
 
-    fun clear() {
+    override fun clear() {
         preferences().edit().remove(KEY_BLOB).commit()
     }
 

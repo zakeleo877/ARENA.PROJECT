@@ -53,7 +53,9 @@ private data class ProductUpsertWire(
 private data class OrderItemDetailWire(
     @SerialName("product_id") val productId: String? = null,
     val name: String,
-    val price: String,
+    // PostgREST returns numeric columns and JSONB prices as JSON numbers, not
+    // necessarily quoted strings. Preserve the decimal spelling for BigDecimal.
+    val price: JsonElement,
     val qty: Int,
 )
 
@@ -63,13 +65,13 @@ private data class OrderWire(
     val number: Long,
     val customer: String,
     val phone: String,
-    val notes: String,
+    val notes: String? = null,
     /** Contact-only map link for shop-to-customer contact. */
-    @SerialName("location") val customerLocationUrl: String,
+    @SerialName("location") val customerLocationUrl: String? = null,
     val channel: String,
     val status: String,
     val details: List<OrderItemDetailWire>,
-    val total: String,
+    val total: JsonElement,
     @SerialName("client_id") val clientId: String? = null,
     @SerialName("created_at") val createdAt: String,
 ) {
@@ -78,18 +80,31 @@ private data class OrderWire(
         number = number,
         customer = customer,
         phone = phone,
-        notes = notes,
-        customerLocationUrl = customerLocationUrl,
+        notes = notes.orEmpty(),
+        customerLocationUrl = customerLocationUrl.orEmpty(),
         channel = if (channel == OrderChannel.MANUAL.databaseValue) OrderChannel.MANUAL else OrderChannel.APP,
         status = runCatching { OrderStatus.fromDatabase(status) }.getOrDefault(OrderStatus.NEW),
         items = details.map {
-            OrderItem(it.productId.orEmpty(), it.name, it.price.toBigDecimal(), it.qty)
+            OrderItem(it.productId.orEmpty(), it.name, orderDecimal(it.price), it.qty)
         },
-        total = total.toBigDecimal(),
+        total = orderDecimal(total),
         clientId = clientId,
         createdAt = OffsetDateTime.parse(createdAt).toInstant(),
     )
 }
+
+/** Do not silently turn malformed order prices into a plausible zero. */
+private fun orderDecimal(value: JsonElement): BigDecimal {
+    val decimal = value.jsonPrimitive.contentOrNull?.toBigDecimalOrNull()
+    require(decimal != null && decimal.signum() >= 0) { "Invalid order amount." }
+    return decimal
+}
+
+@Serializable
+private data class OrderNumberWire(val number: Long)
+
+@Serializable
+private data class SettingReadWire(val key: String, val value: String)
 
 @Serializable
 private data class SettingUpsertWire(val key: String, val value: String)
@@ -151,6 +166,20 @@ class AdminApi(
         }
         ensureSuccess(response)
         return response.body<List<OrderWire>>().map(OrderWire::model)
+    }
+
+    /** Only order numbers are needed for notifications; do not fetch customer details. */
+    suspend fun newOrderNumbers(token: String, after: Long, limit: Int = ORDERS_PAGE_SIZE): List<Long> {
+        val response = client.get("${config.baseUrl}/rest/v1/orders") {
+            headers(token)
+            parameter("select", "number")
+            parameter("status", "eq.${OrderStatus.NEW.databaseValue}")
+            parameter("number", "gt.${after.coerceAtLeast(0)}")
+            parameter("order", "number.asc")
+            parameter("limit", limit.coerceIn(1, MAX_ORDERS_PAGE_SIZE))
+        }
+        ensureSuccess(response)
+        return response.body<List<OrderNumberWire>>().map { it.number }
     }
 
     suspend fun updateOrderStatus(token: String, orderId: String, status: OrderStatus): Boolean {
@@ -404,6 +433,15 @@ class AdminApi(
             parameter("id", "eq.$id")
         }
         return response.status.isSuccess()
+    }
+
+    suspend fun settings(token: String): Map<String, String> {
+        val response = client.get("${config.baseUrl}/rest/v1/settings") {
+            headers(token)
+            parameter("select", "key,value")
+        }
+        ensureSuccess(response)
+        return response.body<List<SettingReadWire>>().associate { it.key to it.value }
     }
 
     suspend fun updateSettings(token: String, values: Map<String, String>): Boolean {

@@ -149,6 +149,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.hilt.navigation.compose)
+    implementation(libs.androidx.hilt.work)
+    implementation(libs.androidx.work.runtime)
     implementation(libs.hilt.android)
     implementation(libs.kotlinx.coroutines.android)
     // The optional throwaway catalogue is read with kotlinx.serialization.

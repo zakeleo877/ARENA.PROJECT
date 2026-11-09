@@ -35,6 +35,7 @@ import com.zakeleo877.saeedadmin.R
 fun DashboardScreen(
     stats: DashboardStats,
     onRefresh: () -> Unit,
+    ordersLoadFailed: Boolean = false,
 ) {
     Column(
         Modifier
@@ -55,6 +56,14 @@ fun DashboardScreen(
             )
         }
         Spacer(Modifier.height(16.dp))
+        if (ordersLoadFailed) {
+            Text(
+                text = stringResource(R.string.admin_orders_stale),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Spacer(Modifier.height(12.dp))
+        }
 
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 150.dp),

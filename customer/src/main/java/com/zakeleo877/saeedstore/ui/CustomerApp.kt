@@ -41,6 +41,8 @@ import com.zakeleo877.saeedcore.util.Links
 import com.zakeleo877.saeedstore.R
 import kotlinx.coroutines.launch
 
+private data class ConfirmedOrder(val number: Long, val items: List<CartItem>)
+
 private object Routes {
     const val CATALOG = "catalog"
     const val CART = "cart"
@@ -67,18 +69,19 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
     val addedToCartText = stringResource(R.string.add_to_cart)
     val cartRemovedText = stringResource(R.string.cart_removed)
     val undoText = stringResource(R.string.action_undo)
-    val genericErrorText = stringResource(R.string.generic_error)
     val orderSuccessTitle = stringResource(R.string.order_success_title)
     val orderNumberLabel = stringResource(R.string.order_number)
     val orderDoneText = stringResource(R.string.order_done)
     val orderQueuedTitle = stringResource(R.string.order_queued_title)
     val orderQueuedMessage = stringResource(R.string.order_queued_message)
-    val cartTotalLabel = stringResource(R.string.cart_total)
+    val estimatedTotalLabel = stringResource(R.string.order_estimated_total)
+    val whatsappHint = stringResource(R.string.order_success_whatsapp_hint)
+    val orderRejectedText = stringResource(R.string.order_rejected_message)
 
     var checkoutOpen by remember { mutableStateOf(false) }
     var submitting by remember { mutableStateOf(false) }
     var selectedProduct by remember { mutableStateOf<Product?>(null) }
-    var successNumber by remember { mutableStateOf<Long?>(null) }
+    var confirmedOrder by remember { mutableStateOf<ConfirmedOrder?>(null) }
     var queuedMessage by remember { mutableStateOf(false) }
     var lastRemoved by remember { mutableStateOf<CartItem?>(null) }
 
@@ -158,9 +161,13 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                     orders = pendingOrders,
                     onRetry = { clientId ->
                         scope.launch {
-                            when (viewModel.retry(clientId)) {
-                                is SubmitOutcome.Sent -> navController.popBackStack()
-                                else -> Unit
+                            when (val outcome = viewModel.retry(clientId)) {
+                                is SubmitOutcome.Sent -> {
+                                    confirmedOrder = ConfirmedOrder(outcome.orderNumber, emptyList())
+                                    navController.popBackStack()
+                                }
+                                is SubmitOutcome.Queued -> queuedMessage = true
+                                is SubmitOutcome.Rejected -> snackbarHostState.showSnackbar(orderRejectedText)
                             }
                         }
                     },
@@ -239,7 +246,8 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                             is SubmitOutcome.Sent -> {
                                 submitting = false
                                 checkoutOpen = false
-                                successNumber = outcome.orderNumber
+                                // Preserve the ordered snapshot before clearing the cart.
+                                confirmedOrder = ConfirmedOrder(outcome.orderNumber, viewModel.cart.snapshot())
                                 viewModel.clearCart()
                             }
                             is SubmitOutcome.Queued -> {
@@ -250,7 +258,7 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                             }
                             is SubmitOutcome.Rejected -> {
                                 submitting = false
-                                scope.launch { snackbarHostState.showSnackbar(genericErrorText) }
+                                scope.launch { snackbarHostState.showSnackbar(orderRejectedText) }
                             }
                         }
                     }
@@ -259,9 +267,10 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
         }
     }
 
-    successNumber?.let { number ->
+    confirmedOrder?.let { confirmed ->
+        val number = confirmed.number
         val settings = state.settings
-        val total = cartItems.sumOf { it.estimatedTotal }
+        val total = confirmed.items.sumOf { it.estimatedTotal }
         val summary = buildString {
             append(orderNumberLabel)
             append(": ")
@@ -269,10 +278,16 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
             if (settings != null) {
                 append('\n')
                 append(settings.storeName)
-                append(" · ")
-                append(cartTotalLabel)
-                append(": ")
-                append(Formatters.money(total, settings.currency))
+                if (confirmed.items.isNotEmpty()) {
+                    append(" · ")
+                    append(estimatedTotalLabel)
+                    append(": ")
+                    append(Formatters.money(total, settings.currency))
+                }
+                if (settings.whatsapp.isNotBlank()) {
+                    append('\n')
+                    append(whatsappHint)
+                }
             }
         }
 
@@ -280,8 +295,8 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
             title = orderSuccessTitle,
             message = summary,
             confirmLabel = orderDoneText,
-            onConfirm = { successNumber = null },
-            onDismiss = { successNumber = null },
+            onConfirm = { confirmedOrder = null },
+            onDismiss = { confirmedOrder = null },
         )
 
         // The WhatsApp message carries the invoice number, the items and the total.
@@ -292,10 +307,18 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                 append(orderNumberLabel)
                 append(": ")
                 append(Formatters.orderNumber(number))
-                append('\n')
-                append(cartTotalLabel)
-                append(": ")
-                append(Formatters.money(total, current.currency))
+                confirmed.items.forEach { item ->
+                    append('\n')
+                    append(item.product.name)
+                    append(" ×")
+                    append(item.quantity)
+                }
+                if (confirmed.items.isNotEmpty()) {
+                    append('\n')
+                    append(estimatedTotalLabel)
+                    append(": ")
+                    append(Formatters.money(total, current.currency))
+                }
             }
             Links.whatsapp(current.whatsapp, message)
         }

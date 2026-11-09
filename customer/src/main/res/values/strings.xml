@@ -43,19 +43,22 @@
     <string name="order_success_title">تم استلام طلبك</string>
     <string name="order_number">رقم الفاتورة</string>
     <string name="order_queued_title">تم حفظ طلبك</string>
-    <string name="order_queued_message">سيُرسل طلبك تلقائياً عند عودة الاتصال.</string>
+    <string name="order_queued_message">حُفظ الطلب على جهازك ولم نتأكد من وصوله بعد. سيحاول التطبيق إرساله عند توفر الإنترنت؛ تابع حالته في الطلبات المعلّقة.</string>
+    <string name="order_estimated_total">المجموع التقديري</string>
+    <string name="order_success_whatsapp_hint">إذا فتح واتساب، اضغط زر الإرسال لتصل الرسالة إلى المتجر.</string>
+    <string name="order_rejected_message">تعذّر إرسال الطلب. راجع البيانات والطلبات المعلّقة ثم أعد المحاولة.</string>
     <string name="order_done">تم</string>
 
     <string name="pending_title">الطلبات المعلّقة</string>
     <string name="pending_empty">لا توجد طلبات معلّقة.</string>
-    <string name="pending_waiting">بانتظار الاتصال</string>
+    <string name="pending_waiting">بانتظار الإرسال</string>
     <string name="pending_sending">جارٍ الإرسال</string>
     <string name="pending_failed">فشل</string>
     <string name="pending_retry_now">إعادة المحاولة الآن</string>
     <string name="pending_delete">حذف</string>
     <string name="pending_error_network">تعذّر الاتصال بالخادم.</string>
     <string name="pending_error_server">خطأ في الخادم، أعد المحاولة لاحقاً.</string>
-    <string name="pending_error_invalid">الطلب مرفوض من المتجر، عدّل البيانات ثم أعد المحاولة.</string>
+    <string name="pending_error_invalid">رُفض الطلب. راجع البيانات والمنتجات في السلة قبل إعادة المحاولة.</string>
     <string name="pending_error_rate">تم تجاوز عدد الطلبات المسموح بها، حاول لاحقاً.</string>
 
     <string name="generic_error">حدث خطأ، حاول مجدداً.</string>
