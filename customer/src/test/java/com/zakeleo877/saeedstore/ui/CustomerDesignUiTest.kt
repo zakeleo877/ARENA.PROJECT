@@ -81,8 +81,10 @@ class CustomerDesignUiTest {
     @Test
     fun `home discovery opens the distinct products view`() {
         setCatalog()
-        composeRule.onNodeWithText("حلاقة وتجميل").assertIsDisplayed()
-        composeRule.onNodeWithText("عنايتك تبدأ هنا").assertIsDisplayed()
+        composeRule.onNodeWithText("تسوّق بالجملة لمحلك").assertIsDisplayed()
+        composeRule.onNodeWithText("لأصحاب المحلات").assertIsDisplayed()
+        composeRule.onNodeWithText("مستلزمات محلك بالجملة").assertIsDisplayed()
+        composeRule.onNodeWithText("عنايتك تبدأ هنا").assertDoesNotExist()
         composeRule.onNodeWithText("من اختيارات السعيد").assertDoesNotExist()
         composeRule.onNodeWithText("تصفّح المنتجات").assertIsDisplayed().performClick()
         composeRule.onNodeWithText("كل المنتجات").assertIsDisplayed()
@@ -93,7 +95,7 @@ class CustomerDesignUiTest {
     @Config(qualifiers = "w320dp-h640dp")
     fun `home feature stays visible and usable on a narrow screen`() {
         setCatalog()
-        composeRule.onNodeWithText("عنايتك تبدأ هنا").assertIsDisplayed()
+        composeRule.onNodeWithText("مستلزمات محلك بالجملة").assertIsDisplayed()
         composeRule.onNodeWithText("تصفّح المنتجات").assertIsDisplayed().performClick()
         composeRule.onNodeWithText("كل المنتجات").assertIsDisplayed()
     }
@@ -159,6 +161,8 @@ class CustomerDesignUiTest {
     fun `checkout validates fields and returns the form on a narrow screen`() {
         var submitted: CheckoutForm? = null
         composeRule.setContent { SaeedTheme { CheckoutSheet(submitting = false, onSubmit = { submitted = it }) } }
+        composeRule.onNodeWithText("لمساعدتنا على التواصل معك — اختياري").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("لمساعدة المحل على التواصل معك — اختياري").assertDoesNotExist()
         composeRule.onNodeWithText("إرسال الطلب").performScrollTo().performClick()
         composeRule.onNodeWithText("أدخل اسمك الكامل.").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("الاسم الكامل").performScrollTo().performTextInput("زبون تجريبي")

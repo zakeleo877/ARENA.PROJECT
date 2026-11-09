@@ -272,7 +272,7 @@ private fun CatalogFeature(onShowAll: () -> Unit) {
     Box(
         Modifier.fillMaxWidth().heightIn(min = 190.dp).clip(RoundedCornerShape(20.dp)).background(SaeedGoldSoft),
     ) {
-        // The tools are a decorative scene, not products from the shop catalogue.
+        // A decorative wholesale scene, not the shop's actual stock or products.
         Image(
             painter = painterResource(R.drawable.catalog_editorial),
             contentDescription = null,

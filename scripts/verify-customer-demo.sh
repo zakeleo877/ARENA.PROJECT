@@ -93,15 +93,15 @@ width="${size%x*}"; height="${size#*x}"
 for _ in 1 2; do
   "$ADB" -s "$SERIAL" shell input swipe "$((width / 2))" "$((height / 4))" "$((width / 2))" "$((height * 3 / 4))" 350
 done
-wait_node text 'عنايتك تبدأ هنا' >/dev/null
+wait_node text 'مستلزمات محلك بالجملة' >/dev/null
 snapshot customer-home-feature.png
 tap text 'تصفّح المنتجات'
 wait_node text 'كل المنتجات' >/dev/null
-printf 'PASS: redesigned home feature opens the products view\n'
+printf 'PASS: wholesale home feature opens the products view\n'
 
 # Also verify the independent product tab and its isolated sample catalogue.
 tap desc 'الرئيسية'
-wait_node text 'عنايتك تبدأ هنا' >/dev/null
+wait_node text 'مستلزمات محلك بالجملة' >/dev/null
 tap desc 'المنتجات'
 wait_node text 'كل المنتجات' >/dev/null
 for _ in 1 2 3 4; do
@@ -132,7 +132,7 @@ tap desc 'الطلبات المعلّقة'
 wait_node text 'لا توجد طلبات معلّقة.' >/dev/null
 printf 'PASS: pending tab opens the local send queue\n'
 tap desc 'الرئيسية'
-wait_node text 'تفاصيل أجمل ليومك' >/dev/null
+wait_node text 'تسوّق بالجملة لمحلك' >/dev/null
 printf 'PASS: home navigation works\n'
 
 [ -n "$("$ADB" -s "$SERIAL" shell pidof "$PACKAGE" | tr -d '\r')" ] || {
