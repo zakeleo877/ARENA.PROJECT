@@ -74,13 +74,23 @@ class CartPersistenceTest {
      * Asserting on the stored JSON, rather than on a second in-memory object,
      * is what makes this a test of persistence and not of caching.
      */
-    private fun storedJson(ds: DataStore<Preferences>) = runBlocking(Dispatchers.IO) {
+    /**
+     * Waits until the stored JSON satisfies [condition], and returns it.
+     *
+     * Waiting for "a value exists" is not enough: the collector's first write is
+     * the empty basket, so the check would return before the change under test
+     * had been written - which is exactly how this test failed once.
+     */
+    private fun awaitStored(
+        ds: DataStore<Preferences>,
+        condition: (String) -> Boolean = { true },
+    ): String = runBlocking(Dispatchers.IO) {
         withTimeout(10_000) {
-            var raw: String? = null
-            while (raw == null) {
-                raw = ds.data.first()[stringPreferencesKey("cart_v1")]
-                if (raw == null) delay(20)
-            }
+            var raw: String
+            do {
+                raw = ds.data.first()[stringPreferencesKey("cart_v1")].orEmpty()
+                if (!condition(raw)) delay(20)
+            } while (!condition(raw))
             raw
         }
     }
@@ -93,7 +103,7 @@ class CartPersistenceTest {
         store.add(product("b"), 1)
         CartPersistence(ds, scopes.last()).bind(store)
 
-        val written = storedJson(ds)
+        val written = awaitStored(ds) { it.contains("\"id\":\"b\"") }
         assertTrue("the file must carry both lines", written.contains("\"id\":\"a\""))
         assertTrue(written.contains("\"id\":\"b\""))
         assertTrue("the quantity is stored, not just the id", written.contains("\"quantity\":2"))
@@ -109,7 +119,7 @@ class CartPersistenceTest {
         val store = CartStore()
         store.add(product("a"), 3)
         CartPersistence(first, firstScope).bind(store)
-        storedJson(first)
+        awaitStored(first) { it.contains("\"id\":\"a\"") }
         // The process ends: its scope, and with it the DataStore, is stopped
         // before the next launch opens the same file.
         firstScope.cancel()
@@ -166,20 +176,12 @@ class CartPersistenceTest {
         CartPersistence(ds, scope).bind(store)
 
         store.add(product("a"), 1)
-        assertTrue(storedJson(ds).contains("\"quantity\":1"))
+        assertTrue(awaitStored(ds) { it.contains("\"quantity\":1") }.contains("\"quantity\":1"))
 
         store.setQuantity("a", 5)
-        runBlocking(Dispatchers.IO) {
-            withTimeout(10_000) {
-                while (!storedJson(ds).contains("\"quantity\":5")) delay(20)
-            }
-        }
+        assertTrue(awaitStored(ds) { it.contains("\"quantity\":5") }.contains("\"quantity\":5"))
 
         store.remove("a")
-        runBlocking(Dispatchers.IO) {
-            withTimeout(10_000) {
-                while (storedJson(ds) != "[]") delay(20)
-            }
-        }
+        assertEquals("an emptied basket is written as an empty list", "[]", awaitStored(ds) { it == "[]" })
     }
 }
