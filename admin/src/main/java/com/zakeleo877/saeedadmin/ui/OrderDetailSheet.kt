@@ -27,6 +27,8 @@ fun OrderDetailSheet(
     order: Order,
     onStatusChange: (OrderStatus) -> Unit,
     onClose: () -> Unit,
+    statusUpdating: Boolean = false,
+    currency: String = "د.ج",
 ) {
     Column(
         Modifier
@@ -72,7 +74,7 @@ fun OrderDetailSheet(
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    text = Formatters.money(item.price * item.quantity.toBigDecimal(), "د.ج"),
+                    text = Formatters.money(item.price * item.quantity.toBigDecimal(), currency),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -88,7 +90,7 @@ fun OrderDetailSheet(
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = Formatters.money(order.total, "د.ج"),
+                text = Formatters.money(order.total, currency),
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -105,6 +107,7 @@ fun OrderDetailSheet(
             SaeedButton(
                 text = status.databaseValue,
                 onClick = { onStatusChange(status) },
+                enabled = !statusUpdating,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),

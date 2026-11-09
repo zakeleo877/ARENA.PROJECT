@@ -8,14 +8,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.zakeleo877.saeedcore.R
 
-val Tajawal = FontFamily(
-    Font(R.font.tajawal_regular, FontWeight.Normal),
-    Font(R.font.tajawal_medium, FontWeight.Medium),
-    Font(R.font.tajawal_bold, FontWeight.Bold),
+/** Arabic type used by the approved preview; static weights also work on older Android. */
+val Alexandria = FontFamily(
+    Font(R.font.alexandria_regular, FontWeight.Normal),
+    Font(R.font.alexandria_medium, FontWeight.Medium),
+    Font(R.font.alexandria_bold, FontWeight.Bold),
 )
 
 private fun style(size: Int, line: Int, weight: FontWeight = FontWeight.Normal) = TextStyle(
-    fontFamily = Tajawal,
+    fontFamily = Alexandria,
     fontWeight = weight,
     fontSize = size.sp,
     lineHeight = line.sp,

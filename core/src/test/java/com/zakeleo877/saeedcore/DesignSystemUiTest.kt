@@ -13,6 +13,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
@@ -104,6 +107,21 @@ class DesignSystemUiTest {
         composeRule.onNodeWithText("الاسم").performTextInput("زبون")
         composeRule.waitForIdle()
         assertEquals(listOf("زبون"), changes)
+    }
+
+    @Test
+    fun `a password field keeps password semantics`() {
+        composeRule.setContent {
+            SaeedTheme {
+                SaeedTextField(
+                    value = "secret",
+                    onValueChange = {},
+                    label = "كلمة المرور",
+                    visualTransformation = PasswordVisualTransformation(),
+                )
+            }
+        }
+        composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password)).assertExists()
     }
 
     @Test

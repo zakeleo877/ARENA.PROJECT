@@ -116,6 +116,9 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
     // plain remember the owner was thrown back to the dashboard every time the
     // phone was turned.
     var tab by rememberSaveable { mutableStateOf(AdminTab.DASHBOARD) }
+    val storeName = settings?.get("storeName")?.takeIf { it.isNotBlank() }
+        ?: stringResource(R.string.app_name)
+    val currency = settings?.get("currency")?.takeIf { it.isNotBlank() } ?: "د.ج"
 
     // Wide screens (foldables and tablets) get a navigation rail instead of the
     // bottom bar, so the content area keeps its full height.
@@ -175,16 +178,28 @@ fun AdminApp(viewModel: AdminViewModel = hiltViewModel()) {
             ) {
                 when (tab) {
                     AdminTab.DASHBOARD -> DashboardScreen(
-                        stats = viewModel.stats(),
+                        state = state,
+                        storeName = storeName,
+                        currency = currency,
                         onRefresh = viewModel::refresh,
-                        ordersLoadFailed = state.ordersLoadFailed,
+                        onOrdersClick = {
+                            viewModel.setStatusFilter(null)
+                            viewModel.setSearchQuery("")
+                            tab = AdminTab.ORDERS
+                        },
+                        onProductsClick = {
+                            viewModel.setSearchQuery("")
+                            tab = AdminTab.PRODUCTS
+                        },
+                        onStatusUpdate = { id, status, onDone -> viewModel.updateOrderStatus(id, status, onDone) },
                     )
                     AdminTab.ORDERS -> OrdersScreen(
                         state = state,
                         onFilterChange = viewModel::setStatusFilter,
                         onSearchChange = viewModel::setSearchQuery,
-                        onStatusUpdate = { id, status -> viewModel.updateOrderStatus(id, status) },
+                        onStatusUpdate = { id, status, onDone -> viewModel.updateOrderStatus(id, status, onDone) },
                         onRefresh = viewModel::refresh,
+                        currency = currency,
                     )
                     AdminTab.PRODUCTS -> ProductsScreen(
                         products = state.products,

@@ -11,6 +11,7 @@
     <string name="search_products">ابحث عن منتج…</string>
 
     <string name="cart_title">سلة المشتريات</string>
+    <string name="cart_subtitle">راجع اختياراتك قبل إرسال الطلب</string>
     <string name="cart_empty">السلة فارغة. تصفّح المنتجات وأضف ما تحتاجه.</string>
     <string name="cart_total">المجموع</string>
     <string name="cart_checkout">إتمام الطلب</string>
@@ -68,7 +69,22 @@
     <string name="catalog_all">الكل</string>
     <string name="catalog_filter">تصفية</string>
     <string name="catalog_offers">العروض</string>
-    <string name="catalog_pending_tab">الطلبات</string>
+    <string name="catalog_home_tab">الرئيسية</string>
+    <string name="catalog_products_tab">المنتجات</string>
+    <string name="catalog_pending_tab">المعلّقة</string>
+    <string name="catalog_welcome">مرحباً بك</string>
+    <string name="catalog_welcome_title">تفاصيل أجمل ليومك</string>
+    <string name="catalog_feature_label">من اختيارات السعيد</string>
+    <string name="catalog_feature_title">أشياء تحبّها، قريبة منك.</string>
+    <string name="catalog_discover">اكتشف المنتجات</string>
+    <string name="catalog_categories">تسوّق حسب التصنيف</string>
+    <string name="catalog_choices">اختيارات لك</string>
+    <string name="catalog_view_all">عرض الكل</string>
+    <string name="catalog_all_products">كل المنتجات</string>
+    <string name="catalog_no_products">لا توجد منتجات لعرضها حالياً.</string>
+    <string name="catalog_results_count">%1$d منتج</string>
+    <string name="catalog_cart_description">السلة، %1$d منتجات</string>
+    <string name="catalog_add_named">أضف %1$s إلى السلة</string>
     <string name="catalog_previous_price">%1$s قبل</string>
     <string name="catalog_discount_badge">-%1$d%%</string>
     <string name="catalog_rating">%1$s</string>

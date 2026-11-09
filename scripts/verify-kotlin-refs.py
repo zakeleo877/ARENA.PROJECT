@@ -26,7 +26,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # Modifier extensions that live in androidx.compose.foundation.layout and are
 # therefore resolved through an import, not through the Modifier receiver.
 LAYOUT_EXTENSIONS = {
-    # align and weight are members of BoxScope and RowScope, not extensions.
+    # align/matchParentSize and weight are BoxScope/RowScope members, not imports.
     "aspectRatio",
     "background",
     "border",
@@ -39,7 +39,6 @@ LAYOUT_EXTENSIONS = {
     "height",
     "heightIn",
     "heightIn",
-    "matchParentSize",
     "offset",
     "padding",
     "padding",

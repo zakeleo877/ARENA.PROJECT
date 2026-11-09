@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -42,13 +43,6 @@ import com.zakeleo877.saeedstore.R
 import kotlinx.coroutines.launch
 
 private data class ConfirmedOrder(val number: Long, val items: List<CartItem>)
-
-private object Routes {
-    const val CATALOG = "catalog"
-    const val CART = "cart"
-    const val PENDING = "pending"
-    const val DETAIL = "product"
-}
 
 /** Root composable of the customer app: navigation, checkout sheet and order feedback. */
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -84,14 +78,25 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
     var confirmedOrder by remember { mutableStateOf<ConfirmedOrder?>(null) }
     var queuedMessage by remember { mutableStateOf(false) }
     var lastRemoved by remember { mutableStateOf<CartItem?>(null) }
+    // The two catalogue views share their filters and restore them on rotation.
+    var query by rememberSaveable { mutableStateOf("") }
+    var selectedCategory by rememberSaveable { mutableStateOf<String?>(null) }
+    var offersOnly by rememberSaveable { mutableStateOf(false) }
 
     val currency = state.settings?.currency ?: "د.ج"
 
-    // The bar belongs to the shell, not to one screen. It used to be drawn by
-    // the catalogue alone, so the cart and the pending list had no bar and no
-    // way back to the shop.
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-    val showBar = currentRoute != null && !currentRoute.startsWith(Routes.DETAIL)
+    val showBar = customerShowsBottomBar(currentRoute)
+
+    // Tabs are top-level destinations. Returning to home does not accumulate
+    // duplicate carts or pending screens on the back stack.
+    fun navigateTab(route: String) {
+        if (currentRoute == route) return
+        navController.navigate(route) {
+            popUpTo(CustomerRoutes.HOME) { inclusive = false }
+            launchSingleTop = true
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -100,51 +105,53 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                 SaeedBottomBar(
                     cartCount = cartCount,
                     pendingCount = pendingOrders.size,
-                    current = when {
-                        currentRoute.orEmpty().startsWith(Routes.CART) -> SaeedTab.CART
-                        currentRoute.orEmpty().startsWith(Routes.PENDING) -> SaeedTab.PENDING
-                        else -> SaeedTab.CATALOG
-                    },
-                    onCatalogClick = {
-                        navController.navigate(Routes.CATALOG) {
-                            popUpTo(Routes.CATALOG) { inclusive = false }
-                            launchSingleTop = true
-                        }
-                    },
-                    onCartClick = { navController.navigate(Routes.CART) { launchSingleTop = true } },
-                    onPendingClick = { navController.navigate(Routes.PENDING) { launchSingleTop = true } },
+                    current = customerTabForRoute(currentRoute),
+                    onHomeClick = { navigateTab(CustomerRoutes.HOME) },
+                    onProductsClick = { navigateTab(CustomerRoutes.PRODUCTS) },
+                    onCartClick = { navigateTab(CustomerRoutes.CART) },
+                    onPendingClick = { navigateTab(CustomerRoutes.PENDING) },
                 )
             }
         },
     ) { innerPadding ->
     Box(Modifier.fillMaxSize().padding(innerPadding)) {
       SharedTransitionLayout {
-        NavHost(navController = navController, startDestination = Routes.CATALOG) {
-            composable(Routes.CATALOG) {
-                CatalogScreen(
-                    sharedScope = this@SharedTransitionLayout,
-                    animatedScope = this,
-                    state = state,
-                    cartCount = cartCount,
-                    pendingCount = pendingOrders.size,
-                    onProductClick = { product ->
-                        selectedProduct = product
-                        // The id travels in the route, so a restored process can
-                        // find the product again instead of falling back to the
-                        // non-saveable field.
-                        navController.navigate("${Routes.DETAIL}?id=${product.id}")
-                    },
-                    onAddToCart = { product ->
-                        viewModel.addToCart(product)
-                        scope.launch { snackbarHostState.showSnackbar(addedToCartText) }
-                    },
-                    onCartClick = { navController.navigate(Routes.CART) },
-                    onPendingClick = { navController.navigate(Routes.PENDING) },
-                    onRetry = viewModel::refresh,
-                )
+        NavHost(navController = navController, startDestination = CustomerRoutes.HOME) {
+            listOf(CustomerRoutes.HOME, CustomerRoutes.PRODUCTS).forEach { route ->
+                composable(route) {
+                    CatalogScreen(
+                        sharedScope = this@SharedTransitionLayout,
+                        animatedScope = this,
+                        state = state,
+                        isHome = route == CustomerRoutes.HOME,
+                        cartCount = cartCount,
+                        query = query,
+                        onQueryChange = { query = it },
+                        selectedCategory = selectedCategory,
+                        onCategorySelected = { selectedCategory = it },
+                        offersOnly = offersOnly,
+                        onOffersOnlyChange = { offersOnly = it },
+                        onProductClick = { product ->
+                            selectedProduct = product
+                            navController.navigate("${CustomerRoutes.DETAIL}?id=${product.id}")
+                        },
+                        onAddToCart = { product ->
+                            viewModel.addToCart(product)
+                            scope.launch { snackbarHostState.showSnackbar(addedToCartText) }
+                        },
+                        onCartClick = { navigateTab(CustomerRoutes.CART) },
+                        onShowAll = {
+                            query = ""
+                            selectedCategory = null
+                            offersOnly = false
+                            navigateTab(CustomerRoutes.PRODUCTS)
+                        },
+                        onRetry = viewModel::refresh,
+                    )
+                }
             }
 
-            composable(Routes.CART) {
+            composable(CustomerRoutes.CART) {
                 CartScreen(
                     items = cartItems,
                     currency = currency,
@@ -156,7 +163,7 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
                 )
             }
 
-            composable(Routes.PENDING) {
+            composable(CustomerRoutes.PENDING) {
                 PendingOrdersScreen(
                     orders = pendingOrders,
                     onRetry = { clientId ->
@@ -178,7 +185,7 @@ fun CustomerApp(viewModel: CustomerViewModel = hiltViewModel()) {
             }
 
             composable(
-                route = "${Routes.DETAIL}?id={id}",
+                route = CustomerRoutes.DETAIL_PATTERN,
                 arguments = listOf(navArgument("id") { type = NavType.StringType; defaultValue = "" }),
             ) {
                 val routeId = it.arguments?.getString("id").orEmpty()

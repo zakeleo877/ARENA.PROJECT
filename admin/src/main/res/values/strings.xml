@@ -4,6 +4,8 @@
 
     <string name="admin_title">إدارة محلات السعيد</string>
     <string name="admin_subtitle">سجّل الدخول لإدارة الطلبات والمنتجات</string>
+    <string name="admin_login_label">لوحة الإدارة</string>
+    <string name="admin_login_hint">استخدم حساب الإدارة المخوّل</string>
     <string name="admin_email">البريد الإلكتروني</string>
     <string name="admin_password">كلمة المرور</string>
     <string name="admin_sign_in">تسجيل الدخول</string>
@@ -18,10 +20,20 @@
     <string name="admin_tab_settings">الإعدادات</string>
 
     <string name="admin_stat_new">طلبات جديدة</string>
-    <string name="admin_stat_today">طلبات اليوم</string>
-    <string name="admin_stat_total">إجمالي الطلبات</string>
-    <string name="admin_stat_products">عدد المنتجات</string>
-    <string name="admin_stat_sales">مبيعات المسلَّم</string>
+    <string name="admin_stat_today">طلبات اليوم المحمّلة</string>
+    <string name="admin_stat_total">الطلبات المحمّلة</string>
+    <string name="admin_stat_products">المنتجات المحمّلة</string>
+    <string name="admin_stat_sales">مبيعات المسلَّم المحمّلة</string>
+    <string name="admin_dashboard_welcome">مرحباً بعودتك</string>
+    <string name="admin_dashboard_title">متجرك في لمحة</string>
+    <string name="admin_dashboard_new_hint">ضمن أحدث الطلبات المحمّلة</string>
+    <string name="admin_dashboard_scope">الإحصاءات تخص أحدث 100 طلب محمّل، وليست إجمالي المتجر.</string>
+    <string name="admin_dashboard_recent">آخر الطلبات</string>
+    <string name="admin_dashboard_view_all">عرض الكل</string>
+    <string name="admin_dashboard_products">منتجات المتجر</string>
+    <string name="admin_dashboard_products_hint">راجع المعروض وتفاصيله</string>
+    <string name="admin_products_stale">تعذّر تحديث المنتجات؛ العدد المعروض قد يكون قديماً.</string>
+    <string name="admin_status_update_failed">تعذّر تغيير حالة الطلب. تحقّق من الاتصال وأعد المحاولة.</string>
 
     <string name="admin_search_orders">ابحث برقم الطلب أو الاسم أو الهاتف…</string>
     <string name="admin_filter_all">الكل</string>

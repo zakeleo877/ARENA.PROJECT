@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -67,11 +68,37 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.zakeleo877.saeedcore.R
 import com.zakeleo877.saeedcore.model.OrderStatus
+
+/** A decorative Arabic brand mark shared by the two apps. */
+@Composable
+fun SaeedBrandMark(
+    modifier: Modifier = Modifier,
+    inverse: Boolean = false,
+) {
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .clip(RoundedCornerShape(topStart = 15.dp, topEnd = 15.dp, bottomEnd = 15.dp, bottomStart = 4.dp))
+            .background(if (inverse) androidx.compose.ui.graphics.Color.White else SaeedGreen)
+            .clearAndSetSemantics {},
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "س",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (inverse) SaeedGreen else androidx.compose.ui.graphics.Color.White,
+        )
+    }
+}
 
 @Composable
 fun SaeedButton(
@@ -148,6 +175,7 @@ fun SaeedTextField(
     supportingText: String? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     singleLine: Boolean = true,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
 ) {
     OutlinedTextField(
         value = value,
@@ -157,6 +185,7 @@ fun SaeedTextField(
         isError = isError,
         supportingText = supportingText?.let { message -> { Text(message) } },
         keyboardOptions = keyboardOptions,
+        visualTransformation = visualTransformation,
         singleLine = singleLine,
         shape = MaterialTheme.shapes.medium,
         colors = TextFieldDefaults.colors(
@@ -196,9 +225,12 @@ fun SaeedSearchField(
         singleLine = true,
         shape = MaterialTheme.shapes.medium,
         colors = TextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            focusedContainerColor = SaeedChipSurface,
+            unfocusedContainerColor = SaeedChipSurface,
+            disabledContainerColor = SaeedChipSurface,
+            focusedIndicatorColor = SaeedGreen,
+            unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+            disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
         ),
     )
 }

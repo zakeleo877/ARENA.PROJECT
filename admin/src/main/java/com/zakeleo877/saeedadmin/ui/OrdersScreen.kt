@@ -50,10 +50,13 @@ fun OrdersScreen(
     state: AdminUiState,
     onFilterChange: (OrderStatus?) -> Unit,
     onSearchChange: (String) -> Unit,
-    onStatusUpdate: (String, OrderStatus) -> Unit,
+    onStatusUpdate: (String, OrderStatus, (Boolean) -> Unit) -> Unit,
     onRefresh: () -> Unit,
+    currency: String = "د.ج",
 ) {
-    var selected by remember { mutableStateOf<Order?>(null) }
+    var selectedOrderId by remember { mutableStateOf<String?>(null) }
+    var statusUpdating by remember { mutableStateOf(false) }
+    var statusFailed by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     Column(
@@ -142,20 +145,40 @@ fun OrdersScreen(
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(state.orders, key = { it.id }) { order ->
-                OrderRow(order = order, onClick = { selected = order })
+                OrderRow(order = order, onClick = { selectedOrderId = order.id; statusFailed = false }, currency = currency)
             }
         }
     }
 
+    // Read the detail from the unfiltered snapshot so a successful status
+    // change remains visible even when it no longer matches the list filter.
+    val selected = state.allOrders.firstOrNull { it.id == selectedOrderId }
+        ?: state.orders.firstOrNull { it.id == selectedOrderId }
     selected?.let { order ->
-        SaeedBottomSheet(onDismiss = { selected = null }) {
+        SaeedBottomSheet(onDismiss = { selectedOrderId = null }) {
+            if (statusFailed) {
+                Text(
+                    stringResource(R.string.admin_status_update_failed),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                )
+            }
             OrderDetailSheet(
                 order = order,
                 onStatusChange = { status ->
-                    onStatusUpdate(order.id, status)
-                    selected = selected?.copy(status = status)
+                    if (!statusUpdating) {
+                        statusUpdating = true
+                        statusFailed = false
+                        onStatusUpdate(order.id, status) { succeeded ->
+                            statusUpdating = false
+                            if (selectedOrderId == order.id) statusFailed = !succeeded
+                        }
+                    }
                 },
-                onClose = { selected = null },
+                onClose = { selectedOrderId = null },
+                statusUpdating = statusUpdating,
+                currency = currency,
             )
         }
     }
@@ -194,7 +217,7 @@ private fun exportOrders(context: android.content.Context, orders: List<Order>) 
 }
 
 @Composable
-private fun OrderRow(order: Order, onClick: () -> Unit) {
+internal fun OrderRow(order: Order, onClick: () -> Unit, currency: String = "د.ج") {
     SaeedCard(onClick = onClick) {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -221,7 +244,7 @@ private fun OrderRow(order: Order, onClick: () -> Unit) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                text = Formatters.money(order.total, "د.ج"),
+                text = Formatters.money(order.total, currency),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )

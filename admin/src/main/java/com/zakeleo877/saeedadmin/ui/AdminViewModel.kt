@@ -31,12 +31,18 @@ data class DashboardStats(
 )
 
 data class AdminUiState(
+    // The list tab is filtered; the dashboard must always use the unfiltered snapshot.
     val orders: List<Order> = emptyList(),
+    val allOrders: List<Order> = emptyList(),
+    val dashboardStats: DashboardStats = DashboardStats(),
     val products: List<Product> = emptyList(),
     val statusFilter: OrderStatus? = null,
     val searchQuery: String = "",
     val isLoading: Boolean = false,
+    val ordersLoaded: Boolean = false,
+    val productsLoaded: Boolean = false,
     val ordersLoadFailed: Boolean = false,
+    val productsLoadFailed: Boolean = false,
     val errorMessage: String? = null,
 )
 
@@ -57,7 +63,10 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
     private data class LoadState(
         val loading: Boolean = false,
         val error: String? = null,
+        val ordersLoaded: Boolean = false,
+        val productsLoaded: Boolean = false,
         val ordersFailed: Boolean = false,
+        val productsFailed: Boolean = false,
     )
 
     private val _load = MutableStateFlow(LoadState())
@@ -78,6 +87,8 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
                     ArabicText.contains(order.phone, query)
                 matchesStatus && matchesQuery
             },
+            allOrders = orders,
+            dashboardStats = calculateDashboardStats(orders, products),
             products = if (query.isBlank()) {
                 products
             } else {
@@ -90,7 +101,10 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
             statusFilter = filter,
             searchQuery = query,
             isLoading = load.loading,
+            ordersLoaded = load.ordersLoaded,
+            productsLoaded = load.productsLoaded,
             ordersLoadFailed = load.ordersFailed,
+            productsLoadFailed = load.productsFailed,
             errorMessage = load.error,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AdminUiState())
@@ -141,6 +155,7 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
             _orders.value = emptyList()
             _products.value = emptyList()
             _settings.value = null
+            _load.value = LoadState()
         }
     }
 
@@ -166,7 +181,10 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
                     }
                 }
                 _load.value = _load.value.copy(
+                    ordersLoaded = _load.value.ordersLoaded || ordersResult.isSuccess,
+                    productsLoaded = _load.value.productsLoaded || productsResult.isSuccess,
                     ordersFailed = ordersResult.isFailure,
+                    productsFailed = productsResult.isFailure,
                     error = when {
                         productsResult.isFailure -> repository.lastFailure ?: "products_failed"
                         ordersResult.isFailure -> "load_failed"
@@ -219,13 +237,24 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
     }
 
     fun updateOrderStatus(orderId: String, status: OrderStatus, onDone: (Boolean) -> Unit = {}) {
-        val session = repository.sessionHolder.session.value ?: return
+        val session = repository.sessionHolder.session.value ?: run {
+            onDone(false)
+            return
+        }
         viewModelScope.launch {
-            val ok = repository.updateOrderStatus(session, orderId, status)
-            if (ok) {
+            val ok = try {
+                repository.updateOrderStatus(session, orderId, status)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                false
+            }
+            // A response from an old session must not change the current view.
+            val sameSession = repository.sessionHolder.session.value?.userId == session.userId
+            if (ok && sameSession) {
                 _orders.value = _orders.value.map { if (it.id == orderId) it.copy(status = status) else it }
             }
-            onDone(ok)
+            onDone(ok && sameSession)
         }
     }
 
@@ -363,19 +392,4 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
         }
     }
 
-    fun stats(): DashboardStats {
-        val orders = _orders.value
-        val today = java.time.LocalDate.now()
-        return DashboardStats(
-            newOrders = orders.count { it.status == OrderStatus.NEW },
-            todayOrders = orders.count {
-                it.createdAt.atZone(java.time.ZoneId.systemDefault()).toLocalDate() == today
-            },
-            totalOrders = orders.size,
-            productCount = _products.value.size,
-            handedOverTotal = orders
-                .filter { it.status == OrderStatus.HANDED_OVER }
-                .fold(BigDecimal.ZERO) { acc, order -> acc + order.total },
-        )
-    }
 }

@@ -2,6 +2,6 @@
 <resources>
     <!-- The adaptive icon's ground: the brand green. -->
     <color name="saeed_launcher_background">#FF017D20</color>
-    <color name="neon_void_background">#FFEDEEF2</color>
+    <color name="neon_void_background">#FFFBFCF9</color>
     <!-- Kept under the old name so the theme files keep compiling. -->
 </resources>
