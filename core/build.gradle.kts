@@ -135,6 +135,9 @@ dependencies {
     implementation(libs.ktor.serialization.json)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
+    // The basket is the one piece of state a customer must never lose, and the
+    // wiring lives in the customer app, so this has to be `api`.
+    api(libs.androidx.datastore.preferences)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
     testImplementation(libs.ktor.client.mock)

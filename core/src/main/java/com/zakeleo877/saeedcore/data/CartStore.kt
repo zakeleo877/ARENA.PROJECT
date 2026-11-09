@@ -9,8 +9,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 
 /**
- * In-memory cart for the current session.
- * The customer app persists it in DataStore; this class holds only the live state.
+ * The live basket the screens read.
+ *
+ * It is mirrored to disk by [CartPersistence], which the customer app wires at
+ * startup; this class stays free of I/O and is therefore trivial to test.
  */
 class CartStore(initial: List<CartItem> = emptyList()) {
     private val _items = MutableStateFlow(initial)
@@ -59,6 +61,11 @@ class CartStore(initial: List<CartItem> = emptyList()) {
     }
 
     fun restore(item: CartItem) = add(item.product, item.quantity)
+
+    /** Replaces the whole basket, used once when the stored one is read back. */
+    fun restoreAll(items: List<CartItem>) {
+        _items.value = items
+    }
 
     fun clear() {
         _items.value = emptyList()
