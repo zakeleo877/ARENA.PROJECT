@@ -15,9 +15,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.yield
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -56,11 +57,28 @@ class CartPersistenceTest {
         createdAt = Instant.ofEpochSecond(1_700_000_000),
     )
 
-    /** Waits for the mirroring collector to see the change, instead of guessing a yield count. */
-    private suspend fun awaitWritten(expected: Int, store: () -> CartPersistence) {
+    /**
+     * Waits for the mirroring collector, on real time.
+     *
+     * The collector runs on Dispatchers.IO, so virtual time is the wrong clock:
+     * the 5s budget would expire instantly while the write had not happened yet.
+     * `runBlocking` on the IO dispatcher keeps the two clocks apart.
+     */
+    private fun awaitWritten(expected: Int) = runBlocking(Dispatchers.IO) {
         withTimeout(5_000) {
-            while (store().load().size != expected) {
-                yield()
+            while (CartPersistence(dataStore(), scope).load().size != expected) {
+                delay(20)
+            }
+        }
+    }
+
+    /** Waits until the first stored line reports [quantity]. */
+    private fun awaitQuantity(id: String, quantity: Int) = runBlocking(Dispatchers.IO) {
+        withTimeout(5_000) {
+            while (CartPersistence(dataStore(), scope).load()
+                    .firstOrNull { it.product.id == id }?.quantity != quantity
+            ) {
+                delay(20)
             }
         }
     }
@@ -72,7 +90,7 @@ class CartPersistenceTest {
         store.add(product("b"), 1)
         val persistence = CartPersistence(dataStore(), scope)
         persistence.bind(store)
-        awaitWritten(2) { CartPersistence(dataStore(), scope) }
+        awaitWritten(2)
 
         // A second instance over the same file stands in for the next launch.
         val restarted = CartPersistence(dataStore(), scope).load()
@@ -119,15 +137,13 @@ class CartPersistenceTest {
         val persistence = CartPersistence(dataStore(), scope)
         persistence.bind(store)
         store.add(product("a"), 1)
-        awaitWritten(1) { CartPersistence(dataStore(), scope) }
+        awaitWritten(1)
 
         store.setQuantity("a", 5)
-        withTimeout(5_000) {
-            while (CartPersistence(dataStore(), scope).load().firstOrNull()?.quantity != 5) yield()
-        }
+        awaitQuantity("a", 5)
 
         store.remove("a")
-        awaitWritten(0) { CartPersistence(dataStore(), scope) }
+        awaitWritten(0)
         assertTrue(store.items.first().isEmpty())
     }
 }
