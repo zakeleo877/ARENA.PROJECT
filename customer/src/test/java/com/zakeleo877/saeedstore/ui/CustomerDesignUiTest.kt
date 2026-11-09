@@ -104,11 +104,11 @@ class CustomerDesignUiTest {
         composeRule.setContent {
             SaeedTheme {
                 SharedTransitionLayout {
-                    AnimatedContent(targetState = 0, label = "test-detail") {
+                    AnimatedContent(targetState = second, label = "test-detail") { product ->
                         with(this@SharedTransitionLayout) {
                             ProductDetailScreen(
                                 animatedScope = this@AnimatedContent,
-                                product = second,
+                                product = product,
                                 currency = "د.ج",
                                 onBack = {},
                                 onAddToCart = { added = true },

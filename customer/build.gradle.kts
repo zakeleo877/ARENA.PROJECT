@@ -21,6 +21,10 @@ val signingSettings = Properties().apply {
 }
 val supabaseUrl = localSettings.getProperty("SUPABASE_URL", "").trim()
 val supabaseKey = localSettings.getProperty("SUPABASE_KEY", "").trim()
+val demoBuild = providers.gradleProperty("saeed.demo").getOrElse("false") == "true"
+require(!demoBuild || supabaseUrl == "https://placeholder.invalid") {
+    "The emulator catalogue requires the isolated placeholder backend."
+}
 
 /** Reads the `role` claim of a legacy JWT key, or null when the key is opaque. */
 fun roleOfLegacyJwt(key: String): String? {
@@ -85,10 +89,10 @@ android {
         versionName = "1.0"
         buildConfigField("String", "SUPABASE_URL", javaString(supabaseUrl))
         buildConfigField("String", "SUPABASE_KEY", javaString(supabaseKey))
-        // Throwaway catalogue for the emulator run, which has no route to a
-        // project. Off by default, so a build for the shop contains an empty
-        // string and shows nothing. Ask for it with -Psaeed.demo=true.
-        val demoProducts = if (providers.gradleProperty("saeed.demo").getOrElse("false") == "true") {
+        // Throwaway catalogue for the isolated emulator only. Normal builds
+        // contain no examples, and the guard above forbids a real backend when
+        // explicitly opting in with -Psaeed.demo=true.
+        val demoProducts = if (demoBuild) {
             // A raw JSON string, escaped once by javaString for BuildConfig.
             // These are emulator-only examples; normal APKs contain no demo catalogue.
             javaString(
