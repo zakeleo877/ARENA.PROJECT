@@ -48,6 +48,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -316,14 +317,16 @@ fun SaeedBottomSheet(
     // where it let a violet glow through; here it would only weaken the surface
     // and let the content behind the sheet show through the text.
     val overlay = MaterialTheme.colorScheme.surfaceContainerHigh
-    // Material3's ModalBottomSheet drives the predictive back gesture itself
-    // when android:enableOnBackInvokedCallback="true" is declared, so the
-    // sheet shrinks with the gesture on Android 13+ without a custom handler.
+    // Open fully rather than leaving the bottom of a long form below a
+    // partially expanded sheet on small screens. Its contents remain scrollable.
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // Material3 handles predictive back on Android 13+.
     ModalBottomSheet(
         onDismissRequest = {
             onDismiss()
         },
         modifier = modifier,
+        sheetState = sheetState,
         containerColor = overlay,
         contentColor = MaterialTheme.colorScheme.onSurface,
         shape = MaterialTheme.shapes.extraLarge,

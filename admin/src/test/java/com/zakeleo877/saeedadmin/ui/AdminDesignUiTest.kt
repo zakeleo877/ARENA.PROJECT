@@ -93,7 +93,12 @@ class AdminDesignUiTest {
         composeRule.onNodeWithText("قيد التحضير").performClick()
         composeRule.onNodeWithText("تعذّر تغيير حالة الطلب. تحقّق من الاتصال وأعد المحاولة.").assertIsDisplayed()
         composeRule.onNodeWithText("قيد التحضير").performClick()
-        composeRule.onNodeWithText("جاهز").performScrollTo().assertIsDisplayed()
+        val ready = composeRule.onNodeWithText("جاهز").performScrollTo()
+        try {
+            ready.assertIsDisplayed()
+        } catch (failure: AssertionError) {
+            throw AssertionError("Ready button bounds after scrolling: ${ready.fetchSemanticsNode().boundsInRoot}", failure)
+        }
         assertEquals(2, attempts)
     }
 

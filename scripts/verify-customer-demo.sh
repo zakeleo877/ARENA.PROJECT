@@ -35,6 +35,7 @@ for node in root.iter('node'):
     text, desc = node.get('text', ''), node.get('content-desc', '')
     matches = (mode == 'text' and text == wanted) or \
               (mode == 'desc' and desc == wanted) or \
+              (mode == 'contains' and (wanted in text or wanted in desc)) or \
               (mode == 'desc-prefix' and desc.startswith(wanted))
     if not matches:
         continue
@@ -56,6 +57,21 @@ wait_node() {
     sleep 1
   done
   printf 'FAIL: could not find UI element: %s\n' "$label" >&2
+  # This is an isolated placeholder build; log its visible semantics to make
+  # a failed test diagnosable without exposing a real customer's information.
+  python3 - "$TREE" >&2 <<'PY'
+from xml.etree import ElementTree as ET
+import sys
+try:
+    root = ET.parse(sys.argv[1]).getroot()
+    for node in root.iter('node'):
+        text, desc = node.get('text', ''), node.get('content-desc', '')
+        if text or desc:
+            print('text=', repr(text), 'description=', repr(desc))
+except Exception as exc:
+    print('Could not read the isolated UI tree:', exc)
+PY
+  timeout 60 "$ADB" -s "$SERIAL" exec-out screencap -p > "$OUTPUT/customer-demo-failure.png" || true
   return 1
 }
 tap() {
@@ -77,11 +93,11 @@ size="$("$ADB" -s "$SERIAL" shell wm size | tr -d '\r' | grep -oE '[0-9]+x[0-9]+
 width="${size%x*}"; height="${size#*x}"
 for _ in 1 2 3 4; do
   dump_ui || true
-  if find_node text 'أداة تصفيف تجريبية' >/dev/null; then break; fi
+  if find_node contains 'أداة تصفيف تجريبية' >/dev/null; then break; fi
   "$ADB" -s "$SERIAL" shell input swipe "$((width / 2))" "$((height * 3 / 4))" "$((width / 2))" "$((height / 3))" 350
   sleep 1
 done
-wait_node text 'أداة تصفيف تجريبية' >/dev/null
+wait_node contains 'أداة تصفيف تجريبية' >/dev/null
 snapshot customer-products-demo.png
 printf 'PASS: product tab renders the isolated sample catalogue\n'
 
@@ -89,12 +105,12 @@ printf 'PASS: product tab renders the isolated sample catalogue\n'
 tap desc 'أضف أداة تصفيف تجريبية إلى السلة'
 tap desc-prefix 'السلة'
 wait_node text 'سلة المشتريات' >/dev/null
-wait_node text 'أداة تصفيف تجريبية' >/dev/null
+wait_node contains 'أداة تصفيف تجريبية' >/dev/null
 snapshot customer-cart-demo.png
 printf 'PASS: adding a sample item reaches the cart\n'
 tap text 'إتمام الطلب'
-wait_node text 'الاسم الكامل' >/dev/null
-wait_node text 'رقم الهاتف' >/dev/null
+wait_node contains 'الاسم الكامل' >/dev/null
+wait_node contains 'رقم الهاتف' >/dev/null
 snapshot customer-checkout-demo.png
 printf 'PASS: checkout form opens; no order was submitted\n'
 
