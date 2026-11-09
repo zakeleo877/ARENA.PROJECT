@@ -325,7 +325,8 @@ jobs:
           if bash scripts/verify-emulator.sh \
               "$CUSTOMER_APK" \
               com.zakeleo877.saeedstore \
-              artifacts/screenshots > /tmp/emulator-customer.txt 2>&1; then
+              artifacts/screenshots > /tmp/emulator-customer.txt 2>&1 && \
+              bash scripts/verify-customer-demo.sh artifacts/screenshots >> /tmp/emulator-customer.txt 2>&1; then
             cat /tmp/emulator-customer.txt
           else
             cat /tmp/emulator-customer.txt

@@ -12,6 +12,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -92,7 +93,7 @@ class AdminDesignUiTest {
         composeRule.onNodeWithText("قيد التحضير").performClick()
         composeRule.onNodeWithText("تعذّر تغيير حالة الطلب. تحقّق من الاتصال وأعد المحاولة.").assertIsDisplayed()
         composeRule.onNodeWithText("قيد التحضير").performClick()
-        composeRule.onNodeWithText("جاهز").assertIsDisplayed()
+        composeRule.onNodeWithText("جاهز").performScrollTo().assertIsDisplayed()
         assertEquals(2, attempts)
     }
 

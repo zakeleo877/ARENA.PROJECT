@@ -51,6 +51,7 @@
     <string name="order_done">تم</string>
 
     <string name="pending_title">الطلبات المعلّقة</string>
+    <string name="pending_hint">طلبات محفوظة على هذا الجهاز ولم يتأكد إرسالها بعد.</string>
     <string name="pending_empty">لا توجد طلبات معلّقة.</string>
     <string name="pending_waiting">بانتظار الإرسال</string>
     <string name="pending_sending">جارٍ الإرسال</string>

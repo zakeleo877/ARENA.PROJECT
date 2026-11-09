@@ -86,13 +86,10 @@ android {
         // project. Off by default, so a build for the shop contains an empty
         // string and shows nothing. Ask for it with -Psaeed.demo=true.
         val demoProducts = if (providers.gradleProperty("saeed.demo").getOrElse("false") == "true") {
+            // A raw JSON string, escaped once by javaString for BuildConfig.
+            // These are emulator-only examples; normal APKs contain no demo catalogue.
             javaString(
-                "[{\"id\":\"demo-1\",\"name\":\"خلاط زجاجي\",\"price\":\"8900\"," +
-                    "\"category\":\"المطبخ\",\"originalPrice\":\"11900\",\"rating\":4.8}," +
-                    "{\"id\":\"demo-2\",\"name\":\"مشط شعر هوائي\",\"price\":\"3600\"," +
-                    "\"category\":\"أدوات تجميلية\",\"rating\":4.5}," +
-                    "{\"id\":\"demo-3\",\"name\":\"طقم سكاكين\",\"price\":\"5800\"," +
-                    "\"category\":\"المطبخ\",\"originalPrice\":\"7200\"}]",
+                """[{"id":"demo-1","name":"أداة تصفيف تجريبية","price":"8900","category":"العناية","originalPrice":"11900","rating":4.8},{"id":"demo-2","name":"مشط تجريبي","price":"3600","category":"العناية","rating":4.5},{"id":"demo-3","name":"كريم تجريبي","price":"5800","category":"التجميل","originalPrice":"7200"}]""",
             )
         } else {
             javaString("")

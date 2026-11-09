@@ -16,9 +16,13 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.zakeleo877.saeedcore.designsystem.SaeedTheme
+import com.zakeleo877.saeedcore.data.PendingOrderRow
+import com.zakeleo877.saeedcore.data.PendingState
+import com.zakeleo877.saeedcore.model.PendingOrderItem
 import com.zakeleo877.saeedcore.model.Product
 import java.math.BigDecimal
 import java.time.Instant
@@ -137,4 +141,36 @@ class CustomerDesignUiTest {
         composeRule.onNodeWithContentDescription("الطلبات المعلّقة").performClick()
         assertEquals(SaeedTab.PENDING, selected)
     }
+
+    @Test
+    @Config(qualifiers = "w320dp-h640dp")
+    fun `checkout validates fields and returns the form on a narrow screen`() {
+        var submitted: CheckoutForm? = null
+        composeRule.setContent { SaeedTheme { CheckoutSheet(submitting = false, onSubmit = { submitted = it }) } }
+        composeRule.onNodeWithText("إرسال الطلب").performScrollTo().performClick()
+        composeRule.onNodeWithText("أدخل اسمك الكامل.").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("الاسم الكامل").performScrollTo().performTextInput("زبون تجريبي")
+        composeRule.onNodeWithText("رقم الهاتف").performScrollTo().performTextInput("0555123456")
+        composeRule.onNodeWithText("إرسال الطلب").performScrollTo().performClick()
+        assertEquals("زبون تجريبي", submitted?.customer)
+        assertEquals("0555123456", submitted?.phone)
+    }
+
+    @Test
+    fun `pending orders show the local queue state and retry the same client id`() {
+        var retried = ""
+        val pending = PendingOrderRow(
+            clientId = "example-local-id", customer = "زبون تجريبي", phone = "0555123456",
+            notes = "", customerLocationUrl = "", items = listOf(PendingOrderItem("example-product", 2)),
+            state = PendingState.WAITING, attemptCount = 1, lastError = null,
+        )
+        composeRule.setContent {
+            SaeedTheme { PendingOrdersScreen(orders = listOf(pending), onRetry = { retried = it }, onDelete = {}) }
+        }
+        composeRule.onNodeWithText("بانتظار الإرسال").assertIsDisplayed()
+        composeRule.onNodeWithText("قيد التحضير").assertDoesNotExist()
+        composeRule.onNodeWithText("إعادة المحاولة الآن").performClick()
+        assertEquals("example-local-id", retried)
+    }
+
 }
