@@ -1,5 +1,6 @@
 package com.zakeleo877.saeedcore
 
+import com.zakeleo877.saeedcore.data.remote.AdminApi
 import com.zakeleo877.saeedcore.data.remote.ApiFailure
 import com.zakeleo877.saeedcore.data.remote.ApiFailureKind
 import com.zakeleo877.saeedcore.data.remote.CatalogApi
@@ -57,6 +58,21 @@ class CatalogApiTest {
             assertEquals(1, products.size)
             assertEquals(BigDecimal("125.50"), products.single().price)
             assertFalse(products.single().available)
+        } finally { client.close() }
+    }
+
+    @Test fun legacyNullOptionalFieldsDoNotHideProductsInEitherApp() = runTest {
+        val row = """[{"id":"$PRODUCT_ID","name":"منتج","price":125.50,"description":null,"image_url":null,"category":null,"available":true,"sort_order":0,"created_at":"2026-01-01T00:00:00+00:00"}]"""
+        val client = anonymousHttpClient(MockEngine { respond(row, HttpStatusCode.OK, responseHeaders()) })
+        val config = SupabasePublicConfig("https://project.example", KEY)
+        try {
+            val customerProduct = CatalogApi(client, config).products().single()
+            val adminProduct = AdminApi(client, config).products("admin-token").single()
+            for (product in listOf(customerProduct, adminProduct)) {
+                assertEquals("", product.description)
+                assertEquals("", product.imageUrl)
+                assertEquals("عام", product.category)
+            }
         } finally { client.close() }
     }
 

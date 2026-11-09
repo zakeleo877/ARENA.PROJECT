@@ -287,8 +287,11 @@ jobs:
               if not isinstance(rows, list): raise ValueError('not a list')
               for row in rows:
                   if not isinstance(row, dict): raise ValueError('invalid row')
-                  for field in ('id', 'name', 'description', 'image_url', 'category', 'created_at'):
-                      if not isinstance(row.get(field), str): raise ValueError('missing string field')
+                  for field in ('id', 'name', 'created_at'):
+                      if not isinstance(row.get(field), str): raise ValueError('missing required string field')
+                  for field in ('description', 'image_url', 'category'):
+                      if field not in row or (row[field] is not None and not isinstance(row[field], str)):
+                          raise ValueError('invalid optional string field')
                   if not isinstance(row.get('available'), bool) or type(row.get('sort_order')) is not int:
                       raise ValueError('invalid availability or sort order')
                   if Decimal(str(row['price'])) < 0: raise ValueError('negative price')

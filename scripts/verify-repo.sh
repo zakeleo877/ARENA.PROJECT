@@ -99,6 +99,7 @@ fi
 
 # 12f. Independently scan key-like values by exact placeholder fingerprint.
 # Do not print credentials, including ones that masquerade as test data.
+python3 scripts/test-check-supabase-keys.py || fail "12f. key scanner self-test failed"
 python3 scripts/check-supabase-keys.py || fail "12f. unapproved Supabase key candidate found"
 
 # 12c. No application may accept a high-privilege key at configuration time.
