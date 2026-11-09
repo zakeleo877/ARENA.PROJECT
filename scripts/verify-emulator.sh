@@ -137,6 +137,31 @@ if [ -n "$FATAL" ]; then
 fi
 printf 'PASS: no fatal exception was logged\n'
 
+# Both apps schedule a Hilt-injected worker during startup. A running activity
+# alone cannot prove that WorkManager used the Hilt factory: a missing factory
+# logs a worker-construction failure without crashing the UI. The emulator uses
+# a placeholder backend and an empty queue, so this never creates live orders.
+case "$PACKAGE" in
+  com.zakeleo877.saeedstore) WORKER='com.zakeleo877.saeedstore.orders.PendingOrdersWorker' ;;
+  com.zakeleo877.saeedadmin) WORKER='com.zakeleo877.saeedadmin.notifications.OrdersRefreshWorker' ;;
+  *) WORKER='' ;;
+esac
+if [ -n "$WORKER" ]; then
+  WORKER_SUCCESS=''
+  for _ in $(seq 1 12); do
+    WORKER_SUCCESS="$("$ADB" -s "$SERIAL" logcat -d -s WM-WorkerWrapper:I '*:S' 2>/dev/null \
+      | grep 'Worker result SUCCESS' | grep -F "$WORKER" | head -n 1 || true)"
+    [ -n "$WORKER_SUCCESS" ] && break
+    sleep 5
+  done
+  if [ -z "$WORKER_SUCCESS" ]; then
+    printf 'FAIL: the scheduled worker did not complete successfully on the emulator (%s)\n' "$WORKER"
+    "$ADB" -s "$SERIAL" logcat -d 2>/dev/null | grep -E 'WM-|WorkManager|WorkerFactory' | tail -n 80 || true
+    exit 1
+  fi
+  printf 'PASS: the scheduled Hilt worker was created and completed successfully (%s)\n' "$WORKER"
+fi
+
 timeout 120 "$ADB" -s "$SERIAL" exec-out screencap -p > "$OUTPUT/$PACKAGE.png"
 if [ ! -s "$OUTPUT/$PACKAGE.png" ]; then
   printf 'FAIL: the screenshot is empty\n'

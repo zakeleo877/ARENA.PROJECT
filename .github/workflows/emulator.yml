@@ -322,14 +322,13 @@ jobs:
             echo "FAIL: the customer APK was not built."
             exit 1
           fi
-          {
-            bash scripts/verify-emulator.sh \
+          if bash scripts/verify-emulator.sh \
               "$CUSTOMER_APK" \
               com.zakeleo877.saeedstore \
-              artifacts/screenshots
-          } > /tmp/emulator-customer.txt 2>&1 || true
-          cat /tmp/emulator-customer.txt
-          if grep -q '^FAIL:' /tmp/emulator-customer.txt; then
+              artifacts/screenshots > /tmp/emulator-customer.txt 2>&1; then
+            cat /tmp/emulator-customer.txt
+          else
+            cat /tmp/emulator-customer.txt
             exit 1
           fi
 
@@ -342,14 +341,13 @@ jobs:
             echo "FAIL: the admin APK was not built."
             exit 1
           fi
-          {
-            bash scripts/verify-emulator.sh \
+          if bash scripts/verify-emulator.sh \
               "$ADMIN_APK" \
               com.zakeleo877.saeedadmin \
-              artifacts/screenshots
-          } > /tmp/emulator-admin.txt 2>&1 || true
-          cat /tmp/emulator-admin.txt
-          if grep -q '^FAIL:' /tmp/emulator-admin.txt; then
+              artifacts/screenshots > /tmp/emulator-admin.txt 2>&1; then
+            cat /tmp/emulator-admin.txt
+          else
+            cat /tmp/emulator-admin.txt
             exit 1
           fi
 

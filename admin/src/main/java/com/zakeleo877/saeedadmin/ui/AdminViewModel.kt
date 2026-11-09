@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class DashboardStats(
@@ -96,9 +97,13 @@ class AdminViewModel @Inject constructor(private val repository: AdminRepository
 
     init {
         viewModelScope.launch {
-            // A remembered session is restored before the login gate is drawn,
-            // so reopening the shop does not ask for a password again.
-            repository.restoreSession()
+            // A temporary outage must not strand the encrypted session behind
+            // the login screen. Retry while this screen remains open; sign-out
+            // after a successful restore does not start this loop again.
+            while (repository.sessionHolder.session.value == null) {
+                if (repository.restoreSession()) break
+                delay(30_000)
+            }
         }
         // Load the catalog as soon as an admin session becomes available.
         viewModelScope.launch {
