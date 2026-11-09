@@ -1,0 +1,10 @@
+{
+  "name": "saeed-orders-api",
+  "private": true,
+  "type": "module",
+  "description": "Optional, least-privilege public facade for the shop settings and order RPC.",
+  "engines": { "node": ">=22.18.0" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
+}

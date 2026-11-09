@@ -60,9 +60,10 @@ private data class ProductWire(
     val id: String,
     val name: String,
     val price: JsonElement,
-    val description: String,
-    @SerialName("image_url") val imageUrl: String,
-    val category: String,
+    // Older store schemas allow null in these optional text columns.
+    val description: String? = null,
+    @SerialName("image_url") val imageUrl: String? = null,
+    val category: String? = null,
     val available: Boolean,
     @SerialName("sort_order") val sortOrder: Int,
     @SerialName("created_at") val createdAt: String,
@@ -78,7 +79,8 @@ private data class ProductWire(
         val original = originalPrice.asDecimalOrNull()?.takeIf { it >= decimal }
         val stars = rating.asDoubleOrNull()?.takeIf { it in 0.0..5.0 }
         return Product(
-            id, name, decimal, description, imageUrl, category, available, sortOrder, timestamp,
+            id, name, decimal, description.orEmpty(), imageUrl.orEmpty(),
+            category?.takeIf { it.isNotBlank() } ?: "عام", available, sortOrder, timestamp,
             originalPrice = original,
             rating = stars,
         )

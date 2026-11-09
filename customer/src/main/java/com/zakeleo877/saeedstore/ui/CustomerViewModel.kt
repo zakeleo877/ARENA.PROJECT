@@ -233,8 +233,10 @@ class CustomerViewModel @Inject constructor(
     fun clearCart() = cart.clear()
 
     /** Builds the immutable snapshot that the retry path reuses verbatim. */
-    fun buildPendingOrder(customer: String, phone: String, notes: String, customerLocationUrl: String): PendingOrder =
-        PendingOrder(
+    suspend fun buildPendingOrder(customer: String, phone: String, notes: String, customerLocationUrl: String): PendingOrder {
+        // Do not place an order from the temporary, partially restored basket.
+        cart.awaitRestored()
+        return PendingOrder(
             clientId = UUID.randomUUID().toString(),
             customer = customer.trim(),
             phone = phone.trim(),
@@ -242,6 +244,7 @@ class CustomerViewModel @Inject constructor(
             customerLocationUrl = customerLocationUrl.trim(),
             items = cart.snapshot().map { PendingOrderItem(it.product.id, it.quantity) },
         )
+    }
 
     suspend fun submit(order: PendingOrder): SubmitOutcome = orderRepository.submit(order, isOnline())
 

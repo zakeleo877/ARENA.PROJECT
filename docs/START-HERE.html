@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ابدأ هنا — محلات السعيد</title>
+  <style>
+    :root { color-scheme: light; --green:#087340; --dark:#123526; --muted:#50645a; --line:#d9e7de; --paper:#fff; --bg:#f3f8f4; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--dark); font-family:Tahoma,Arial,sans-serif; line-height:1.85; }
+    header { background:#123d29; color:white; padding:2.7rem 1.1rem 3.4rem; }
+    header > div, main, footer { width:min(960px, 100%); margin:auto; }
+    .eyebrow { color:#b4ead0; font-size:.9rem; font-weight:bold; }
+    h1 { margin:.25rem 0 .5rem; font-size:clamp(1.8rem,5vw,2.7rem); line-height:1.35; }
+    header p { margin:.3rem 0; max-width:680px; color:#e3f5e9; }
+    main { padding:0 1rem 3rem; margin-top:-1.6rem; }
+    section, .status { background:var(--paper); border:1px solid var(--line); border-radius:16px; padding:1.2rem 1.4rem; margin-bottom:1rem; box-shadow:0 5px 16px #1235260a; }
+    .status { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
+    .status strong { color:var(--green); }
+    .progress { height:9px; background:#e2ede6; border-radius:10px; overflow:hidden; flex:1 1 160px; }
+    .progress span { display:block; height:100%; width:0; background:#15965a; transition:width .2s; }
+    .step { display:flex; align-items:flex-start; gap:.8rem; }
+    .num { display:grid; place-items:center; flex:none; width:2.15rem; height:2.15rem; background:#e2f4e9; color:var(--green); border-radius:50%; font-weight:bold; }
+    h2 { margin:0; font-size:1.25rem; line-height:1.65; }
+    p { margin:.55rem 0; } ol,ul { padding-right:1.4rem; margin:.5rem 0; }
+    .check { display:flex; align-items:center; gap:.5rem; margin-top:1rem; color:var(--muted); font-size:.94rem; }
+    input[type=checkbox] { width:1.15rem; height:1.15rem; accent-color:var(--green); }
+    .actions { display:flex; gap:.6rem; flex-wrap:wrap; margin:.8rem 0; }
+    a.btn, button { display:inline-flex; align-items:center; justify-content:center; min-height:44px; border:1px solid var(--green); border-radius:9px; padding:.55rem 1rem; background:var(--green); color:white; font:inherit; font-weight:bold; text-decoration:none; cursor:pointer; }
+    a.btn.secondary, button.secondary { color:var(--green); background:#fff; }
+    a.btn:hover, button:hover { filter:brightness(.92); }
+    a:focus-visible, button:focus-visible, input:focus-visible { outline:3px solid #f7b71b; outline-offset:3px; }
+    .note, .warning { border-right:4px solid #54aa76; padding:.7rem .9rem; margin:.8rem 0; background:#f0faf3; border-radius:6px; }
+    .warning { border-color:#cf8c15; background:#fff7e6; }
+    .muted { color:var(--muted); font-size:.93rem; }
+    code, pre, input[type=text] { direction:ltr; text-align:left; font-family:monospace; }
+    pre { background:#f0f5f1; border-radius:8px; padding:.8rem; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
+    input[type=text] { width:100%; min-height:44px; border:1px solid #a9c0b0; border-radius:8px; padding:.5rem; background:white; }
+    details { border-top:1px solid var(--line); margin-top:.8rem; padding-top:.6rem; }
+    summary { cursor:pointer; font-weight:bold; }
+    .message { min-height:1.5em; font-size:.9rem; color:var(--green); }
+    footer { padding:0 1rem 2rem; color:var(--muted); font-size:.88rem; }
+    @media (max-width:480px) { section,.status { padding:1rem; } .actions > * { width:100%; } }
+  </style>
+</head>
+<body>
+<header><div>
+  <div class="eyebrow">دليل صاحب المتجر · بدون خبرة تقنية</div>
+  <h1>لنُظهر منتجاتك في التطبيق</h1>
+  <p>أصلحنا الحقول الناقصة في قاعدة المتجر، وتأكدنا من وجود ثلاثة منتجات مفعّلة. اتبع الخطوات على مهل، ولا ترسل أي كلمة مرور في المحادثة.</p>
+</div></header>
+<main>
+  <div class="status">
+    <strong>تقدّمك: <span id="progress-text">0 من 7</span></strong>
+    <div class="progress" aria-hidden="true"><span id="progress-bar"></span></div>
+    <span class="muted">تُحفظ علامات الإنجاز على هذا الجهاز فقط.</span>
+  </div>
+
+  <section><div class="step"><span class="num">١</span><div><h2>افتح تطبيق الزبائن الموجود</h2>
+    <ol><li>شغّل الإنترنت على الهاتف.</li><li>افتح تطبيق محلات السعيد للزبائن.</li><li>اضغط <strong>إعادة المحاولة</strong> إن ظهرت، أو أغلق التطبيق وافتحه مرة أخرى.</li></ol>
+    <p class="note">إصلاح قاعدة البيانات تم بالفعل؛ غالبًا لا تحتاج إلى حذف التطبيق أو تثبيت نسخة جديدة لرؤية المنتجات.</p>
+  </div></div><label class="check"><input type="checkbox" data-step="1"> جرّبت فتح التطبيق وتحديثه</label></section>
+
+  <section><div class="step"><span class="num">٢</span><div><h2>تأكد أن المنتجات متاحة</h2>
+    <ol><li>افتح تطبيق الإدارة وسجّل الدخول بالحساب الذي تستخدمه.</li><li>اضغط <strong>المنتجات</strong>.</li><li>تأكد أن مفتاح <strong>متاح</strong> مفعّل للمنتجات التي تريد ظهورها.</li></ol>
+    <p>يمكنك تعديل منتجاتك الحقيقية وإضافة الصور من الإدارة. لم نضف منتجات وهمية.</p>
+  </div></div><label class="check"><input type="checkbox" data-step="2"> راجعت المنتجات في الإدارة</label></section>
+
+  <section><div class="step"><span class="num">٣</span><div><h2>إذا احتجت إلى تثبيت التطبيق</h2>
+    <p>افتح صفحة التحميل، ثم اضغط ملف تطبيق الزبائن أو تطبيق الإدارة. إذا طلب هاتفك الإذن بتثبيت الملف، اتبع التعليمات الظاهرة عليه.</p>
+    <div class="actions">
+      <a class="btn" href="https://github.com/zakeleo877/ARENA.PROJECT/releases/latest" target="_blank" rel="noopener noreferrer">فتح أحدث صفحة تحميل</a>
+      <a class="btn secondary" href="https://github.com/zakeleo877/ARENA.PROJECT/releases/latest/download/saeed-store-1.0.apk">تحميل أحدث تطبيق الزبائن</a>
+      <a class="btn secondary" href="https://github.com/zakeleo877/ARENA.PROJECT/releases/latest/download/saeed-admin-1.0.apk">تحميل أحدث تطبيق الإدارة</a>
+    </div>
+    <p class="warning"><strong>مهم:</strong> قد تكون نسخ الاختبار موقّعة بمفتاح مؤقت، فيرفض الهاتف تثبيتها فوق نسخة أخرى. حذف التطبيق يمسح السلة والطلبات المنتظرة على الهاتف؛ أرسل الطلبات المحفوظة أولًا، ولا تحذفه إلا عند الضرورة.</p>
+  </div></div><label class="check"><input type="checkbox" data-step="3"> فتحت صفحة التحميل عند الحاجة</label></section>
+
+  <section><div class="step"><span class="num">٤</span><div><h2>استخدم حساب الإدارة الموجود</h2>
+    <p>يوجد حساب إدارة واحد في المشروع. ادخل بالبريد وكلمة المرور الخاصين بك. لم نغيّر كلمة المرور ولم نختبر تسجيل الدخول نيابةً عنك.</p>
+    <div class="actions"><a class="btn secondary" href="https://supabase.com/dashboard/project/bycdertfhfmjsdshagmy/auth/users" target="_blank" rel="noopener noreferrer">فتح قائمة حسابات Supabase</a></div>
+    <p class="muted">أوقفنا التسجيل العام لحماية الإدارة. لا يلزمك إنشاء حساب زبون.</p>
+  </div></div><label class="check"><input type="checkbox" data-step="4"> عرفت حساب الإدارة الذي سأستخدمه</label></section>
+
+  <section><div class="step"><span class="num">٥</span><div><h2>افحص العدد إذا لم تظهر المنتجات</h2>
+    <ol><li>اضغط زر <strong>نسخ أمر الفحص</strong>.</li><li>افتح محرّر SQL بالزر الآخر، وسجّل الدخول إن طُلب منك.</li><li>الصق الأمر في المربع، ثم اضغط <strong>Run</strong>. النتيجة تعرض العدد فقط ولا تعدّل البيانات.</li></ol>
+    <pre id="count-sql">select count(*) as all_products,
+       count(*) filter (where available) as visible_products
+from public.products;</pre>
+    <div class="actions"><button type="button" class="secondary" id="copy-sql">نسخ أمر الفحص</button><a class="btn secondary" href="https://supabase.com/dashboard/project/bycdertfhfmjsdshagmy/sql/new" target="_blank" rel="noopener noreferrer">فتح محرّر SQL</a></div>
+    <p id="sql-message" class="message" role="status" aria-live="polite"></p>
+    <p class="muted">لا تحتاج إلى إعادة تشغيل ملف المخطط الكامل؛ أضفنا الحقول الناقصة بالفعل.</p>
+  </div></div><label class="check"><input type="checkbox" data-step="5"> تحققت من العدد عند الحاجة</label></section>
+
+  <section><div class="step"><span class="num">٦</span><div><h2>أمّن المفتاح السري الذي كُشف</h2>
+    <ol><li>افتح إعدادات مفاتيح Supabase بالزر أدناه.</li><li>في قسم <strong>Secret keys</strong>، أنشئ مفتاحًا بديلًا إذا كانت لديك خدمة تستخدم المفتاح القديم، وحدّث تلك الخدمة أولًا.</li><li>أبطل المفتاح السري الذي سبق إرساله في المحادثة. لا تحذف مفتاحًا آخر لا تعرف استخدامه.</li></ol>
+    <p class="warning">لم نُبطل المفتاح تلقائيًا. لا تنسخ أي مفتاح سري إلى التطبيق أو المستودع، ولا ترسله في المحادثة.</p>
+    <div class="actions"><a class="btn secondary" href="https://supabase.com/dashboard/project/bycdertfhfmjsdshagmy/settings/api-keys" target="_blank" rel="noopener noreferrer">فتح إعدادات مفاتيح API</a></div>
+  </div></div><label class="check"><input type="checkbox" data-step="6"> استبدلت المفتاح المكشوف وأبطلت القديم</label></section>
+
+  <section><div class="step"><span class="num">٧</span><div><h2>احتفظ بكلمات المرور بأمان</h2>
+    <p>لا نعرف كلمة مرورك الحالية. عند إنشاء كلمة مرور جديدة فقط، يمكنك توليد واحدة على جهازك ونسخها أدناه. لا تتغير أي كلمة مرور في Supabase تلقائيًا.</p>
+    <div class="actions"><button type="button" id="generate-password">إنشاء كلمة مرور جديدة</button><button type="button" class="secondary" id="copy-password">نسخ كلمة المرور</button></div>
+    <label for="password" class="muted">الكلمة الجديدة المقترحة، إذا أنشأتها:</label>
+    <input id="password" type="text" readonly autocomplete="off" placeholder="اضغط إنشاء أولًا">
+    <p id="message" class="message" role="status" aria-live="polite"></p>
+    <p class="muted">الكلمة تُولّد محليًا ولا تُحفظ في هذا الدليل. احفظها في مدير كلمات مرور، واستخدمها فقط في شاشة تغيير أو إنشاء الحساب عند الحاجة.</p>
+  </div></div><label class="check"><input type="checkbox" data-step="7"> فهمت كيفية حماية بيانات الدخول</label></section>
+
+  <section><h2>إذا واجهتك مشكلة</h2>
+    <details><summary>لا أرى المنتجات</summary><p>أعد فتح التطبيق مع الإنترنت، وتأكد أن المنتجات متاحة وأن النسخة مرتبطة بالمشروع الصحيح. الحقول المطلوبة موجودة الآن في قاعدة المشروع المذكور هنا.</p></details>
+    <details><summary>لا أستطيع الدخول إلى الإدارة</summary><p>تأكد من البريد وكلمة المرور، أو افتح قائمة الحسابات في الخطوة ٤. لا تنشر كلمة المرور هنا.</p></details>
+    <details><summary>الهاتف يرفض تثبيت النسخة</summary><p>قد يختلف مفتاح توقيع النسخة. لا تحذف النسخة القديمة قبل إرسال الطلبات المنتظرة، لأن حذف التطبيق يمسح بياناته المحلية.</p></details>
+  </section>
+</main>
+<footer>محلات السعيد · الإصلاح لا يضمن اختبار الهاتف أو الطلبات تلقائيًا. راجع <code>RUNBOOK.md</code> للمعلومات التقنية.</footer>
+<script>
+(() => {
+  const checks = [...document.querySelectorAll('[data-step]')];
+  const progressText = document.getElementById('progress-text');
+  const progressBar = document.getElementById('progress-bar');
+  const message = document.getElementById('message');
+  const password = document.getElementById('password');
+  const key = 'saeed-guide-progress-v1';
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || '[]');
+    if (Array.isArray(saved)) checks.forEach((box) => { box.checked = saved.includes(box.dataset.step); });
+  } catch (_) { /* The guide still works if storage is disabled. */ }
+  function updateProgress() {
+    const done = checks.filter((box) => box.checked).map((box) => box.dataset.step);
+    progressText.textContent = `${done.length} من ${checks.length}`;
+    progressBar.style.width = `${done.length * 100 / checks.length}%`;
+    try { localStorage.setItem(key, JSON.stringify(done)); } catch (_) { /* optional */ }
+  }
+  checks.forEach((box) => box.addEventListener('change', updateProgress));
+  updateProgress();
+  async function copy(text, status = message) {
+    if (!text) { status.textContent = 'أنشئ كلمة مرور أولًا.'; return; }
+    try {
+      if (!navigator.clipboard || !window.isSecureContext) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(text);
+      status.textContent = 'تم النسخ. الصق النص في المكان المقصود فقط.';
+    } catch (_) {
+      const temporary = document.createElement('textarea');
+      temporary.value = text;
+      temporary.setAttribute('readonly', '');
+      temporary.style.position = 'fixed';
+      temporary.style.opacity = '0';
+      document.body.appendChild(temporary);
+      temporary.select();
+      let copied = false;
+      try { copied = document.execCommand('copy'); } catch (_) { /* show manual instructions */ }
+      temporary.remove();
+      status.textContent = copied ? 'تم النسخ.' : 'تعذر النسخ التلقائي؛ حدد النص وانسخه يدويًا.';
+    }
+  }
+  document.getElementById('copy-sql').addEventListener('click', () => copy(document.getElementById('count-sql').textContent.trim(), document.getElementById('sql-message')));
+  document.getElementById('generate-password').addEventListener('click', () => {
+    if (!window.crypto || !window.crypto.getRandomValues) { message.textContent = 'التوليد الآمن غير متاح في هذا المتصفح.'; return; }
+    const bytes = new Uint8Array(18);
+    window.crypto.getRandomValues(bytes);
+    password.value = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+    message.textContent = 'أُنشئت كلمة جديدة على هذا الجهاز فقط.';
+  });
+  document.getElementById('copy-password').addEventListener('click', () => copy(password.value));
+})();
+</script>
+</body>
+</html>

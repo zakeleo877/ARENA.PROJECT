@@ -484,9 +484,11 @@ class AdminApi(
         val name = json.getValue("name").jsonPrimitive.content
         val price = json.getValue("price").jsonPrimitive.contentOrNull?.toBigDecimalOrNull()
             ?: throw IllegalArgumentException("Invalid product price.")
-        val description = json.getValue("description").jsonPrimitive.content
-        val imageUrl = json.getValue("image_url").jsonPrimitive.content
-        val category = json.getValue("category").jsonPrimitive.content
+        // Legacy catalogs may contain null optional text fields. Never show
+        // the literal string "null" or fail the whole list because of them.
+        val description = json["description"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val imageUrl = json["image_url"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val category = json["category"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: "عام"
         val available = json.getValue("available").jsonPrimitive.content.toBoolean()
         val sortOrder = json.getValue("sort_order").jsonPrimitive.content.toInt()
         val createdAt = OffsetDateTime.parse(json.getValue("created_at").jsonPrimitive.content).toInstant()

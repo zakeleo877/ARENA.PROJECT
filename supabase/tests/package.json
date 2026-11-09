@@ -4,7 +4,7 @@
   "private": true,
   "description": "Offline PostgreSQL smoke tests with mocked Supabase schemas; not a live security certification.",
   "scripts": {
-    "test": "node local-smoke.cjs",
+    "test": "node local-smoke.cjs && node --test migration.test.cjs",
     "test:acceptance": "node acceptance-checks.cjs"
   },
   "devDependencies": {
