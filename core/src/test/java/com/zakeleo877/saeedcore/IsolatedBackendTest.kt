@@ -251,6 +251,38 @@ class IsolatedBackendTest {
         }
     }
 
+    /** Full order path against a throwaway in-memory database, never the shop. */
+    @Test
+    fun anOrderPlacedByTheCustomerIsReadableByTheAdminAndNotificationQuery() = runTest {
+        val httpClient = client()
+        try {
+            val customer = CatalogApi(httpClient, config())
+            val product = customer.products().first()
+            val order = PendingOrder(
+                clientId = UUID.randomUUID().toString(),
+                customer = "عميل اختبار محلي",
+                phone = "0550123099",
+                notes = "",
+                customerLocationUrl = "",
+                items = listOf(PendingOrderItem(product.id, 2)),
+            )
+            val number = customer.placeOrder(order)
+            val login = AuthManager(httpClient, config()).signIn("owner@example.invalid", "OwnerPass123")
+            assertTrue("isolated admin sign-in must succeed", login is AuthResult.Success)
+            val token = (login as AuthResult.Success).session.accessToken
+            val admin = AdminApi(httpClient, config())
+
+            val saved = admin.orders(token).single { it.clientId == order.clientId }
+            assertEquals(number, saved.number)
+            assertEquals(2, saved.items.single().quantity)
+            assertEquals(0, product.price.compareTo(saved.items.single().price))
+            assertEquals(0, product.price.multiply(2.toBigDecimal()).compareTo(saved.total))
+            assertTrue(admin.newOrderNumbers(token, number - 1).contains(number))
+        } finally {
+            httpClient.close()
+        }
+    }
+
     // --------------------------------------------------------------- auth ---
 
     @Test
