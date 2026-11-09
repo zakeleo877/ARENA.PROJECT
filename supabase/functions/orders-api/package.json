@@ -2,11 +2,9 @@
   "name": "saeed-orders-api",
   "private": true,
   "type": "module",
-  "description": "The desk endpoint: place an order with the shop's own WhatsApp number, so the customer app no longer needs that secret or write access to the orders table.",
+  "description": "Optional, least-privilege public facade for the shop settings and order RPC.",
+  "engines": { "node": ">=22.18.0" },
   "scripts": {
     "test": "node --test test/*.test.mjs"
-  },
-  "dependencies": {
-    "@supabase/server": "^1.9.2"
   }
 }

@@ -321,6 +321,35 @@ jobs:
               sys.exit(1)
           PYCODE
 
+      # This optional facade is not used by the APK; failure is reported but
+      # does not prevent building the Android apps. It only reads public settings.
+      - name: Check the optional orders API (read only)
+        if: env.PLACEHOLDER != '1'
+        run: |
+          set -uo pipefail
+          BASE="$(sed -n 's/^SUPABASE_URL=//p' local.properties | head -n 1)"
+          KEY="$(sed -n 's/^SUPABASE_KEY=//p' local.properties | head -n 1)"
+          BASE="${BASE%/}"
+          if ! CODE="$(curl --silent --show-error --max-time 30 -o /tmp/orders-api-settings.json -w '%{http_code}' \
+            -H "apikey: $KEY" "$BASE/functions/v1/orders-api/settings")"; then CODE=000; fi
+          if [ "$CODE" = 200 ] && python3 - /tmp/orders-api-settings.json /tmp/settings.json <<'PYCODE'
+          import json, sys
+          try:
+              edge = json.load(open(sys.argv[1], encoding='utf-8'))['settings']
+              rows = json.load(open(sys.argv[2], encoding='utf-8'))
+              direct = {row['key']: row['value'] for row in rows}
+              keys = {'storeName', 'whatsapp', 'currency', 'footerNote'}
+              if not isinstance(edge, dict) or set(edge) != keys: raise ValueError('wrong fields')
+              if any(edge[key] != direct.get(key) for key in keys): raise ValueError('different values')
+          except (KeyError, TypeError, ValueError, OSError):
+              sys.exit(1)
+          PYCODE
+          then
+            echo 'PASS: optional orders API returns the four public settings.' | tee /tmp/orders-api-check.txt
+          else
+            echo "NOTE: optional orders API did not pass the read-only check (HTTP $CODE). The APK uses direct PostgREST." | tee /tmp/orders-api-check.txt
+          fi
+
       # Production signing uses the GitHub Secrets when they are configured.
       # Otherwise a throwaway key is generated inside the runner so that the
       # packaging checks can still run. The throwaway key never leaves the
@@ -491,6 +520,17 @@ jobs:
       - name: Verify the repository (acceptance checks 11-13)
         run: bash scripts/verify-repo.sh
 
+      - name: Set up Node for backend checks
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test the optional orders API
+        working-directory: supabase/functions/orders-api
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+
       - name: Run the local database smoke tests
         working-directory: supabase/tests
         run: |
@@ -532,6 +572,11 @@ jobs:
           mkdir -p /tmp/test-reports
           find . -path '*/build/test-results/*' -name '*.xml' -exec cp --parents {} /tmp/test-reports/ \; 2>/dev/null || true
           {
+            echo '## Optional orders API'
+            echo '```'
+            cat /tmp/orders-api-check.txt 2>/dev/null || echo "(not reached)"
+            echo '```'
+            echo
             echo '## Package verification'
             echo '```'
             cat /tmp/verify-apk.txt 2>/dev/null || echo "(not reached)"
@@ -669,12 +714,20 @@ jobs:
             exit 0
           fi
           TAG="build-${GITHUB_RUN_NUMBER}"
-          NOTES="النسخة المبنية من الالتزام ${GITHUB_SHA:0:7}.
-          الحزمتان موقّعتان بمفتاح التطوير، فالسبب نفسه لا يظهر كتحديث فوق نسخة سابقة موقّعة بمفتاح آخر: احذف النسخة القديمة قبل التثبيت."
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            gh release upload "$TAG" artifacts/apk/*.apk --clobber --repo "$GITHUB_REPOSITORY"
+          if grep -q '^SIGNING_MODE=production$' /tmp/signing-mode.txt 2>/dev/null; then
+            SIGNING_NOTE="الحزمتان موقعتان بمفتاح الإنتاج المضبوط للمشروع."
           else
-            gh release create "$TAG" artifacts/apk/*.apk \
+            SIGNING_NOTE="هذه نسخة اختبار بمفتاح توقيع مؤقت وليست للنشر الإنتاجي. قد يرفض الهاتف تثبيتها فوق نسخة سابقة. لا تحذف التطبيق قبل إرسال الطلبات المنتظرة، لأن الحذف يمسح بياناته المحلية."
+          fi
+          NOTES="النسخة المبنية من الالتزام ${GITHUB_SHA:0:7}.
+          ${SIGNING_NOTE}
+          يمكن تنزيل START-HERE.html وفتحه في المتصفح لقراءة دليل البداية."
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            # A rerun may use a different temporary signing key. Never replace
+            # already-published files with incompatible APKs under the same URL.
+            echo "Release $TAG already exists; leaving its APKs unchanged."
+          else
+            gh release create "$TAG" artifacts/apk/*.apk docs/START-HERE.html \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "نسخة ${GITHUB_RUN_NUMBER}" \
